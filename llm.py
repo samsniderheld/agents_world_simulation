@@ -11,16 +11,24 @@ import config
 
 
 def chat(messages, model=None, temperature=0.7) -> str:
-    """Send a chat-style prompt to Ollama and return the reply text."""
+    """Send a chat-style prompt to Ollama and return the reply text.
+    Explicitly caps num_ctx (see config.CHAT_CONTEXT_TOKENS) rather than
+    letting Ollama default to the model's max context -- otherwise it
+    allocates a KV cache sized for that max on every call, which can push a
+    large model into swap even for a one-line prompt."""
     resp = requests.post(
         f"{config.OLLAMA_HOST}/api/chat",
         json={
             "model": model or config.CHAT_MODEL,
             "messages": messages,
             "stream": False,
-            "options": {"temperature": temperature},
+            "options": {
+                "temperature": temperature,
+                "num_ctx": config.CHAT_CONTEXT_TOKENS,
+            },
+            "think": config.ENABLE_THINKING,
         },
-        timeout=120,
+        timeout=config.REQUEST_TIMEOUT_SECONDS,
     )
     resp.raise_for_status()
     return resp.json()["message"]["content"].strip()

@@ -26,6 +26,28 @@ def first_spoken_line(text: str) -> str:
     return text.strip()
 
 
+def cast_constraint(agent_name: str, known_names: list) -> str:
+    """A prompt line telling the LLM exactly who else exists in the
+    simulation, so it doesn't invent a new named character (e.g. a
+    bartender called 'Vinnie') that then contaminates memory retrieval and
+    later dialogue -- see README for this failure mode. Used anywhere an
+    agent generates free-text action or reaction descriptions.
+    """
+    others = [n for n in (known_names or []) if n != agent_name]
+    if others:
+        return (
+            f"The only other named people who exist in this simulation are: "
+            f"{', '.join(others)}. Do not invent or name any other person. "
+            "Refer to anyone else only in generic, unnamed terms "
+            "(e.g. 'the bartender', 'a passerby')."
+        )
+    return (
+        "No other named people exist in this simulation yet. Do not invent "
+        "or name anyone -- refer to anyone else only in generic, unnamed "
+        "terms (e.g. 'the bartender', 'a passerby')."
+    )
+
+
 def parse_list_lines(text: str) -> list[str]:
     """Strip bullet/numbering markers from each line and drop obvious
     preamble lines like 'Here are the 3 actions:' that models sometimes
