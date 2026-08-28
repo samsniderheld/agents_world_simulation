@@ -58,3 +58,9 @@ REFLECTION_INSIGHTS_PER_FOCAL_POINT = 3
 
 # --- Simulation clock -----------------------------------------------------
 TICK_MINUTES = 30
+
+# --- Post-run treatment (treatment.py) ----------------------------------
+# The treatment call reads the whole run's transcript in one shot, which is
+# routinely far longer than the short per-tick prompts CHAT_CONTEXT_TOKENS is
+# sized for, so it gets its own larger context window.
+TREATMENT_CONTEXT_TOKENS = 8192

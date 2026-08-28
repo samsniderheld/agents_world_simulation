@@ -11,6 +11,7 @@ import sys
 import config
 import llm
 from agent import Agent
+from treatment import generate_treatment
 from world import World
 
 
@@ -31,7 +32,31 @@ def build_default_agents() -> list[Agent]:
         location="Ozzy's Bar",
         wake_up_hour=12,
     )
-    return [oswald, lou]
+    veronica = Agent(
+        name="Veronica",
+        age=32,
+        traits="sultry lounge singer, sharp-tongued, guarded, more dangerous than she lets on",
+        currently="rehearsing her set for tonight's show at Ozzy's Bar",
+        location="Ozzy's Bar",
+        wake_up_hour=14,
+    )
+    detective_marsh = Agent(
+        name="Marsh",
+        age=50,
+        traits="corrupt police detective, gruff, always working an angle, hides menace behind a friendly voice",
+        currently="stopping by Ozzy's Bar to collect a favor",
+        location="Ozzy's Bar",
+        wake_up_hour=9,
+    )
+    sal = Agent(
+        name="Sal",
+        age=61,
+        traits="aging mob boss, calm and courteous on the surface, ruthless underneath, expects respect",
+        currently="holding court in his usual booth at Ozzy's Bar",
+        location="Ozzy's Bar",
+        wake_up_hour=11,
+    )
+    return [oswald, lou, veronica, detective_marsh, sal]
 
 
 def main():
@@ -64,6 +89,10 @@ def main():
         for node in agent.memory.nodes:
             tag = f"[{node.kind}]"
             print(f"  {tag:12s} (importance {node.importance:>4.1f}) {node.description}")
+
+    print("\n--- Treatment ---")
+    treatment = generate_treatment(world.log, [agent.name for agent in agents])
+    print(treatment)
 
 
 if __name__ == "__main__":

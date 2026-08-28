@@ -10,12 +10,14 @@ import requests
 import config
 
 
-def chat(messages, model=None, temperature=0.7) -> str:
+def chat(messages, model=None, temperature=0.7, context_tokens=None) -> str:
     """Send a chat-style prompt to Ollama and return the reply text.
     Explicitly caps num_ctx (see config.CHAT_CONTEXT_TOKENS) rather than
     letting Ollama default to the model's max context -- otherwise it
     allocates a KV cache sized for that max on every call, which can push a
-    large model into swap even for a one-line prompt."""
+    large model into swap even for a one-line prompt. Pass `context_tokens`
+    to override that default for calls with unusually long prompts (e.g. a
+    full simulation transcript)."""
     resp = requests.post(
         f"{config.OLLAMA_HOST}/api/chat",
         json={
@@ -24,7 +26,7 @@ def chat(messages, model=None, temperature=0.7) -> str:
             "stream": False,
             "options": {
                 "temperature": temperature,
-                "num_ctx": config.CHAT_CONTEXT_TOKENS,
+                "num_ctx": context_tokens or config.CHAT_CONTEXT_TOKENS,
             },
             "think": config.ENABLE_THINKING,
         },
@@ -34,9 +36,10 @@ def chat(messages, model=None, temperature=0.7) -> str:
     return resp.json()["message"]["content"].strip()
 
 
-def complete(prompt: str, model=None, temperature=0.7) -> str:
+def complete(prompt: str, model=None, temperature=0.7, context_tokens=None) -> str:
     """Convenience wrapper for a single user-turn prompt."""
-    return chat([{"role": "user", "content": prompt}], model=model, temperature=temperature)
+    return chat([{"role": "user", "content": prompt}], model=model,
+                temperature=temperature, context_tokens=context_tokens)
 
 
 def embed(text: str, model=None) -> list[float]:

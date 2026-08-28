@@ -138,6 +138,7 @@ python3 main.py --chat-model qwen2.5:14b --embed-model nomic-embed-text
 | `planning.py` | Planning | Generates a 5-8 item broad-strokes daily plan from the agent's identity, then decomposes each broad step into a few finer actions as it's reached. |
 | `agent.py` | Reacting + dialogue | `react()` retrieves relevant memories and asks the LLM whether to continue the current plan or do something else given a new observation. `converse_turn()` generates one line of dialogue at a time, grounded in retrieved memories about the other agent. |
 | `world.py` | Simulation loop | A tick-based loop (default 30 sim-minutes/tick): agents advance their plan, perceive co-located agents, may react (including breaking into conversation), and are checked for reflection each tick. |
+| `treatment.py` | — (not in the paper) | Runs once, after the simulation finishes: a single LLM call over the full transcript (`World.log`) that writes a short film-noir video-vignette treatment — characters involved, a prose synopsis, and 6 storyboard image prompts (art direction, lighting, DOP). Not an `Agent` — no memory, no ongoing state. |
 | `llm.py` | — | Thin wrapper around Ollama's `/api/chat` and `/api/embeddings`. Swap this file to target MLX or llama.cpp instead. |
 
 ## Deliberate simplifications (vs. the paper/reference repo)
