@@ -7,26 +7,13 @@ from textutil import cast_constraint, first_spoken_line
 
 class Agent:
     def __init__(self, name: str, age: int, traits: str, currently: str,
-                 pos: tuple, wake_up_hour: int = 7):
-        """Set up identity, an empty memory stream, and starting position.
-        `pos` is an (x, y, z) tile coordinate in the World's City -- see
-        city.py for how those are generated and city.entry_point() for a
-        convenient spawn point inside a named building."""
+                 location: str, wake_up_hour: int = 7):
         self.name = name
         self.age = age
         self.traits = traits          # e.g. "creative, warm, a bit scattered"
         self.currently = currently    # e.g. "trying to finish a mural before Friday"
+        self.location = location
         self.wake_up_hour = wake_up_hour
-
-        self.pos = pos                 # current (x, y, z) tile
-        self.dest: tuple = None        # (x, y, z) the agent is walking toward, or None
-        self.path: list = []           # remaining tiles of the current route to dest
-
-        # Kept in sync by World each tick (see World._sync_location_label)
-        # so every prompt below knows where the agent actually is on the
-        # map, not just what its plan text claims.
-        self.location_label: str = "an unspecified location"
-        self.dest_label: str = None    # name of the building being walked toward, if any
 
         self.memory = MemoryStream()
         self.plan: list[str] = []      # today's broad-strokes plan, in order
@@ -35,23 +22,11 @@ class Agent:
         self.chatting_with: "Agent | None" = None
 
     def identity_summary(self) -> str:
-        """A short natural-language description of who this agent is and
-        where it physically is right now, used as context in every prompt
-        sent to the LLM."""
         return (
             f"{self.name} is a {self.age}-year-old. "
             f"Personality: {self.traits}. "
-            f"Currently: {self.currently}. "
-            f"{self.spatial_status()}"
+            f"Currently: {self.currently}."
         )
-
-    def spatial_status(self) -> str:
-        """A short line describing where the agent physically is, including
-        whether it's still en route somewhere -- this is what lets
-        generated text follow the map instead of drifting from it."""
-        if self.dest_label and self.dest_label != self.location_label:
-            return f"Right now {self.name} is at {self.location_label}, walking toward {self.dest_label} (not there yet)."
-        return f"Right now {self.name} is at {self.location_label}."
 
     def perceive(self, observation: str, tick: int):
         """Record something the agent has noticed as a new memory."""

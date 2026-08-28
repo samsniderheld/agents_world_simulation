@@ -13,8 +13,8 @@ OLLAMA_HOST = "http://localhost:11434"
 
 # Any locally-pulled chat model works. Pick one that fits your RAM headroom;
 # an M5 Pro with 24GB+ unified memory comfortably runs 8B-14B q4/q5 models.
-CHAT_MODEL = "batiai/qwen3.6-27b:q4"
-# CHAT_MODEL = "llama3.1:8b"
+# CHAT_MODEL = "batiai/qwen3.6-27b:q4"
+CHAT_MODEL = "llama3.1:8b"
 
 # Ollama's embedding model used for the memory stream's relevance scoring.
 EMBED_MODEL = "nomic-embed-text"
@@ -58,9 +58,3 @@ REFLECTION_INSIGHTS_PER_FOCAL_POINT = 3
 
 # --- Simulation clock -----------------------------------------------------
 TICK_MINUTES = 30
-
-# --- City / world representation (city.py, pathfinding.py, render.py) -----
-CITY_WIDTH = 50
-CITY_HEIGHT = 24
-MOVE_SPEED = 3        # tiles an agent advances along its path per tick
-NEARBY_RADIUS = 2      # max tile distance (same z-level) counted as "co-located"
