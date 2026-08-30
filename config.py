@@ -8,13 +8,38 @@ matches the paper's "Generative Agents: Interactive Simulacra of Human
 Behavior" (Park et al., 2023) as closely as a barebones rewrite reasonably can.
 """
 
+import hardware
+
 # --- Ollama connection -------------------------------------------------
 OLLAMA_HOST = "http://localhost:11434"
 
-# Any locally-pulled chat model works. Pick one that fits your RAM headroom;
-# an M5 Pro with 24GB+ unified memory comfortably runs 8B-14B q4/q5 models.
-# CHAT_MODEL = "batiai/qwen3.6-27b:q4"
-CHAT_MODEL = "llama3.1:8b"
+# Any locally-pulled chat model works -- picked automatically below to fit
+# the memory actually available on this machine (Apple unified memory, or
+# the first NVIDIA GPU's VRAM), since a laptop, an RTX 5090, and an H100 all
+# want a different size of model. Each entry must already be pulled
+# (`ollama pull <name>`) on whichever machine hits that tier. Adjust the
+# GB cutoffs/model names to taste, or just hardcode CHAT_MODEL below to
+# skip auto-detection entirely.
+_CHAT_MODEL_TIERS = [
+    # (minimum GB required, model)
+    (60, "gpt-oss:120b"),              # e.g. H100 80GB
+    (24, "Qwen3.8-27B"),     # e.g. RTX 5090 32GB VRAM
+    (0, "llama3.1:8b"),                # e.g. M5 Pro 24GB unified memory
+]
+
+# Detected once and reused for every auto-sized setting below, so a laptop,
+# an RTX 5090, and an H100 each only pay for one hardware probe.
+_AVAILABLE_GB = hardware.available_memory_gb()
+
+
+def _pick_tier(tiers: list, available_gb: float):
+    for min_gb, value in tiers:
+        if available_gb >= min_gb:
+            return value
+    return tiers[-1][1]
+
+
+CHAT_MODEL = _pick_tier(_CHAT_MODEL_TIERS, _AVAILABLE_GB)
 
 # Ollama's embedding model used for the memory stream's relevance scoring.
 EMBED_MODEL = "nomic-embed-text"
@@ -24,8 +49,17 @@ EMBED_MODEL = "nomic-embed-text"
 # allocates a KV cache sized for that no matter how short the prompt is --
 # on a memory-constrained machine that alone can push the process into swap
 # and turn a one-word reply into a multi-minute wait. Our prompts here are
-# short, so a modest window is plenty; raise it if you see truncated output.
-CHAT_CONTEXT_TOKENS = 4096
+# short, so a modest window is plenty on small hardware; scaled up on
+# machines with room for it. Adjust the tiers to taste, or hardcode
+# CHAT_CONTEXT_TOKENS to skip auto-detection.
+_CHAT_CONTEXT_TIERS = [
+    # (minimum GB required, context tokens)
+    (60, 32768),   # e.g. H100 80GB
+    (24, 8192),    # e.g. RTX 5090 32GB VRAM
+    (0, 4096),     # e.g. M5 Pro 24GB unified memory
+]
+
+CHAT_CONTEXT_TOKENS = _pick_tier(_CHAT_CONTEXT_TIERS, _AVAILABLE_GB)
 
 # How long to wait for a single Ollama response before giving up. Larger
 # models (e.g. 27B on 24GB of unified memory) are noticeably slower per

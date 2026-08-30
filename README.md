@@ -104,15 +104,18 @@ fed back into the next LLM prompt
    ./start_ollama.sh
    ```
    Stop it later with `./stop_ollama.sh`.
-2. Pull a chat model and the embedding model:
+2. Pull a chat model and the embedding model. `config.py` auto-detects the
+   machine it's running on (Apple unified memory via `sysctl`, or an NVIDIA
+   GPU's VRAM via `nvidia-smi` -- see `hardware.py`) and picks a model sized
+   to it from `config._CHAT_MODEL_TIERS`, so pull whichever of these applies:
    ```bash
-   ollama pull llama3.1:8b       # or qwen2.5:14b, mistral, etc.
+   ollama pull llama3.1:8b             # < 28GB, e.g. a 24GB M5 Pro
+   ollama pull batiai/qwen3.6-27b:q4   # 28-60GB, e.g. an RTX 5090 (32GB VRAM)
+   ollama pull llama3.1:70b            # 60GB+, e.g. an H100 (80GB VRAM)
    ollama pull nomic-embed-text
    ```
-   Model sizing rule of thumb for an M5 Pro: an 8B model (q4/q5) is
-   comfortable on 16GB+ of unified memory; a 14B model wants 24GB+. Bigger
-   models make noticeably better planning/reflection judgments at the cost
-   of tokens/sec.
+   Adjust the GB cutoffs and model names in `config._CHAT_MODEL_TIERS` to
+   taste, or skip auto-detection entirely by hardcoding `CHAT_MODEL`.
 3. Install Python deps (Python 3.9+):
    ```bash
    python3 -m venv .venv && source .venv/bin/activate
@@ -138,6 +141,7 @@ python3 main.py --chat-model qwen2.5:14b --embed-model nomic-embed-text
 | `planning.py` | Planning | Generates a 5-8 item broad-strokes daily plan from the agent's identity, then decomposes each broad step into a few finer actions as it's reached. |
 | `agent.py` | Reacting + dialogue | `react()` retrieves relevant memories and asks the LLM whether to continue the current plan or do something else given a new observation. `converse_turn()` generates one line of dialogue at a time, grounded in retrieved memories about the other agent. |
 | `world.py` | Simulation loop | A tick-based loop (default 30 sim-minutes/tick): agents advance their plan, perceive co-located agents, may react (including breaking into conversation), and are checked for reflection each tick. |
+| `hardware.py` | — (not in the paper) | Detects memory available to run a model against: Apple unified memory on macOS, otherwise the first NVIDIA GPU's VRAM via `nvidia-smi`. Used by `config.py` to auto-pick `CHAT_MODEL`. |
 | `treatment.py` | — (not in the paper) | Runs once, after the simulation finishes: a single LLM call over the full transcript (`World.log`) that writes a short film-noir video-vignette treatment — characters involved, a prose synopsis, and 6 storyboard image prompts (art direction, lighting, DOP). Not an `Agent` — no memory, no ongoing state. |
 | `llm.py` | — | Thin wrapper around Ollama's `/api/chat` and `/api/embeddings`. Swap this file to target MLX or llama.cpp instead. |
 
