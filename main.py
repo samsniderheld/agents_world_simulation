@@ -2,7 +2,7 @@
 and runs a short simulation.
 
 Usage:
-    python3 main.py [--ticks N] [--chat-model NAME] [--embed-model NAME]
+    python3 main.py [--ticks N] [--chat-model NAME] [--embed-model NAME] [--context-tokens N]
 """
 
 import argparse
@@ -64,11 +64,14 @@ def main():
     parser.add_argument("--ticks", type=int, default=8, help="number of simulation steps")
     parser.add_argument("--chat-model", default=config.CHAT_MODEL)
     parser.add_argument("--embed-model", default=config.EMBED_MODEL)
+    parser.add_argument("--context-tokens", type=int, default=config.CHAT_CONTEXT_TOKENS,
+                         help="context window (tokens) requested per chat call, overriding config.CHAT_CONTEXT_TOKENS")
     parser.add_argument("--tick_sleep", type=int, default=0, help="seconds to wait between ticks to make it readable")
     args = parser.parse_args()
 
     config.CHAT_MODEL = args.chat_model
     config.EMBED_MODEL = args.embed_model
+    config.CHAT_CONTEXT_TOKENS = args.context_tokens
 
     try:
         llm.check_connection()
@@ -80,7 +83,8 @@ def main():
     world = World(agents, tick_sleep=args.tick_sleep)
 
     print(f"Running {args.ticks} ticks with chat model '{config.CHAT_MODEL}' "
-          f"and embed model '{config.EMBED_MODEL}'...\n")
+          f"({config.CHAT_CONTEXT_TOKENS} context tokens) and embed model "
+          f"'{config.EMBED_MODEL}'...\n")
     world.run(args.ticks)
 
     print("\n--- Memory streams ---")
