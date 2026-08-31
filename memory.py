@@ -9,7 +9,9 @@ from dataclasses import dataclass, field
 import itertools
 import math
 
+import display
 import llm
+import recorder
 from config import (
     RECENCY_DECAY,
     RECENCY_WEIGHT,
@@ -58,7 +60,8 @@ class MemoryStream:
         self.importance_since_reflection = 0.0
 
     def add(self, description: str, kind: str = "observation", tick: int = 0,
-             importance: float = None, evidence: list = None) -> MemoryNode:
+             importance: float = None, evidence: list = None,
+             agent_name: str = "", color: str = "", verbose: bool = False) -> MemoryNode:
         if importance is None:
             importance = self._rate_importance(description)
         node = MemoryNode(
@@ -74,6 +77,10 @@ class MemoryStream:
         self.nodes.append(node)
         if kind == "observation":
             self.importance_since_reflection += importance
+        if verbose:
+            print(display.memory_line(agent_name, color, kind, importance, description))
+        recorder.log("memory", tick, agent=agent_name or None,
+                     memory_kind=kind, importance=importance, text=description)
         return node
 
     def _rate_importance(self, description: str) -> float:

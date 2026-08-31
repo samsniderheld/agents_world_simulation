@@ -1,23 +1,26 @@
 """The Agent: identity + memory stream + perceive/react/converse behavior."""
 
+import display
 import llm
+import recorder
 from memory import MemoryStream
 from textutil import cast_constraint, first_spoken_line
 
 
 class Agent:
     def __init__(self, name: str, age: int, traits: str, currently: str,
-                 location: str, wake_up_hour: int = 7):
+                 location: str):
         self.name = name
         self.age = age
         self.traits = traits          # e.g. "creative, warm, a bit scattered"
         self.currently = currently    # e.g. "trying to finish a mural before Friday"
         self.location = location
-        self.wake_up_hour = wake_up_hour
 
         self.memory = MemoryStream()
         self.plan: list[str] = []      # today's broad-strokes plan, in order
         self.plan_cursor = 0
+        self.substeps: list[str] = []  # current broad step, decomposed
+        self.substep_cursor = 0
         self.current_action: str = "idle"
         self.chatting_with: "Agent | None" = None
 
@@ -32,13 +35,21 @@ class Agent:
         """Record something the agent has noticed as a new memory."""
         self.memory.add(observation, kind="observation", tick=tick)
 
-    def react(self, observation: str, tick: int, known_names: list = None) -> bool:
+    def react(self, observation: str, tick: int, known_names: list = None,
+              verbose: bool = False, color: str = "") -> bool:
         """Decide whether `observation` warrants deviating from the current
         plan. Returns True if the agent should react (and updates
         current_action accordingly); False if it just continues its plan.
         `known_names` should be every other agent's name, so the reaction
-        doesn't invent a new named character.
+        doesn't invent a new named character. When `verbose`, prints the
+        observation and the resulting decision to the terminal right as
+        each is generated (see display.py); `color` is this agent's
+        assigned display color.
         """
+        if verbose:
+            print(display.observation_line(self.name, color, observation))
+        recorder.log("observe", tick, agent=self.name, text=observation)
+
         memories = self.memory.retrieve(observation, tick, k=6)
         memory_text = "\n".join(f"- {m.description}" for m in memories) or "(none yet)"
 
@@ -56,13 +67,22 @@ class Agent:
             "CONTINUE"
         )
         reply = llm.complete(prompt, temperature=0.6)
-        self.memory.add(f"Observed: {observation}", kind="observation", tick=tick)
+        self.memory.add(f"Observed: {observation}", kind="observation", tick=tick,
+                         agent_name=self.name, color=color, verbose=verbose)
 
         if reply.strip().upper().startswith("REACT"):
             new_action = reply.split(":", 1)[1].strip() if ":" in reply else reply.strip()
             self.current_action = new_action or self.current_action
-            self.memory.add(f"{self.name} decided to: {self.current_action}", kind="observation", tick=tick)
+            self.memory.add(f"{self.name} decided to: {self.current_action}", kind="observation", tick=tick,
+                             agent_name=self.name, color=color, verbose=verbose)
+            if verbose:
+                print(display.reaction_line(self.name, color, self.current_action))
+            recorder.log("react", tick, agent=self.name, text=self.current_action)
             return True
+
+        if verbose:
+            print(display.continue_line(self.name, color))
+        recorder.log("continue", tick, agent=self.name)
         return False
 
     def converse_turn(self, other: "Agent", history: list, tick: int) -> str:

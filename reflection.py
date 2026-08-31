@@ -13,7 +13,9 @@ the last reflection crosses REFLECTION_IMPORTANCE_THRESHOLD. When it fires:
 
 import re
 
+import display
 import llm
+import recorder
 from agent import Agent
 from textutil import parse_list_lines
 from config import (
@@ -28,7 +30,7 @@ def should_reflect(agent: Agent) -> bool:
     return agent.memory.importance_since_reflection >= REFLECTION_IMPORTANCE_THRESHOLD
 
 
-def _generate_focal_points(agent: Agent) -> list[str]:
+def _generate_focal_points(agent: Agent, tick: int, verbose: bool = False, color: str = "") -> list[str]:
     recent = agent.memory.recent(REFLECTION_LOOKBACK, kinds=("observation",))
     statements = "\n".join(f"- {m.description}" for m in recent)
     prompt = (
@@ -39,10 +41,16 @@ def _generate_focal_points(agent: Agent) -> list[str]:
     )
     reply = llm.complete(prompt, temperature=0.6)
     questions = parse_list_lines(reply)
-    return questions[:REFLECTION_NUM_FOCAL_POINTS] or [f"What matters most to {agent.name} right now?"]
+    focal_points = questions[:REFLECTION_NUM_FOCAL_POINTS] or [f"What matters most to {agent.name} right now?"]
+    for question in focal_points:
+        if verbose:
+            print(display.focal_line(agent.name, color, question))
+        recorder.log("focal", tick, agent=agent.name, text=question)
+    return focal_points
 
 
-def _generate_insights(agent: Agent, focal_point: str, tick: int):
+def _generate_insights(agent: Agent, focal_point: str, tick: int,
+                        verbose: bool = False, color: str = ""):
     nodes = agent.memory.retrieve(focal_point, tick, k=10)
     if not nodes:
         return
@@ -68,17 +76,21 @@ def _generate_insights(agent: Agent, focal_point: str, tick: int):
             indices = []
         evidence_ids = [nodes[i].id for i in indices if 0 <= i < len(nodes)]
         if insight:
-            agent.memory.add(insight, kind="reflection", tick=tick, evidence=evidence_ids)
+            if verbose:
+                print(display.insight_line(agent.name, color, insight))
+            recorder.log("insight", tick, agent=agent.name, text=insight, evidence=evidence_ids)
+            agent.memory.add(insight, kind="reflection", tick=tick, evidence=evidence_ids,
+                              agent_name=agent.name, color=color, verbose=verbose)
 
 
-def reflect(agent: Agent, tick: int):
+def reflect(agent: Agent, tick: int, verbose: bool = False, color: str = ""):
     """Run a full reflection pass if the importance threshold has been hit."""
     if not should_reflect(agent):
         return False
 
-    focal_points = _generate_focal_points(agent)
+    focal_points = _generate_focal_points(agent, tick, verbose=verbose, color=color)
     for focal_point in focal_points:
-        _generate_insights(agent, focal_point, tick)
+        _generate_insights(agent, focal_point, tick, verbose=verbose, color=color)
 
     agent.memory.importance_since_reflection = 0.0
     return True

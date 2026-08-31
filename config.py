@@ -23,7 +23,7 @@ OLLAMA_HOST = "http://localhost:11434"
 _CHAT_MODEL_TIERS = [
     # (minimum GB required, model)
     (60, "gpt-oss:120b"),              # e.g. H100 80GB
-    (24, "Qwen3.8-27B"),     # e.g. RTX 5090 32GB VRAM
+    (32, "Qwen3.8-27B"),     # e.g. RTX 5090 32GB VRAM
     (0, "llama3.1:8b"),                # e.g. M5 Pro 24GB unified memory
 ]
 

@@ -11,7 +11,9 @@ breaking into conversation), and are checked for reflection.
 import datetime
 import time
 
+import display
 import planning
+import recorder
 import reflection
 from agent import Agent
 from config import TICK_MINUTES
@@ -21,11 +23,13 @@ _DIALOGUE_HINTS = ("talk", "chat", "greet", "ask", "convers", "say hi", "wave")
 
 class World:
     def __init__(self, agents: list[Agent], start_time: datetime.datetime = None,
-                 tick_sleep: int = 0):
+                 tick_sleep: int = 0, verbose: bool = False):
         self.agents = agents
         self.start_time = start_time or datetime.datetime(2026, 8, 24, 6, 0)
         self.tick = 0
         self.tick_sleep = tick_sleep
+        self.verbose = verbose
+        self.agent_colors = display.agent_colors([a.name for a in agents])
         self.log: list[str] = []
 
     @property
@@ -59,6 +63,7 @@ class World:
             line = speaker.converse_turn(listener, history, self.tick)
             history.append(f"{speaker.name}: {line}")
             self._say(f"{speaker.name}: {line}")
+            recorder.log("dialogue", self.tick, agent=speaker.name, text=line, listener=listener.name)
             speaker, listener = listener, speaker
             time.sleep(self.tick_sleep)
 
@@ -68,6 +73,8 @@ class World:
                 f"{participant.name} talked with {other.name}. Conversation:\n{transcript}",
                 kind="chat",
                 tick=self.tick,
+                agent_name=participant.name, color=self.agent_colors[participant.name],
+                verbose=self.verbose,
             )
             participant.chatting_with = None
             participant.current_action = f"talking with {other.name}"
@@ -77,23 +84,32 @@ class World:
 
         for agent in acting_agents:
             other_names = [a.name for a in self.agents if a is not agent]
-            planning.next_action(agent, self.tick, known_names=other_names)
+            color = self.agent_colors[agent.name]
+            planning.next_action(agent, self.tick, known_names=other_names,
+                                  verbose=self.verbose, color=color)
             self._say(f"{agent.name} ({agent.location}): {agent.current_action}")
+            recorder.log("action", self.tick, agent=agent.name,
+                         text=agent.current_action, location=agent.location,
+                         time=self.current_time.strftime("%I:%M %p"))
             agent.memory.add(
-                f"{agent.name} is {agent.current_action}", kind="observation", tick=self.tick
+                f"{agent.name} is {agent.current_action}", kind="observation", tick=self.tick,
+                agent_name=agent.name, color=color, verbose=self.verbose,
             )
             time.sleep(self.tick_sleep)
 
         for a, b in self._co_located_pairs():
             observation = f"{b.name} is nearby, currently: {b.current_action}."
             other_names = [x.name for x in self.agents if x is not a]
-            reacted = a.react(observation, self.tick, known_names=other_names)
+            reacted = a.react(observation, self.tick, known_names=other_names,
+                               verbose=self.verbose, color=self.agent_colors[a.name])
             if reacted and any(hint in a.current_action.lower() for hint in _DIALOGUE_HINTS):
                 self._run_conversation(a, b)
 
         for agent in self.agents:
-            if reflection.reflect(agent, self.tick):
+            if reflection.reflect(agent, self.tick, verbose=self.verbose,
+                                   color=self.agent_colors[agent.name]):
                 self._say(f"{agent.name} pauses to reflect.")
+                recorder.log("reflect_pause", self.tick, agent=agent.name)
                 time.sleep(self.tick_sleep)
 
         self.tick += 1
