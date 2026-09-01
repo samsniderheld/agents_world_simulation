@@ -53,6 +53,13 @@ def embed(text: str, model=None) -> list[float]:
     return resp.json()["embedding"]
 
 
+def list_models() -> list[str]:
+    """Names of every model Ollama currently has pulled, for a UI picker."""
+    resp = requests.get(f"{config.OLLAMA_HOST}/api/tags", timeout=5)
+    resp.raise_for_status()
+    return sorted(m["name"] for m in resp.json().get("models", []))
+
+
 def check_connection():
     """Raise a clear error early if Ollama or the configured models aren't ready."""
     try:
