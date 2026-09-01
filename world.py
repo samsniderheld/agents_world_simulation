@@ -125,13 +125,24 @@ class World:
             with ThreadPoolExecutor(max_workers=len(acting_agents)) as pool:
                 list(pool.map(self._act, acting_agents))
 
+        # _co_located_pairs() is computed once per tick, but _run_conversation
+        # resets chatting_with to None as soon as it finishes -- so without
+        # this guard, an agent free again after one conversation could
+        # immediately start a second (and a third...) with every other pair
+        # it appears in, all stamped with the same tick. One conversation
+        # per agent per tick.
+        already_talked = set()
         for a, b in self._co_located_pairs():
+            if a in already_talked or b in already_talked:
+                continue
             observation = f"{b.name} is nearby, currently: {b.current_action}."
             other_names = [x.name for x in self.agents if x is not a]
             reacted = a.react(observation, self.tick, known_names=other_names,
                                verbose=self.verbose, color=self.agent_colors[a.name])
             if reacted and any(hint in a.current_action.lower() for hint in _DIALOGUE_HINTS):
                 self._run_conversation(a, b)
+                already_talked.add(a)
+                already_talked.add(b)
 
         if self.agents:
             with ThreadPoolExecutor(max_workers=len(self.agents)) as pool:
