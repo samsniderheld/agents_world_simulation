@@ -216,6 +216,28 @@
     border-right: 1px solid var(--border);
     padding: 14px 18px 60px;
   }
+
+  .interactions-column{ background: rgba(255,255,255,0.015); }
+  .convo-block{
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px dashed var(--border);
+  }
+  .convo-block:last-child{ border-bottom: none; }
+  .convo-head{
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.04em;
+    color: var(--text-faint);
+    margin-bottom: 6px;
+  }
+  .convo-line{
+    font-size: 13px;
+    line-height: 1.55;
+    margin-bottom: 3px;
+  }
+  .convo-line .who{ font-weight: 700; }
+  .convo-line .line-text{ font-style: italic; color: var(--text); }
   .agent-column:last-child{ border-right: none; }
   .agent-col-header{
     display: flex;
@@ -414,6 +436,9 @@
     kindFilter: new Set(),    // event kinds hidden within a column
     search: "",
     perAgent: new Map(),      // name -> {outlineEl, planBlock, stepBlock, tickItem, stepCount}
+    interactionsList: null,   // the Interactions column's conversation-list container
+    lastConvKey: null,        // (pair + tick) signature of the conversation block in progress
+    lastConvBlock: null,
     eventSource: null,
     lastStartedAt: null,      // detects a new/changed run (see pollState)
   };
@@ -437,6 +462,11 @@
     return String(s).replace(/[&<>"']/g, c => ({
       '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
     }[c]));
+  }
+
+  function agentColorByName(name){
+    const a = state.agents.find(x => x.name === name);
+    return a ? a.color : '#9ca3af';
   }
 
   // --- setup: roster + models -----------------------------------------
@@ -518,6 +548,11 @@
     document.querySelectorAll('.agent-column[data-agent]').forEach(col => {
       col.style.display = state.agentFilter.has(col.dataset.agent) ? 'none' : '';
     });
+    document.querySelectorAll('.convo-line[data-hay]').forEach(row => {
+      row.style.display = (state.search && !row.dataset.hay.includes(state.search)) ? 'none' : '';
+    });
+    const interCol = document.querySelector('.interactions-column');
+    if (interCol) interCol.style.display = state.kindFilter.has('dialogue') ? 'none' : '';
   }
 
   searchBox.addEventListener('input', () => {
@@ -569,6 +604,23 @@
   function rebuildColumns(agents){
     mainEl.innerHTML = '';
     state.perAgent = new Map();
+    state.lastConvKey = null;
+    state.lastConvBlock = null;
+
+    const interCol = document.createElement('div');
+    interCol.className = 'agent-column interactions-column';
+    if (state.kindFilter.has('dialogue')) interCol.style.display = 'none';
+    interCol.innerHTML = `
+      <div class="agent-col-header" style="border-color:${KIND_META.dialogue.color}88">
+        <span class="swatch" style="background:${KIND_META.dialogue.color}"></span>
+        <span class="name" style="color:${KIND_META.dialogue.color}">Interactions</span>
+        <span class="sub">who's talking to whom</span>
+      </div>
+      <div class="convo-list"></div>
+    `;
+    mainEl.appendChild(interCol);
+    state.interactionsList = interCol.querySelector('.convo-list');
+
     agents.forEach(a => {
       const col = document.createElement('div');
       col.className = 'agent-column';
@@ -646,6 +698,37 @@
     const row = makeEventRow(ev, escapeHtml(eventText(ev)));
     target.appendChild(row);
     if (ev.kind === 'react' && as.tickItem) as.tickItem.classList.add('has-react');
+    if (ev.kind === 'dialogue') renderInteraction(ev);
+  }
+
+  function conversationKey(ev){
+    // unordered pair + tick, so both speakers' turns in one exchange group
+    // into the same block regardless of who's "agent" on a given line
+    return [ev.agent, ev.listener].sort().join('|') + '@' + ev.tick;
+  }
+
+  function renderInteraction(ev){
+    if (!state.interactionsList) return;
+    const key = conversationKey(ev);
+    if (state.lastConvKey !== key) {
+      const aColor = agentColorByName(ev.agent);
+      const bColor = agentColorByName(ev.listener);
+      const block = document.createElement('div');
+      block.className = 'convo-block';
+      block.innerHTML = `
+        <div class="convo-head">T${ev.tick} · <span style="color:${aColor}">${escapeHtml(ev.agent)}</span> ↔ <span style="color:${bColor}">${escapeHtml(ev.listener)}</span></div>
+        <div class="convo-lines"></div>
+      `;
+      state.interactionsList.appendChild(block);
+      state.lastConvKey = key;
+      state.lastConvBlock = block;
+    }
+    const line = document.createElement('div');
+    line.className = 'convo-line';
+    line.dataset.hay = JSON.stringify(ev).toLowerCase();
+    line.innerHTML = `<span class="who" style="color:${agentColorByName(ev.agent)}">${escapeHtml(ev.agent)}:</span> <span class="line-text">"${escapeHtml(ev.text)}"</span>`;
+    if (state.search && !line.dataset.hay.includes(state.search)) line.style.display = 'none';
+    state.lastConvBlock.querySelector('.convo-lines').appendChild(line);
   }
 
   // --- streaming ----------------------------------------------------
