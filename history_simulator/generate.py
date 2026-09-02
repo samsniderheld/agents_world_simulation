@@ -4,7 +4,10 @@ Places (with their full event-by-event backstory) meant to be consumed by
 some other project later.
 
 Usage:
-    python3 generate.py [--seed N] [--figures-per-era N] [--events-per-figure N] [--out PATH] [--no-llm]
+    python3 generate.py [--seed N] [--figures-per-era N] [--events-per-figure N] [--out PATH] [--no-llm] [--no-serve]
+
+By default, once generation finishes it starts a local web server and opens
+a browser to view the result (index.html); pass --no-serve to skip that.
 """
 
 import argparse
@@ -13,10 +16,13 @@ import json
 import random
 import sys
 
+import characters
+import citymap
 import config
 import entities
 import events
 import llm
+import server
 from eras import ERAS
 
 
@@ -116,7 +122,7 @@ def generate(seed=None, figures_per_era=None, events_per_figure=None):
     return all_figures, all_places, all_events
 
 
-def to_json(figures, places, events_list):
+def to_json(figures, places, events_list, map_text=None, characters_list=None):
     return {
         "generated_at": datetime.datetime.now().isoformat(),
         "eras": [
@@ -139,6 +145,8 @@ def to_json(figures, places, events_list):
             for p in places
         ],
         "events": events_list,
+        "map": map_text,
+        "characters": characters_list or [],
     }
 
 
@@ -148,7 +156,11 @@ def main():
     parser.add_argument("--figures-per-era", type=int, default=None)
     parser.add_argument("--events-per-figure", type=int, default=None)
     parser.add_argument("--out", default="history.json")
+    parser.add_argument("--map-out", default="map.txt", help="path for the ASCII map (blank to skip)")
+    parser.add_argument("--characters", type=int, default=10, help="number of present-day residents to generate")
+    parser.add_argument("--characters-out", default="characters.json", help="path for the generated characters (blank to skip)")
     parser.add_argument("--no-llm", action="store_true", help="skip Ollama entirely (pure grammar output)")
+    parser.add_argument("--no-serve", action="store_true", help="don't start the web viewer after generation")
     args = parser.parse_args()
 
     if args.no_llm:
@@ -166,12 +178,35 @@ def main():
         events_per_figure=args.events_per_figure,
     )
 
-    payload = to_json(figures, places, events_list)
+    map_text = citymap.build_map(places, figures, seed=args.seed)
+
+    characters_list = characters.generate_characters(
+        places, figures, count=args.characters, seed=args.seed,
+    )
+
+    payload = to_json(figures, places, events_list, map_text=map_text, characters_list=characters_list)
     with open(args.out, "w") as f:
         json.dump(payload, f, indent=2, default=str)
 
     print(f"\n{len(figures)} figures, {len(places)} places, {len(events_list)} events.")
     print(f"Saved to {args.out}")
+
+    print(f"\n{map_text}")
+    if args.map_out:
+        with open(args.map_out, "w") as f:
+            f.write(map_text + "\n")
+        print(f"\nSaved map to {args.map_out}")
+
+    print(f"\n--- {len(characters_list)} residents of the city, c. 1959 ---")
+    for c in characters_list:
+        print(f"  {c['name']}, {c['age']} -- {c['occupation']} (connected to {c['place_name']})")
+    if args.characters_out:
+        with open(args.characters_out, "w") as f:
+            json.dump(characters_list, f, indent=2, default=str)
+        print(f"Saved to {args.characters_out}")
+
+    if not args.no_serve:
+        server.serve()
 
 
 if __name__ == "__main__":
