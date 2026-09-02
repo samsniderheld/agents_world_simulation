@@ -32,7 +32,7 @@ DOMAINS = [
 # the direct analog of the talk's "frogs"/"cats" factions.
 FACTIONS = [
     "the dockworkers", "the harbor pilots", "the temperance league", "the ward bosses",
-    "the immigrant aid society", "the press", "the constabulary", "the abolitionists",
+    "the immigrant aid society", "the press", "the police", "the abolitionists",
     "the merchants' guild", "the parish poor", "the longshoremen", "the suffragists",
     "the volunteer firemen", "the stagehands' union", "the settlement house",
 ]
@@ -55,6 +55,8 @@ ROLES = {
     "Immigrant Entrepreneur": ["antebellum", "gilded_age", "progressive", "prohibition", "depression_war"],
     "Society Matron": ["gilded_age", "progressive", "depression_war"],
     "Police Captain": ["antebellum", "gilded_age", "progressive", "prohibition", "depression_war"],
+    "Detective": ["progressive", "prohibition", "depression_war"],
+    "Reporter" : ["progressive", "prohibition", "depression_war"],
 }
 
 # place_type -> list of valid era ids, or None for "any era"

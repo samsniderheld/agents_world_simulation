@@ -80,7 +80,9 @@ def _llm_character(grounding: dict):
 
     prompt = (
         "You are writing a short character dossier for a resident of an alternate-history "
-        "New York City, living around 1959. Here is a real piece of that city's generated "
+        "New York City, living around 1959, in a film noir style world. "
+        "the character should feel like an archetype from those types of movies."
+        "Here is a real piece of that city's generated "
         "history:\n\n" + "\n".join(lines) +
         "\n\nInvent ONE person deeply connected to this specific history. Reply in exactly "
         "this format, nothing else:\n"
