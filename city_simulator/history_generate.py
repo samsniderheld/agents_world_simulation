@@ -1,13 +1,12 @@
-"""Entry point: generates a procedural history (1624-1950) for a single
-NYC-inspired city and writes it to history.json -- a catalog of historical
-Places (with their full event-by-event backstory) meant to be consumed by
-some other project later.
+"""Generates a procedural history (1624-1950) for a single NYC-inspired
+city -- a catalog of historical Places (with their full event-by-event
+backstory) and present-day characters, meant to be consumed by some other
+project later. `run_history()` is what server.py's History tab calls on a
+background thread; `main()` is a standalone CLI for offline use that writes
+the same data to history.json/map.txt/characters.json.
 
 Usage:
-    python3 generate.py [--seed N] [--figures-per-era N] [--events-per-figure N] [--out PATH] [--no-llm] [--no-serve]
-
-By default, once generation finishes it starts a local web server and opens
-a browser to view the result (index.html); pass --no-serve to skip that.
+    python3 history_generate.py [--seed N] [--figures-per-era N] [--events-per-figure N] [--out PATH] [--no-llm]
 """
 
 import argparse
@@ -18,11 +17,11 @@ import sys
 
 import characters
 import citymap
-import config
+import history_config as config
 import entities
 import events
-import llm
-import server
+import history_llm as llm
+import history_log
 from eras import ERAS
 
 
@@ -95,7 +94,9 @@ def generate(seed=None, figures_per_era=None, events_per_figure=None):
                 "template_id": template["id"], "figure_id": figure.id,
                 "gospel_text": gospel_text,
             })
-        print(f"  [{year}] ({era.name}) {figure.name}: {gospel_text}")
+        line = f"[{year}] ({era.name}) {figure.name}: {gospel_text}"
+        print(f"  {line}")
+        history_log.log(line)
 
     # Deaths don't touch Place state, so they're safe to resolve in a final
     # pass regardless of order -- each figure just needs one, some time
@@ -115,7 +116,9 @@ def generate(seed=None, figures_per_era=None, events_per_figure=None):
             "template_id": "death", "figure_id": figure.id, "place_id": None,
             "gospel_text": gospel_text,
         })
-        print(f"  [{death_year}] {gospel_text}")
+        line = f"[{death_year}] {gospel_text}"
+        print(f"  {line}")
+        history_log.log(line)
 
     all_events.sort(key=lambda e: e["year"])
 
@@ -150,6 +153,37 @@ def to_json(figures, places, events_list, map_data=None, characters_list=None):
     }
 
 
+def run_history(seed=None, figures_per_era=None, events_per_figure=None,
+                 characters_count=10, use_llm=True) -> dict:
+    """Everything a full run produces, as one JSON-shaped dict -- no file
+    I/O, no argparse. Called by server.py's /api/history/generate on a
+    background thread; main() below is the standalone-file-writing CLI
+    wrapper around the same steps."""
+    history_log.reset()
+    config.LLM_FILL_NAMES = bool(use_llm)
+    if not use_llm:
+        config.LLM_FLOURISH_RATE = 0.0
+
+    history_log.log("Generating history...")
+    figures, places, events_list = generate(
+        seed=seed, figures_per_era=figures_per_era, events_per_figure=events_per_figure,
+    )
+    history_log.log(f"{len(figures)} figures, {len(places)} places, {len(events_list)} events.")
+
+    history_log.log("Drawing the map...")
+    map_data = citymap.build_map(places, figures, seed=seed)
+    history_log.log("Map complete.")
+
+    history_log.log(f"Generating {characters_count} present-day residents...")
+    characters_list = characters.generate_characters(
+        places, figures, count=characters_count, seed=seed,
+    )
+    for c in characters_list:
+        history_log.log(f"  {c['name']}, {c['age']} -- {c['occupation']} (connected to {c['place_name']})")
+    history_log.log("Done.")
+    return to_json(figures, places, events_list, map_data=map_data, characters_list=characters_list)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Procedural NYC-inspired city history generator")
     parser.add_argument("--seed", type=int, default=None)
@@ -160,43 +194,34 @@ def main():
     parser.add_argument("--characters", type=int, default=10, help="number of present-day residents to generate")
     parser.add_argument("--characters-out", default="characters.json", help="path for the generated characters (blank to skip)")
     parser.add_argument("--no-llm", action="store_true", help="skip Ollama entirely (pure grammar output)")
-    parser.add_argument("--no-serve", action="store_true", help="don't start the web viewer after generation")
     args = parser.parse_args()
 
-    if args.no_llm:
-        config.LLM_FILL_NAMES = False
-        config.LLM_FLOURISH_RATE = 0.0
-    else:
+    if not args.no_llm:
         try:
             llm.check_connection()
             print(f"Using Ollama model '{config.CHAT_MODEL}' for name/flourish fills.\n")
         except RuntimeError as e:
             print(f"Note: {e}\nContinuing with pure-grammar output only.\n", file=sys.stderr)
 
-    figures, places, events_list = generate(
+    payload = run_history(
         seed=args.seed, figures_per_era=args.figures_per_era,
         events_per_figure=args.events_per_figure,
+        characters_count=args.characters, use_llm=not args.no_llm,
     )
-
-    map_data = citymap.build_map(places, figures, seed=args.seed)
-
-    characters_list = characters.generate_characters(
-        places, figures, count=args.characters, seed=args.seed,
-    )
-
-    payload = to_json(figures, places, events_list, map_data=map_data, characters_list=characters_list)
     with open(args.out, "w") as f:
         json.dump(payload, f, indent=2, default=str)
 
-    print(f"\n{len(figures)} figures, {len(places)} places, {len(events_list)} events.")
+    print(f"\n{len(payload['figures'])} figures, {len(payload['places'])} places, "
+          f"{len(payload['events'])} events.")
     print(f"Saved to {args.out}")
 
-    print(f"\n{map_data['text']}")
+    print(f"\n{payload['map']['text']}")
     if args.map_out:
         with open(args.map_out, "w") as f:
-            f.write(map_data["text"] + "\n")
+            f.write(payload["map"]["text"] + "\n")
         print(f"\nSaved map to {args.map_out}")
 
+    characters_list = payload["characters"]
     print(f"\n--- {len(characters_list)} residents of the city, c. 1959 ---")
     for c in characters_list:
         print(f"  {c['name']}, {c['age']} -- {c['occupation']} (connected to {c['place_name']})")
@@ -204,9 +229,6 @@ def main():
         with open(args.characters_out, "w") as f:
             json.dump(characters_list, f, indent=2, default=str)
         print(f"Saved to {args.characters_out}")
-
-    if not args.no_serve:
-        server.serve()
 
 
 if __name__ == "__main__":

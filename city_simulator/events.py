@@ -24,10 +24,10 @@ Each template is a dict:
 
 import random
 
-import config
+import history_config as config
 import entities
 import grammar
-import llm
+import history_llm as llm
 import names
 
 _GENERIC_CAUSES = [

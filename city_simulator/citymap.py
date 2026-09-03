@@ -22,8 +22,8 @@ import colorsys
 import math
 import random
 
-import config
-import llm
+import history_config as config
+import history_llm as llm
 from eras import ERAS
 
 CHAR_WIDTH = 74

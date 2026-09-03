@@ -10,9 +10,9 @@ import itertools
 import math
 
 import display
-import llm
+import agent_llm as llm
 import recorder
-from config import (
+from agent_config import (
     RECENCY_DECAY,
     RECENCY_WEIGHT,
     IMPORTANCE_WEIGHT,

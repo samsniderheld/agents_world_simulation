@@ -4,8 +4,8 @@ no memory stream or ongoing state of its own, just a single LLM call made
 once, after the simulation loop has already produced its log.
 """
 
-import config
-import llm
+import agent_config as config
+import agent_llm as llm
 
 NOIR_LOOK = (
     "moody film noir aesthetic: high-contrast black-and-white lighting, hard "

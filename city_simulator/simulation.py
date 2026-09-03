@@ -5,9 +5,9 @@ does is streamed live through recorder.py rather than returned, since the
 frontend is watching the event log, not this function's return value.
 """
 
-import config
+import agent_config as config
 import display
-import llm
+import agent_llm as llm
 from agent import Agent
 from treatment import generate_treatment
 from world import World
@@ -47,14 +47,66 @@ AGENT_ROSTER = {
 }
 
 
+_HUB_COUNT = 3  # a small, fixed number of shared "scenes" agents can occupy
+
+# Set by server.py once a history has finished generating (see
+# set_history_roster below); while it's None, the hardcoded noir cast above
+# is what roster_summary()/build_agents() draw from.
+_active_roster = None
+
+
+def _pick_hubs(history: dict) -> list:
+    """A history's own richest still-active places, standing in for "wherever
+    everyone in town still actually gathers" -- world.py has no movement, so
+    a handful of shared location strings is the only way two agents can ever
+    end up co-located (and therefore able to talk)."""
+    active = [p for p in history.get("places", []) if p.get("status") == "active"]
+    pool = active or history.get("places", [])
+    pool = sorted(pool, key=lambda p: len(p.get("history", [])), reverse=True)
+    return [p["name"] for p in pool[:_HUB_COUNT]] or ["the city"]
+
+
+def roster_from_history(history: dict) -> dict:
+    """A history's generated characters, restaged as an agent roster:
+    each keeps their real grounded bio, but is assigned round-robin across
+    a few shared hub locations (see _pick_hubs) instead of their own
+    individual, almost-certainly-unique grounding place."""
+    hubs = _pick_hubs(history)
+    roster = {}
+    for i, c in enumerate(history.get("characters", [])):
+        traits = (c.get("occupation") or "").strip()
+        quirk = (c.get("quirk") or "").strip()
+        if quirk:
+            traits = f"{traits}; {quirk}" if traits else quirk
+        roster[c["name"]] = dict(
+            age=c.get("age", 40),
+            traits=traits or "a longtime local",
+            currently=c.get("bio", ""),
+            location=hubs[i % len(hubs)],
+        )
+    return roster
+
+
+def set_history_roster(history: dict = None):
+    """Point the agent roster at a generated history's characters (or, if
+    called with None, back at the hardcoded noir cast)."""
+    global _active_roster
+    _active_roster = roster_from_history(history) if history else None
+
+
+def _current_roster() -> dict:
+    return _active_roster or AGENT_ROSTER
+
+
 def roster_summary() -> list:
     """The available cast, for the frontend's agent picker."""
-    return [{"name": name, **attrs} for name, attrs in AGENT_ROSTER.items()]
+    return [{"name": name, **attrs} for name, attrs in _current_roster().items()]
 
 
 def build_agents(names: list) -> list:
-    chosen = [n for n in names if n in AGENT_ROSTER] or ["Lou"]
-    return [Agent(name=name, **AGENT_ROSTER[name]) for name in chosen]
+    roster = _current_roster()
+    chosen = [n for n in names if n in roster] or [next(iter(roster))]
+    return [Agent(name=name, **roster[name]) for name in chosen]
 
 
 def run(ticks: int = 8, chat_model: str = None, embed_model: str = None,
@@ -72,7 +124,7 @@ def run(ticks: int = 8, chat_model: str = None, embed_model: str = None,
 
     llm.check_connection()
 
-    agents = build_agents(agent_names or list(AGENT_ROSTER))
+    agents = build_agents(agent_names or list(_current_roster()))
     agent_hex_colors = display.agent_hex_colors([a.name for a in agents])
 
     recorder.start(

@@ -14,11 +14,11 @@ the last reflection crosses REFLECTION_IMPORTANCE_THRESHOLD. When it fires:
 import re
 
 import display
-import llm
+import agent_llm as llm
 import recorder
 from agent import Agent
 from textutil import parse_list_lines
-from config import (
+from agent_config import (
     REFLECTION_IMPORTANCE_THRESHOLD,
     REFLECTION_LOOKBACK,
     REFLECTION_NUM_FOCAL_POINTS,

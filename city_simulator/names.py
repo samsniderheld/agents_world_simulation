@@ -10,8 +10,8 @@ back to the grammar with no visible error.
 
 import random
 
-import config
-import llm
+import history_config as config
+import history_llm as llm
 from eras import ERAS_BY_ID
 
 _GIVEN_DUTCH = ["Jan", "Pieter", "Willem", "Cornelis", "Hendrick", "Anneke", "Griet", "Marritje", "Trijntje", "Aeltje"]

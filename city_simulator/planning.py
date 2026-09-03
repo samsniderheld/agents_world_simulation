@@ -5,7 +5,7 @@ is enough for a short simulated run -- see README for how to extend it.)
 """
 
 import display
-import llm
+import agent_llm as llm
 import recorder
 from agent import Agent
 from textutil import cast_constraint, parse_list_lines
