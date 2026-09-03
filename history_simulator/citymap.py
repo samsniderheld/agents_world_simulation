@@ -1,15 +1,15 @@
-"""An ASCII map of every generated Place, clustered by era along a
-south-to-north axis -- mirroring how Manhattan actually grew over this
-exact timeline: oldest settlement at the Battery (bottom), newest
-expansion uptown (top). Each era's band is also drawn at a different
-width, giving the whole image a rough island silhouette (narrow at the
-Battery, bulging through the middle, narrowing again uptown) with the
-Hudson and East Rivers filling the margins, and a handful of real bridges
-crossing them once they'd actually have been built.
+"""An ASCII map of every generated Place, drawn over a procedurally
+generated island -- not real coastline data, since this whole project is
+about generating things, not tracing them. The island's silhouette comes
+from Perlin noise thresholded against a Manhattan-proportioned envelope
+(narrow at both the north and south tips, bulging through the middle), so
+the coastline gets real bays and points instead of just a wobbly edge,
+rasterized as Unicode braille dot-density for a much finer, more organic
+look than a block-character grid can give. Era neighborhoods are labeled
+directly on the land, the way a hand-drawn map would.
 
-Deliberately split the labor: Python computes every coordinate -- island
-width, water fill, marker positions, bridge placement -- and draws the
-grid, so it's always perfectly aligned regardless of how many places
+Deliberately split the labor: Python generates the shape and draws every
+dot and label, so it's always well-formed regardless of how many places
 exist. The LLM's only job is the creative part it's actually good at --
 naming each era's cluster as a neighborhood and writing a one-line
 caption -- with a plain grammar fallback if Ollama is unreachable.
@@ -22,39 +22,316 @@ import config
 import llm
 from eras import ERAS
 
-# How many marker-columns wide each era's band is, oldest (index 0, the
-# Battery) to newest (uptown) -- this is what gives the map its island
-# shape. MAX_COLS is derived from it so every band keeps at least a couple
-# of columns of water on each side, even at the widest point.
-ISLAND_COLS_PROFILE = [4, 6, 8, 10, 10, 8, 6, 5]
-MAX_COLS = max(ISLAND_COLS_PROFILE) + 4
-MIN_ROWS_PER_ERA = 3
-WATER_CHAR = "~"
+CHAR_WIDTH = 74
+CHAR_HEIGHT = 44
+DOT_W = CHAR_WIDTH * 2
+DOT_H = CHAR_HEIGHT * 4
 
-# (name, year actually built, era-band index it crosses at, which shore).
-# Only drawn once the map's final year has reached that bridge's real
-# opening year, via _bridges_for_era().
-BRIDGES = [
-    ("Brooklyn Bridge", 1883, 0, "east"),
-    ("Williamsburg Bridge", 1903, 1, "east"),
-    ("Manhattan Bridge", 1909, 1, "east"),
-    ("Queensboro Bridge", 1909, 4, "east"),
-    ("Triborough Bridge", 1936, 6, "east"),
-    ("George Washington Bridge", 1931, 7, "west"),
-]
+LAND_DENSITY = 0.62   # fraction of land sub-dots actually drawn, for texture
+WATER_DENSITY = 0.10  # fraction of water sub-dots drawn, so the sea isn't a void
+
+NOISE_SCALE = 0.05       # smaller = broader, smoother terrain features
+NOISE_OCTAVES = 5
+NOISE_PERSISTENCE = 0.5
+FALLOFF_POWER = 2.2      # higher = sharper edge, lower = softer/larger island
+SEA_LEVEL = -0.20        # higher = smaller/patchier landmass, lower = bigger/more solid
+SATELLITE_SEA_LEVEL = -0.30  # more generous than SEA_LEVEL -- a small island
+                             # needs a lower bar to read as solid rather than
+                             # fragmenting away to nothing at its small size
+
+_BRAILLE_BASE = 0x2800
+_BRAILLE_BIT = {
+    (0, 0): 0x01, (0, 1): 0x02, (0, 2): 0x04, (0, 3): 0x40,
+    (1, 0): 0x08, (1, 1): 0x10, (1, 2): 0x20, (1, 3): 0x80,
+}
+
+# One color per physical landmass, id 0 always the largest (the main
+# landmass, kept the same off-white as before); satellites get distinct
+# accent colors so they visually pop as "other landmasses" -- this only
+# ever reaches the web viewer, since plain text can't carry color.
+LANDMASS_COLORS = {
+    0: "#b875fa",
+    1: "#7dd3fc",
+    2: "#fca5a5",
+    3: "#bef264",
+}
+DEFAULT_LANDMASS_COLOR = "#d4d4d4"  # if there's ever more landmasses than the palette
+WATER_COLOR = "#3b5f7a"
+
+MIN_LANDMASS_DOTS = 30  # noise specks smaller than this read as water, not an island
 
 
-def _cell_width(num_places: int) -> int:
-    digits = len(str(max(num_places, 1)))
-    return digits + 3  # "[" + digits + "]" + 1 trailing space
+def _make_perlin(rng: random.Random):
+    """A standard 2D gradient (Perlin) noise function, seeded from `rng` --
+    no numpy/noise dependency, just the classic algorithm: a shuffled
+    permutation table, smoothstep-interpolated between four corner
+    gradients per cell. Returns noise(x, y) -> roughly [-1, 1]."""
+    perm = list(range(256))
+    rng.shuffle(perm)
+    perm = perm * 2  # avoid index-wrapping checks below
+
+    def fade(t):
+        return t * t * t * (t * (t * 6 - 15) + 10)
+
+    def lerp(t, a, b):
+        return a + t * (b - a)
+
+    def grad(hash_, x, y):
+        # 4 gradient directions is the standard simplification for 2D
+        # Perlin noise (Ken Perlin's own reference implementation does
+        # the same trick for the 2D case).
+        h = hash_ & 3
+        u = x if h < 2 else y
+        v = y if h < 2 else x
+        return (u if h & 1 == 0 else -u) + (v if h & 2 == 0 else -v)
+
+    def noise(x, y):
+        xi, yi = int(math.floor(x)) & 255, int(math.floor(y)) & 255
+        xf, yf = x - math.floor(x), y - math.floor(y)
+        u, v = fade(xf), fade(yf)
+        aa, ab = perm[perm[xi] + yi], perm[perm[xi] + yi + 1]
+        ba, bb = perm[perm[xi + 1] + yi], perm[perm[xi + 1] + yi + 1]
+        x1 = lerp(u, grad(aa, xf, yf), grad(ba, xf - 1, yf))
+        x2 = lerp(u, grad(ab, xf, yf - 1), grad(bb, xf - 1, yf - 1))
+        return lerp(v, x1, x2)
+
+    return noise
+
+
+def _fractal_noise(noise, x: float, y: float, octaves: int, persistence: float) -> float:
+    """Layer several octaves of the base noise (each higher-frequency and
+    lower-amplitude than the last) for the small-scale roughness real
+    coastlines have on top of their broad curves, normalized to [-1, 1]."""
+    total, amplitude, frequency, max_value = 0.0, 1.0, 1.0, 0.0
+    for _ in range(octaves):
+        total += noise(x * frequency, y * frequency) * amplitude
+        max_value += amplitude
+        amplitude *= persistence
+        frequency *= 2.0
+    return total / max_value
+
+
+def _land_at(noise, col: float, row: float, cx: float, cy: float,
+             a: float, b: float, sea_level: float) -> bool:
+    """Shared land test: fractal noise minus an elliptical falloff from
+    (cx, cy) with semi-axes (a, b), thresholded at sea_level. The main
+    landmass and each satellite island (see _add_satellite_islands) are
+    both just this same test centered somewhere different."""
+    dx, dy = (col - cx) / a, (row - cy) / b
+    distance = math.sqrt(dx * dx + dy * dy)
+    n = _fractal_noise(noise, col * NOISE_SCALE, row * NOISE_SCALE, NOISE_OCTAVES, NOISE_PERSISTENCE)
+    elevation = (n + 1) / 2  # normalize from [-1, 1] to [0, 1]
+    return (elevation - distance ** FALLOFF_POWER) > sea_level
+
+
+def _add_satellite_islands(mask: list, noise, rng: random.Random):
+    """1-3 more landmasses near the main one -- the boroughs/New-Jersey
+    character of the real NYC area, without tracing it: each is the same
+    noise field, just thresholded around its own center point elsewhere.
+    Sized anywhere from a small island up to comparable to the main
+    landmass itself, and deliberately allowed to center off-grid, so a
+    big one reads the way Brooklyn or New Jersey would on a map centered
+    on Manhattan -- a landmass that just runs off the edge, not a tidy
+    island fully contained in view."""
+    cx, cy = DOT_W / 2, DOT_H / 2
+    main_a, main_b = DOT_W * 0.30, DOT_H * 0.48
+    placed = []  # (cx, cy, a, b) of every satellite placed so far
+
+    count = rng.randint(1, 3)
+    attempts = 0
+    while len(placed) < count and attempts < 300:
+        attempts += 1
+        a, b = DOT_W * rng.uniform(0.08, 0.32), DOT_H * rng.uniform(0.07, 0.28)
+        # Center can land up to half its own radius off-grid -- enough to
+        # spill off an edge while still guaranteeing some of it is visible.
+        col = rng.uniform(-0.5 * a, DOT_W + 0.5 * a)
+        row = rng.uniform(-0.5 * b, DOT_H + 0.5 * b)
+
+        dx, dy = (col - cx) / main_a, (row - cy) / main_b
+        d_main = math.sqrt(dx * dx + dy * dy)
+        # A bigger satellite needs proportionally more center-to-center
+        # clearance to actually stay offshore -- a flat distance range
+        # here let a big enough satellite overlap (and silently fuse
+        # into) the main landmass instead of reading as a separate one
+        # across the water, the way a real borough always is.
+        satellite_radius_norm = ((a / main_a) + (b / main_b)) / 2
+        min_d = 1.0 + satellite_radius_norm + 0.15
+        if not (min_d < d_main < min_d + 1.0):
+            continue
+        if any(math.hypot(col - ocx, row - ocy) < max(a, b) + max(oa, ob)
+               for ocx, ocy, oa, ob in placed):
+            continue  # keep clear of satellites already placed
+        placed.append((col, row, a, b))
+
+    for icx, icy, a, b in placed:
+        row_lo, row_hi = max(0, int(icy - b - 2)), min(DOT_H, int(icy + b + 2))
+        col_lo, col_hi = max(0, int(icx - a - 2)), min(DOT_W, int(icx + a + 2))
+        for row in range(row_lo, row_hi):
+            for col in range(col_lo, col_hi):
+                if _land_at(noise, col, row, icx, icy, a, b, SATELLITE_SEA_LEVEL):
+                    mask[row][col] = True
+
+
+def _generate_island_mask(rng: random.Random) -> list:
+    """True/False per (dot) row/col -- land or water. This is the standard
+    noise-terrain technique (see e.g. redblobgames' writeups on generating
+    maps with noise): a full 2D fractal-noise height field, biased by an
+    elongated elliptical falloff (tall north-south, narrow east-west, so
+    the overall silhouette still reads as a Manhattan-like island rather
+    than a circular blob), thresholded at a sea level. The landmass's
+    actual shape -- not just its coastline -- is whatever that combination
+    produces: real bays and points, plus 1-3 smaller satellite islands
+    offshore (see _add_satellite_islands) for an archipelago rather than
+    one lone landmass."""
+    noise = _make_perlin(rng)
+    mask = [[False] * DOT_W for _ in range(DOT_H)]
+    cx, cy = DOT_W / 2, DOT_H / 2
+    a, b = DOT_W * 0.30, DOT_H * 0.48  # ellipse semi-axes
+
+    for row in range(DOT_H):
+        for col in range(DOT_W):
+            mask[row][col] = _land_at(noise, col, row, cx, cy, a, b, SEA_LEVEL)
+
+    _add_satellite_islands(mask, noise, rng)
+    return mask
+
+
+def _dot_grid(mask: list, rng: random.Random) -> list:
+    """Texture the solid mask into a sparser dot pattern -- land denser
+    than water -- purely cosmetic, so terrain reads as dotted density
+    rather than solid blocks."""
+    grid = [[False] * DOT_W for _ in range(DOT_H)]
+    for row in range(DOT_H):
+        for col in range(DOT_W):
+            density = LAND_DENSITY if mask[row][col] else WATER_DENSITY
+            grid[row][col] = rng.random() < density
+    return grid
+
+
+def _to_braille_rows(dots: list) -> list:
+    """Pack the DOT_W x DOT_H dot grid down into CHAR_WIDTH x CHAR_HEIGHT
+    braille characters (each covers a 2-wide x 4-tall block of dots)."""
+    rows = []
+    for cr in range(CHAR_HEIGHT):
+        line = []
+        for cc in range(CHAR_WIDTH):
+            code = _BRAILLE_BASE
+            for dr in range(4):
+                for dc in range(2):
+                    if dots[cr * 4 + dr][cc * 2 + dc]:
+                        code |= _BRAILLE_BIT[(dc, dr)]
+            line.append(chr(code))
+        rows.append(line)
+    return rows
+
+
+def _char_is_land(mask: list) -> list:
+    """Character-cell land/water: land if any of its 2x4 sub-dots are land."""
+    grid = [[False] * CHAR_WIDTH for _ in range(CHAR_HEIGHT)]
+    for cr in range(CHAR_HEIGHT):
+        for cc in range(CHAR_WIDTH):
+            grid[cr][cc] = any(
+                mask[cr * 4 + dr][cc * 2 + dc]
+                for dr in range(4) for dc in range(2)
+            )
+    return grid
+
+
+def _label_components(mask: list) -> list:
+    """Flood-fill connected components of the full dot mask -- same-shaped
+    grid of component ids (None for water), remapped so id 0 is always the
+    largest component (the main landmass) and 1, 2, 3... are satellites in
+    decreasing size order, regardless of the order they happened to be
+    generated in."""
+    h, w = DOT_H, DOT_W
+    raw = [[None] * w for _ in range(h)]
+    next_id = 0
+    for r in range(h):
+        for c in range(w):
+            if mask[r][c] and raw[r][c] is None:
+                stack = [(r, c)]
+                raw[r][c] = next_id
+                while stack:
+                    cr, cc = stack.pop()
+                    for dr, dc in ((-1, 0), (1, 0), (0, -1), (0, 1),
+                                   (-1, -1), (-1, 1), (1, -1), (1, 1)):
+                        nr, nc = cr + dr, cc + dc
+                        if 0 <= nr < h and 0 <= nc < w and mask[nr][nc] and raw[nr][nc] is None:
+                            raw[nr][nc] = next_id
+                            stack.append((nr, nc))
+                next_id += 1
+
+    sizes = [0] * next_id
+    for row in raw:
+        for cid in row:
+            if cid is not None:
+                sizes[cid] += 1
+
+    # Perlin noise occasionally crosses the sea-level threshold in a tiny,
+    # isolated speck far too small to read as an intentional island --
+    # drop anything under MIN_LANDMASS_DOTS so it colors as plain water
+    # instead of claiming its own (visually indistinguishable) gray id.
+    order = sorted(
+        (i for i in range(next_id) if sizes[i] >= MIN_LANDMASS_DOTS),
+        key=lambda i: -sizes[i],
+    )
+    remap = {old: new for new, old in enumerate(order)}
+
+    return [[remap.get(cid) if cid is not None else None for cid in row] for row in raw]
+
+
+def _char_component_grid(comp_dot_grid: list) -> list:
+    """Character-cell component id: whichever component owns the most of
+    that cell's 2x4 sub-dots (None if the cell is entirely water). A
+    labeled place/neighborhood always lands on a cell with a definite
+    component here, since _find_spot only ever places on land."""
+    grid = [[None] * CHAR_WIDTH for _ in range(CHAR_HEIGHT)]
+    for cr in range(CHAR_HEIGHT):
+        for cc in range(CHAR_WIDTH):
+            counts = {}
+            for dr in range(4):
+                for dc in range(2):
+                    cid = comp_dot_grid[cr * 4 + dr][cc * 2 + dc]
+                    if cid is not None:
+                        counts[cid] = counts.get(cid, 0) + 1
+            grid[cr][cc] = max(counts, key=counts.get) if counts else None
+    return grid
+
+
+def _era_row_range(era_index: int) -> tuple:
+    """Character rows this era's band occupies -- era 0 (oldest) at the
+    south/bottom, the newest era at the north/top."""
+    band = CHAR_HEIGHT // len(ERAS)
+    from_top = len(ERAS) - 1 - era_index
+    start = from_top * band
+    end = CHAR_HEIGHT if era_index == 0 else start + band
+    return start, end
+
+
+def _find_spot(start_row: int, end_row: int, width: int, char_is_land: list,
+                claimed: set, rng: random.Random):
+    """A free, on-land horizontal run of `width` characters within this
+    era's row band. Falls back to the least-bad candidate if nothing is
+    perfectly free, so a crowded band never just silently drops a place."""
+    candidates = []
+    for r in range(start_row, min(end_row, CHAR_HEIGHT)):
+        for c in range(0, CHAR_WIDTH - width):
+            if char_is_land[r][c]:
+                candidates.append((r, c))
+    rng.shuffle(candidates)
+    for r, c in candidates:
+        cells = [(r, c + i) for i in range(width)]
+        if not any(cell in claimed for cell in cells):
+            claimed.update(cells)
+            return r, c
+    if candidates:
+        r, c = candidates[0]
+        claimed.update((r, c + i) for i in range(width))
+        return r, c
+    return None
 
 
 def _neighborhood_name(era, places_here: list, used_names: set, rng: random.Random) -> str:
-    # The era name itself already makes this unique across eras, unlike an
-    # LLM answer -- so it's the fallback both when the model's unavailable
-    # and when it ignores the exclusion list below (e.g. "Lower East Side"
-    # is such an obvious answer for several different tenement-heavy eras
-    # that a plain "don't repeat yourself" instruction doesn't always hold).
     fallback = f"{era.name.split('(')[0].strip()} Quarter"
     if not (config.LLM_FILL_NAMES and llm.available()):
         return fallback
@@ -97,16 +374,25 @@ def _caption(neighborhood_names: list) -> str:
     return fallback
 
 
-def _bridges_for_era_index(era_index: int, max_year: int):
-    return [b for b in BRIDGES if b[2] == era_index and b[1] <= max_year]
+def _stamp(rows: list, row: int, col: int, text: str):
+    for i, ch in enumerate(text):
+        if 0 <= col + i < CHAR_WIDTH:
+            rows[row][col + i] = ch
 
 
-def build_map(places: list, figures: list, seed=None) -> str:
+def build_map(places: list, figures: list, seed=None) -> dict:
     """`places`/`figures` are the entities.Place/Figure objects generate.py
-    holds in memory -- call this before (or after) serializing to JSON."""
+    holds in memory -- call this before (or after) serializing to JSON.
+
+    Returns {"text": <the plain multi-line map, for map.txt/console -- what
+    this function used to return outright>, "rows": <the grid's CHAR_HEIGHT
+    lines alone, no left-margin>, "cell_components": <same-shaped grid of
+    landmass id per character cell, None for water>, "palette": <id (as a
+    string) -> hex color, plus "water">, "caption": <the caption line>}.
+    Only the web viewer (which can actually render color) uses anything
+    past "text"."""
     rng = random.Random(seed)
     figure_era = {f.id: f.era_id for f in figures}
-    max_year = max(era.end_year for era in ERAS)
 
     places_by_era = {era.id: [] for era in ERAS}
     for place in places:
@@ -114,85 +400,43 @@ def build_map(places: list, figures: list, seed=None) -> str:
         if era_id in places_by_era:
             places_by_era[era_id].append(place)
 
-    cell_width = _cell_width(len(places))
-    total_width = MAX_COLS * cell_width
+    mask = _generate_island_mask(rng)
+    dots = _dot_grid(mask, rng)
+    rows = _to_braille_rows(dots)
+    char_is_land = _char_is_land(mask)
+    cell_components = _char_component_grid(_label_components(mask))
+    claimed = set()
 
-    legend = []       # (number, place) in display order
-    band_blocks = []  # [row strings] per era, oldest era first
-    used_names = set()        # lowercased, for case-insensitive dedup checks
-    neighborhood_order = []   # properly-cased, oldest-to-newest, for the caption prompt
+    legend = []              # (number, place) in display order
+    used_names = set()       # lowercased, for case-insensitive dedup checks
+    neighborhood_order = []  # properly-cased, oldest-to-newest, for the caption prompt
     number = 1
 
     for era_index, era in enumerate(ERAS):
+        start_row, end_row = _era_row_range(era_index)
         places_here = places_by_era[era.id]
+
         neighborhood = _neighborhood_name(era, places_here, used_names, rng)
         used_names.add(neighborhood.lower())
         neighborhood_order.append(neighborhood)
+        spot = _find_spot(start_row, end_row, len(neighborhood) + 2, char_is_land, claimed, rng)
+        if spot:
+            _stamp(rows, spot[0], spot[1], neighborhood)
 
-        island_cols = ISLAND_COLS_PROFILE[era_index]
-        water_cols_each_side = (MAX_COLS - island_cols) // 2
-        land_start = water_cols_each_side * cell_width
-        land_end = land_start + island_cols * cell_width
-
-        bridges_here = _bridges_for_era_index(era_index, max_year)
-        rows_needed = max(
-            MIN_ROWS_PER_ERA,
-            math.ceil(len(places_here) / island_cols) if places_here else 0,
-            len(bridges_here),
-        ) or MIN_ROWS_PER_ERA
-
-        # Water everywhere, land (blank, ready for markers) only inside
-        # this band's island width -- this is what produces the silhouette.
-        rows = [[WATER_CHAR] * total_width for _ in range(rows_needed)]
-        for row in rows:
-            for x in range(land_start, land_end):
-                row[x] = " "
-
-        slots = [(r, c) for r in range(rows_needed) for c in range(island_cols)]
-        rng.shuffle(slots)
-        for place, (r, c) in zip(places_here, slots):
+        for place in places_here:
             label = f"[{number}]"
-            x = land_start + c * cell_width
-            for i, ch in enumerate(label):
-                if x + i < land_end:
-                    rows[r][x + i] = ch
+            spot = _find_spot(start_row, end_row, len(label), char_is_land, claimed, rng)
+            if spot:
+                _stamp(rows, spot[0], spot[1], label)
             legend.append((number, place))
             number += 1
 
-        # One label per row: the neighborhood name on row 0, plus any
-        # bridge crossing this band, each on its own row so labels never
-        # collide.
-        row_labels = {0: [neighborhood]}
-        for i, (bname, byear, _idx, side) in enumerate(bridges_here):
-            r = i % rows_needed
-            if side == "east":
-                for x in range(land_end, total_width):
-                    rows[r][x] = "="
-            else:
-                for x in range(0, land_start):
-                    rows[r][x] = "="
-            row_labels.setdefault(r, []).append(f"{bname} ({byear})")
-
-        row_strings = []
-        for r, row in enumerate(rows):
-            line = "".join(row)
-            labels = row_labels.get(r)
-            if labels:
-                line += "    " + " / ".join(labels)
-            row_strings.append(line)
-        band_blocks.append(row_strings)
-
-    band_blocks.reverse()  # newest era at the top of the map
-
-    # 8-space lead-in matches the "     |  " prefix every grid row below
-    # gets, so these two labels sit directly above their actual water columns.
-    river_header = " " * 8 + "HUDSON RIVER".ljust(total_width // 2) + "EAST RIVER"
-    out = [river_header, "     N", "     ^"]
-    for row_strings in band_blocks:
-        for r in row_strings:
-            out.append(f"     |  {r}")
-        out.append("     |")
-    out.append("     +" + "-" * (total_width + 4) + ">")
+    river_header = " " * 8 + "HUDSON RIVER".ljust(CHAR_WIDTH // 2) + "EAST RIVER"
+    grid_lines = ["".join(r) for r in rows]
+    out = [river_header, "  N", "  ^"]
+    for line in grid_lines:
+        out.append("  |" + line)
+    out.append("  +" + "-" * CHAR_WIDTH + ">")
     out.append("")
     out.append("Legend:")
     for number, place in legend:
@@ -200,6 +444,22 @@ def build_map(places: list, figures: list, seed=None) -> str:
         out.append(f"  {number:>2}. {place.name} ({place.place_type}, founded {place.founded_year}{status_note})")
 
     out.append("")
-    out.append(_caption(neighborhood_order))
+    caption = _caption(neighborhood_order)
+    out.append(caption)
 
-    return "\n".join(out)
+    palette = {str(cid): color for cid, color in LANDMASS_COLORS.items()}
+    palette["water"] = WATER_COLOR
+    palette["default"] = DEFAULT_LANDMASS_COLOR
+
+    return {
+        "text": "\n".join(out),
+        "rows": grid_lines,
+        "cell_components": cell_components,
+        "palette": palette,
+        "caption": caption,
+        # so a colored (web-only) rendering of the grid doesn't have to
+        # re-parse this framing back out of "text"
+        "header_lines": [river_header, "  N", "  ^"],
+        "row_prefix": "  |",
+        "border_line": "  +" + "-" * CHAR_WIDTH + ">",
+    }

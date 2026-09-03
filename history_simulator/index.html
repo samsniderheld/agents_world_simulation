@@ -378,15 +378,42 @@
   }
 
   function renderMap(data){
-    // build_map() (citymap.py) always ends with a blank line then a single
-    // caption sentence -- split those off so the caption renders separately
-    // from the grid+legend body.
-    const mapText = data.map || "";
-    const lines = mapText.split("\n");
-    const captionLine = lines[lines.length - 1] || "";
-    const body = lines.slice(0, -2).join("\n");
-    document.getElementById('mapText').textContent = body || mapText;
-    document.getElementById('mapCaption').textContent = captionLine;
+    const map = data.map;
+    if (!map || typeof map !== 'object') {
+      document.getElementById('mapText').textContent = map || '';
+      return;
+    }
+
+    const palette = map.palette || {};
+    const colorFor = (cid) => {
+      if (cid === null || cid === undefined) return palette.water || '#3b5f7a';
+      return palette[String(cid)] || palette.default || '#d4d4d4';
+    };
+
+    // Color each character by which physical landmass it's on (or water) --
+    // grouped into runs per row so the HTML stays compact rather than one
+    // span per character.
+    const coloredRows = (map.rows || []).map((line, r) => {
+      const comps = (map.cell_components && map.cell_components[r]) || [];
+      let html = '', runColor = null, runText = '';
+      const flush = () => {
+        if (runText) html += `<span style="color:${runColor}">${escapeHtml(runText)}</span>`;
+        runText = '';
+      };
+      for (let c = 0; c < line.length; c++) {
+        const color = colorFor(comps[c]);
+        if (color !== runColor) { flush(); runColor = color; }
+        runText += line[c];
+      }
+      flush();
+      return (map.row_prefix || '') + html;
+    });
+
+    const header = (map.header_lines || []).map(escapeHtml).join('\n');
+    const border = escapeHtml(map.border_line || '');
+    document.getElementById('mapText').innerHTML =
+      `${header}\n${coloredRows.join('\n')}\n${border}`;
+    document.getElementById('mapCaption').textContent = map.caption || '';
   }
 
   function populateTypeFilter(data){

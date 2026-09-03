@@ -122,7 +122,7 @@ def generate(seed=None, figures_per_era=None, events_per_figure=None):
     return all_figures, all_places, all_events
 
 
-def to_json(figures, places, events_list, map_text=None, characters_list=None):
+def to_json(figures, places, events_list, map_data=None, characters_list=None):
     return {
         "generated_at": datetime.datetime.now().isoformat(),
         "eras": [
@@ -145,7 +145,7 @@ def to_json(figures, places, events_list, map_text=None, characters_list=None):
             for p in places
         ],
         "events": events_list,
-        "map": map_text,
+        "map": map_data,
         "characters": characters_list or [],
     }
 
@@ -178,23 +178,23 @@ def main():
         events_per_figure=args.events_per_figure,
     )
 
-    map_text = citymap.build_map(places, figures, seed=args.seed)
+    map_data = citymap.build_map(places, figures, seed=args.seed)
 
     characters_list = characters.generate_characters(
         places, figures, count=args.characters, seed=args.seed,
     )
 
-    payload = to_json(figures, places, events_list, map_text=map_text, characters_list=characters_list)
+    payload = to_json(figures, places, events_list, map_data=map_data, characters_list=characters_list)
     with open(args.out, "w") as f:
         json.dump(payload, f, indent=2, default=str)
 
     print(f"\n{len(figures)} figures, {len(places)} places, {len(events_list)} events.")
     print(f"Saved to {args.out}")
 
-    print(f"\n{map_text}")
+    print(f"\n{map_data['text']}")
     if args.map_out:
         with open(args.map_out, "w") as f:
-            f.write(map_text + "\n")
+            f.write(map_data["text"] + "\n")
         print(f"\nSaved map to {args.map_out}")
 
     print(f"\n--- {len(characters_list)} residents of the city, c. 1959 ---")
