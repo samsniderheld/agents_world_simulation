@@ -6,7 +6,10 @@ from Perlin noise thresholded against a Manhattan-proportioned envelope
 the coastline gets real bays and points instead of just a wobbly edge,
 rasterized as Unicode braille dot-density for a much finer, more organic
 look than a block-character grid can give. Era neighborhoods are labeled
-directly on the land, the way a hand-drawn map would.
+directly on the land, the way a hand-drawn map would, and in the web
+viewer each one's row-band is colored separately -- carving up every
+landmass into its actual neighborhoods rather than leaving it one flat
+color (see _char_neighborhood_grid / build_map).
 
 Deliberately split the labor: Python generates the shape and draws every
 dot and label, so it's always well-formed regardless of how many places
@@ -15,6 +18,7 @@ naming each era's cluster as a neighborhood and writing a one-line
 caption -- with a plain grammar fallback if Ollama is unreachable.
 """
 
+import colorsys
 import math
 import random
 
@@ -45,20 +49,41 @@ _BRAILLE_BIT = {
     (1, 0): 0x08, (1, 1): 0x10, (1, 2): 0x20, (1, 3): 0x80,
 }
 
-# One color per physical landmass, id 0 always the largest (the main
-# landmass, kept the same off-white as before); satellites get distinct
-# accent colors so they visually pop as "other landmasses" -- this only
-# ever reaches the web viewer, since plain text can't carry color.
-LANDMASS_COLORS = {
-    0: "#b875fa",
-    1: "#7dd3fc",
-    2: "#fca5a5",
-    3: "#bef264",
-}
-DEFAULT_LANDMASS_COLOR = "#d4d4d4"  # if there's ever more landmasses than the palette
+# Every era's row-band gets its own color, and each band is itself sliced
+# into this many east-west columns -- these (era x column) cells ARE the
+# neighborhoods (see _neighborhood_name / build_map), so coloring by them
+# is what actually divides each landmass up into a real 2D grid of
+# visually distinct sections, rather than one flat color or a single
+# north-south strip. Generated rather than hand-picked so the palette
+# always matches however many eras/columns exist; this only ever reaches
+# the web viewer, since plain text can't carry color.
+DEFAULT_NEIGHBORHOOD_COLOR = "#d4d4d4"  # land with no era/column mapped (shouldn't happen)
 WATER_COLOR = "#3b5f7a"
 
-MIN_LANDMASS_DOTS = 30  # noise specks smaller than this read as water, not an island
+NEIGHBORHOOD_COLUMNS = 2
+_COLUMN_LABELS = ["West", "East"]  # sized to NEIGHBORHOOD_COLUMNS -- update together
+
+
+def _column_ranges(n: int) -> list:
+    """n roughly-equal character-column ranges spanning CHAR_WIDTH, west to
+    east -- the vertical cuts that, combined with the era row-bands, carve
+    the map into a real grid instead of just horizontal strips."""
+    step = CHAR_WIDTH / n
+    return [(round(i * step), round((i + 1) * step)) for i in range(n)]
+
+
+COLUMN_RANGES = _column_ranges(NEIGHBORHOOD_COLUMNS)
+
+
+def _neighborhood_palette(n: int) -> list:
+    """n evenly-hued, parchment-friendly pastel colors -- fixed saturation
+    and lightness so every neighborhood reads as equally legible on the
+    map, only the hue rotates."""
+    colors = []
+    for i in range(n):
+        r, g, b = colorsys.hls_to_rgb(i / n, 0.72, 0.55)
+        colors.append("#{:02x}{:02x}{:02x}".format(round(r * 255), round(g * 255), round(b * 255)))
+    return colors
 
 
 def _make_perlin(rng: random.Random):
@@ -237,64 +262,40 @@ def _char_is_land(mask: list) -> list:
     return grid
 
 
-def _label_components(mask: list) -> list:
-    """Flood-fill connected components of the full dot mask -- same-shaped
-    grid of component ids (None for water), remapped so id 0 is always the
-    largest component (the main landmass) and 1, 2, 3... are satellites in
-    decreasing size order, regardless of the order they happened to be
-    generated in."""
-    h, w = DOT_H, DOT_W
-    raw = [[None] * w for _ in range(h)]
-    next_id = 0
-    for r in range(h):
-        for c in range(w):
-            if mask[r][c] and raw[r][c] is None:
-                stack = [(r, c)]
-                raw[r][c] = next_id
-                while stack:
-                    cr, cc = stack.pop()
-                    for dr, dc in ((-1, 0), (1, 0), (0, -1), (0, 1),
-                                   (-1, -1), (-1, 1), (1, -1), (1, 1)):
-                        nr, nc = cr + dr, cc + dc
-                        if 0 <= nr < h and 0 <= nc < w and mask[nr][nc] and raw[nr][nc] is None:
-                            raw[nr][nc] = next_id
-                            stack.append((nr, nc))
-                next_id += 1
-
-    sizes = [0] * next_id
-    for row in raw:
-        for cid in row:
-            if cid is not None:
-                sizes[cid] += 1
-
-    # Perlin noise occasionally crosses the sea-level threshold in a tiny,
-    # isolated speck far too small to read as an intentional island --
-    # drop anything under MIN_LANDMASS_DOTS so it colors as plain water
-    # instead of claiming its own (visually indistinguishable) gray id.
-    order = sorted(
-        (i for i in range(next_id) if sizes[i] >= MIN_LANDMASS_DOTS),
-        key=lambda i: -sizes[i],
-    )
-    remap = {old: new for new, old in enumerate(order)}
-
-    return [[remap.get(cid) if cid is not None else None for cid in row] for row in raw]
+def _era_row_lookup() -> list:
+    """Character row -> the era whose band that row falls in -- the same
+    south-to-north bands _era_row_range already defines, just inverted
+    into a per-row lookup so a character cell's neighborhood is a single
+    array index instead of re-deriving the band on every cell."""
+    lookup = [None] * CHAR_HEIGHT
+    for era_index, era in enumerate(ERAS):
+        start, end = _era_row_range(era_index)
+        for r in range(start, min(end, CHAR_HEIGHT)):
+            lookup[r] = era.id
+    return lookup
 
 
-def _char_component_grid(comp_dot_grid: list) -> list:
-    """Character-cell component id: whichever component owns the most of
-    that cell's 2x4 sub-dots (None if the cell is entirely water). A
-    labeled place/neighborhood always lands on a cell with a definite
-    component here, since _find_spot only ever places on land."""
+def _column_index_lookup() -> list:
+    """Character column -> which column-band it falls in (see
+    COLUMN_RANGES), the west-east counterpart to _era_row_lookup."""
+    lookup = [0] * CHAR_WIDTH
+    for col_index, (start, end) in enumerate(COLUMN_RANGES):
+        for c in range(start, min(end, CHAR_WIDTH)):
+            lookup[c] = col_index
+    return lookup
+
+
+def _char_neighborhood_grid(char_is_land: list, row_era: list, col_index: list) -> list:
+    """Character-cell neighborhood id ("{era_id}_{column}", None for
+    water). This is what actually divides each landmass into a real grid
+    of separately colored sections: a landmass spanning multiple eras'
+    row-bands and multiple columns shows one color per (era, column) cell
+    rather than one flat color or a single north-south strip."""
     grid = [[None] * CHAR_WIDTH for _ in range(CHAR_HEIGHT)]
     for cr in range(CHAR_HEIGHT):
+        era_id = row_era[cr]
         for cc in range(CHAR_WIDTH):
-            counts = {}
-            for dr in range(4):
-                for dc in range(2):
-                    cid = comp_dot_grid[cr * 4 + dr][cc * 2 + dc]
-                    if cid is not None:
-                        counts[cid] = counts.get(cid, 0) + 1
-            grid[cr][cc] = max(counts, key=counts.get) if counts else None
+            grid[cr][cc] = f"{era_id}_{col_index[cc]}" if char_is_land[cr][cc] else None
     return grid
 
 
@@ -308,14 +309,16 @@ def _era_row_range(era_index: int) -> tuple:
     return start, end
 
 
-def _find_spot(start_row: int, end_row: int, width: int, char_is_land: list,
-                claimed: set, rng: random.Random):
+def _find_spot(start_row: int, end_row: int, start_col: int, end_col: int, width: int,
+                char_is_land: list, claimed: set, rng: random.Random):
     """A free, on-land horizontal run of `width` characters within this
-    era's row band. Falls back to the least-bad candidate if nothing is
-    perfectly free, so a crowded band never just silently drops a place."""
+    neighborhood's row band AND column band. Falls back to the least-bad
+    candidate if nothing is perfectly free, so a crowded section never
+    just silently drops a place."""
     candidates = []
+    max_c = min(end_col, CHAR_WIDTH) - width
     for r in range(start_row, min(end_row, CHAR_HEIGHT)):
-        for c in range(0, CHAR_WIDTH - width):
+        for c in range(start_col, max_c):
             if char_is_land[r][c]:
                 candidates.append((r, c))
     rng.shuffle(candidates)
@@ -331,21 +334,22 @@ def _find_spot(start_row: int, end_row: int, width: int, char_is_land: list,
     return None
 
 
-def _neighborhood_name(era, places_here: list, used_names: set, rng: random.Random) -> str:
-    fallback = f"{era.name.split('(')[0].strip()} Quarter"
+def _neighborhood_name(era, column_label: str, places_here: list, used_names: set, rng: random.Random) -> str:
+    fallback = f"{column_label} {era.name.split('(')[0].strip()} Quarter"
     if not (config.LLM_FILL_NAMES and llm.available()):
         return fallback
     try:
         sample = ", ".join(f"{p.name} ({p.place_type})" for p in places_here[:6]) or "a few scattered lots"
         exclusion = (
-            f" Do not use any of these names, already used for other eras on this "
+            f" Do not use any of these names, already used for other neighborhoods on this "
             f"map: {', '.join(sorted(used_names))}."
             if used_names else ""
         )
         prompt = (
             "In one short, evocative neighborhood name (2-4 words, no punctuation, "
             f"no quotes), create a new name for a neighborhood for an alternate history NYC during the \"{era.name}\" era "
-            f"({era.start_year}-{era.end_year}) that's home to: {sample}.{exclusion} "
+            f"({era.start_year}-{era.end_year}), specifically its {column_label.lower()} side, "
+            f"that's home to: {sample}.{exclusion} "
             "Reply with ONLY the neighborhood name."
         )
         name = llm.complete(prompt, temperature=0.9).strip().strip('"').strip(".")
@@ -386,11 +390,15 @@ def build_map(places: list, figures: list, seed=None) -> dict:
 
     Returns {"text": <the plain multi-line map, for map.txt/console -- what
     this function used to return outright>, "rows": <the grid's CHAR_HEIGHT
-    lines alone, no left-margin>, "cell_components": <same-shaped grid of
-    landmass id per character cell, None for water>, "palette": <id (as a
-    string) -> hex color, plus "water">, "caption": <the caption line>}.
-    Only the web viewer (which can actually render color) uses anything
-    past "text"."""
+    lines alone, no left-margin>, "cell_neighborhoods": <same-shaped grid of
+    era id per character cell, None for water -- each era's row-band IS a
+    neighborhood, so this is what divides every landmass into separately
+    colored sections instead of tinting it one flat color>, "palette":
+    <"{era_id}_{column}" -> hex color, plus "water"/"default">,
+    "neighborhoods": <era id/column/name/color per grid cell, in map
+    order, oldest to newest then west to east>, "caption": <the caption
+    line>}. Only the web viewer (which can actually render color) uses
+    anything past "text"."""
     rng = random.Random(seed)
     figure_era = {f.id: f.era_id for f in figures}
 
@@ -404,32 +412,55 @@ def build_map(places: list, figures: list, seed=None) -> dict:
     dots = _dot_grid(mask, rng)
     rows = _to_braille_rows(dots)
     char_is_land = _char_is_land(mask)
-    cell_components = _char_component_grid(_label_components(mask))
+    row_era = _era_row_lookup()
+    col_index = _column_index_lookup()
+    cell_neighborhoods = _char_neighborhood_grid(char_is_land, row_era, col_index)
     claimed = set()
+
+    neighborhood_ids = [f"{era.id}_{ci}" for era in ERAS for ci in range(NEIGHBORHOOD_COLUMNS)]
+    neighborhood_colors = dict(zip(neighborhood_ids, _neighborhood_palette(len(neighborhood_ids))))
 
     legend = []              # (number, place) in display order
     used_names = set()       # lowercased, for case-insensitive dedup checks
     neighborhood_order = []  # properly-cased, oldest-to-newest, for the caption prompt
+    neighborhoods_meta = []  # era_id/column/name/color, same order, for a map legend
     number = 1
 
     for era_index, era in enumerate(ERAS):
         start_row, end_row = _era_row_range(era_index)
-        places_here = places_by_era[era.id]
+        places_here = places_by_era[era.id][:]
+        rng.shuffle(places_here)
+        # Split this era's places roughly evenly across its columns -- there's
+        # no real east/west fact about a place to key this off of, so an even
+        # random split is exactly as meaningful as any other assignment would
+        # be here, same spirit as the rest of this generator's randomness.
+        column_groups = [places_here[ci::NEIGHBORHOOD_COLUMNS] for ci in range(NEIGHBORHOOD_COLUMNS)]
 
-        neighborhood = _neighborhood_name(era, places_here, used_names, rng)
-        used_names.add(neighborhood.lower())
-        neighborhood_order.append(neighborhood)
-        spot = _find_spot(start_row, end_row, len(neighborhood) + 2, char_is_land, claimed, rng)
-        if spot:
-            _stamp(rows, spot[0], spot[1], neighborhood)
+        for col_index_, (start_col, end_col) in enumerate(COLUMN_RANGES):
+            neighborhood_id = f"{era.id}_{col_index_}"
+            column_label = _COLUMN_LABELS[col_index_]
+            places_section = column_groups[col_index_]
 
-        for place in places_here:
-            label = f"[{number}]"
-            spot = _find_spot(start_row, end_row, len(label), char_is_land, claimed, rng)
+            neighborhood = _neighborhood_name(era, column_label, places_section, used_names, rng)
+            used_names.add(neighborhood.lower())
+            neighborhood_order.append(neighborhood)
+            neighborhoods_meta.append({
+                "era_id": era.id, "column": column_label,
+                "name": neighborhood, "color": neighborhood_colors[neighborhood_id],
+            })
+            spot = _find_spot(start_row, end_row, start_col, end_col, len(neighborhood) + 2,
+                               char_is_land, claimed, rng)
             if spot:
-                _stamp(rows, spot[0], spot[1], label)
-            legend.append((number, place))
-            number += 1
+                _stamp(rows, spot[0], spot[1], neighborhood)
+
+            for place in places_section:
+                label = f"[{number}]"
+                spot = _find_spot(start_row, end_row, start_col, end_col, len(label),
+                                   char_is_land, claimed, rng)
+                if spot:
+                    _stamp(rows, spot[0], spot[1], label)
+                legend.append((number, place))
+                number += 1
 
     river_header = " " * 8 + "HUDSON RIVER".ljust(CHAR_WIDTH // 2) + "EAST RIVER"
     grid_lines = ["".join(r) for r in rows]
@@ -447,15 +478,16 @@ def build_map(places: list, figures: list, seed=None) -> dict:
     caption = _caption(neighborhood_order)
     out.append(caption)
 
-    palette = {str(cid): color for cid, color in LANDMASS_COLORS.items()}
+    palette = dict(neighborhood_colors)
     palette["water"] = WATER_COLOR
-    palette["default"] = DEFAULT_LANDMASS_COLOR
+    palette["default"] = DEFAULT_NEIGHBORHOOD_COLOR
 
     return {
         "text": "\n".join(out),
         "rows": grid_lines,
-        "cell_components": cell_components,
+        "cell_neighborhoods": cell_neighborhoods,
         "palette": palette,
+        "neighborhoods": neighborhoods_meta,
         "caption": caption,
         # so a colored (web-only) rendering of the grid doesn't have to
         # re-parse this framing back out of "text"
