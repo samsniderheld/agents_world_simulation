@@ -1,0 +1,67 @@
+# Every tunable knob for the history generator -- loaded once by config.py.
+# Anything computed from the machine it's running on (which chat model tier
+# actually fits) still happens in Python; this file only holds the settings
+# a person might reasonably want to adjust by hand.
+
+ollama:
+  host: "http://localhost:11434"
+  request_timeout_seconds: 120
+  # Thinking models (Qwen3.x, DeepSeek-R1, etc.) burn many seconds of hidden
+  # chain-of-thought on trivial fills (a place name, one embellished
+  # sentence) unless this is off.
+  enable_thinking: false
+
+# Any locally-pulled chat model works -- picked automatically at startup to
+# fit the memory actually available on this machine (Apple unified memory,
+# or the first NVIDIA GPU's VRAM). Each entry must already be pulled
+# (`ollama pull <name>`) on whichever machine hits that tier. Adjust the
+# GB cutoffs/model names to taste, or leave a single entry to skip
+# auto-detection entirely.
+chat_model_tiers:
+  - min_gb: 60   # e.g. H100 80GB
+    model: "gpt-oss:120b"
+  - min_gb: 32   # e.g. RTX 5090 32GB VRAM
+    model: "qwen2.5:14b"
+  - min_gb: 0    # e.g. M5 Pro 24GB unified memory
+    model: "llama3.1:8b"
+
+# This project has no memory stream, so prompts are always a handful of
+# sentences (name a proper noun, embellish one sentence) -- a small fixed
+# context window is plenty regardless of hardware.
+chat_context_tokens: 2048
+
+generation:
+  figures_per_era: 4      # how many central figures each era spawns
+  events_per_figure: 10   # roughly how many life events drive each figure's arc
+  random_seed: null       # set an int for a reproducible run
+  # Hard ceiling: a figure born late in the final era, running a full
+  # life-event chain unclamped, would otherwise drift well past the
+  # requested "up until the 1950s" scope. generate.py stops advancing a
+  # figure's story once it hits this year, rather than clamping every event
+  # to the era's own end year (which just piles up repeated-year events
+  # instead of stopping).
+  max_year: 1959
+
+# The grammar is fully procedural on its own; these just decide when the
+# local LLM gets consulted to fill a blank instead of a static word list.
+# Both degrade gracefully to pure-grammar output if Ollama is unreachable.
+llm_fill:
+  fill_names: true        # ask the LLM for proper nouns (place/ship/gang names)
+  flourish_rate: 0.35     # fraction of "notable" events that get a prose flourish pass
+
+# citymap.py's island/neighborhood generation.
+map:
+  char_width: 74
+  char_height: 44
+  land_density: 0.62          # fraction of land sub-dots actually drawn, for texture
+  water_density: 0.10         # fraction of water sub-dots drawn, so the sea isn't a void
+  noise_scale: 0.05           # smaller = broader, smoother terrain features
+  noise_octaves: 5
+  noise_persistence: 0.5
+  falloff_power: 2.2          # higher = sharper edge, lower = softer/larger island
+  sea_level: -0.20            # higher = smaller/patchier landmass, lower = bigger/more solid
+  # More generous than sea_level -- a small satellite island needs a lower
+  # bar to read as solid rather than fragmenting away to nothing at its
+  # small size.
+  satellite_sea_level: -0.30
+  neighborhood_columns: 2     # east-west slices per era row-band (see citymap.py)

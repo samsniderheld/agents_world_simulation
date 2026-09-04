@@ -1,0 +1,57 @@
+# Pure-grammar word lists, grouped by rough time period rather than
+# duplicated per era -- era_name_groups below maps each era onto one of
+# these groups.
+name_groups:
+  dutch:
+    given: [Jan, Pieter, Willem, Cornelis, Hendrick, Anneke, Griet, Marritje, Trijntje, Aeltje]
+    surname: ["Van der Berg", "De Groot", Bogaert, "Van Dyck", Kuyper, Stuyvesant, Verplanck, Rutgers]
+  english:
+    given: [William, John, Thomas, Samuel, Elizabeth, Margaret, Abigail, Josiah, Nathaniel, Prudence]
+    surname: [Beekman, Livingston, Morris, Hamilton, Bayard, Fish, Roosevelt, Whitfield]
+  "19c":
+    given: [Patrick, Seamus, Bridget, Katharina, Heinrich, Mary, Michael, Anna, Cornelius, Delia]
+    surname: ["O'Malley", Schmidt, Muller, Fitzgerald, Costello, Weber, Doyle, Kessler]
+  "20c":
+    given: [Rose, Sal, Frank, Dorothy, Irving, Ruth, Vincent, Gloria, Moe, Sadie]
+    surname: [Russo, Cohen, Bianchi, Kowalski, Moretti, Feldman, Lombardi, Sullivan]
+
+# era id -> which name_groups entry it draws from. An era with no entry
+# here falls back to "english" (see names.py's _names_for_era).
+era_name_groups:
+  dutch_colonial: dutch
+  english_colonial: english
+  early_republic: english
+  antebellum: "19c"
+  gilded_age: "19c"
+  progressive: "20c"
+  prohibition: "20c"
+  depression_war: "20c"
+
+place_name_words:
+  adjectives: [Gilded, Broken, Crooked, Copper, Weeping, Rusty, Silver, Drowsy, Iron, "Salt-worn"]
+  animals: [Sparrow, Anchor, Fox, Gull, Stag, Eel, Raven, Hare]
+  saints_virtues: ["St. Nicholas", "St. Andrew", "the Redeemer", Grace, "the Good Shepherd", "St. Brigid"]
+  press_words: [Herald, Ledger, Courier, Gazette, Tribune, Sentinel]
+  streets: ["Mulberry Street", "Cherry Street", "Orchard Street", "Bowery Lane", "Water Street", "Delancey Street"]
+  products: [Ironworks, Textile, Foundry, Glassworks, Tannery, Print]
+
+# place_type -> which naming pattern _grammar_place_name uses for it.
+naming_style:
+  Tavern/Bar: tavern
+  Speakeasy: tavern
+  Restaurant: surname_possessive
+  General Store/Shop: surname_possessive
+  Market: surname_possessive
+  Department Store: surname_possessive
+  Bank/Counting House: firm
+  Shipyard/Dock/Warehouse: firm
+  Factory/Mill: works
+  Church/House of Worship: civic
+  Park/Public Square: civic
+  Government/Civic Building: civic
+  School: civic
+  Theater/Hall: tavern
+  Social/Fraternal Club: tavern
+  Hotel/Boarding House: surname_possessive
+  Newspaper/Print Shop: press
+  Tenement/Residence: address

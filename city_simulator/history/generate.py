@@ -15,14 +15,14 @@ import json
 import random
 import sys
 
-import characters
-import citymap
-import history_config as config
-import entities
-import events
-import history_llm as llm
-import history_log
-from eras import ERAS
+from . import characters
+from . import citymap
+from . import config
+from . import entities
+from . import events
+from . import llm
+from . import log as history_log
+from .eras import ERAS
 
 
 def generate(seed=None, figures_per_era=None, events_per_figure=None):

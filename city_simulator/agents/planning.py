@@ -4,11 +4,11 @@ chunks; this barebones version stops after one level of decomposition, which
 is enough for a short simulated run -- see README for how to extend it.)
 """
 
-import display
-import agent_llm as llm
-import recorder
-from agent import Agent
-from textutil import cast_constraint, parse_list_lines
+from . import display
+from . import llm
+from . import recorder
+from .agent import Agent
+from .textutil import cast_constraint, parse_list_lines
 
 
 def generate_daily_plan(agent: Agent, tick: int, known_names: list = None,

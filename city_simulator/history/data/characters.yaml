@@ -1,0 +1,37 @@
+# Free-prose hints handed to the LLM (loose instructions, not filled-in
+# sentences) describing a resident's relationship to their grounding place.
+relationship_hints:
+  active:
+    - "a descendant of the founder, who still runs the place today"
+    - "the current owner, unrelated by blood but a little obsessed with its history"
+    - "a longtime employee who knows every story the walls could tell"
+    - "a regular who has practically lived there for decades"
+  gone:
+    - "a descendant of the founder, who never quite got over losing it"
+    - "someone who grew up on family stories about the place, told long after it was gone"
+    - "a local historian fixated on what the place used to be"
+    - "an old-timer who still tells stories about it to anyone who'll listen"
+
+# Fallback (no-LLM) bio sentences -- separate pools per (place still
+# standing vs. gone) x (a founder exists to reference or not), each a
+# complete sentence with {name}/{place}/{founder} slots, unlike the free
+# prose hints above which only need to work as loose LLM instructions. Kept
+# as four separate pools (rather than one generic template) so a "no blood
+# relation" hint can never get a contradictory "descended from" clause
+# spliced into it, and {place} never dangles awkwardly at a sentence's end.
+bio_templates:
+  active_with_founder:
+    - "{name}, descended from {founder}, still runs {place} to this day."
+    - >-
+      {name} owns {place} now -- no blood relation to {founder}, the
+      original founder, but you would never know it from how they talk
+      about the place.
+  active_no_founder:
+    - "{name} has worked at {place} so long that half the neighborhood assumes they own it."
+    - "{name} has been a regular at {place} for as long as anyone can remember."
+  gone_with_founder:
+    - "{name}, descended from {founder}, never quite got over losing {place}."
+    - "{name} grew up on family stories about {place}, stories that always started with {founder}."
+  gone_no_founder:
+    - "{name} is the closest thing the neighborhood has to a historian of {place}."
+    - "{name} still tells stories about {place} to anyone who'll listen."

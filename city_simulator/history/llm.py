@@ -9,7 +9,7 @@ grammar-driven generation that works with Ollama offline.
 
 import requests
 
-import history_config as config
+from . import config
 
 _available = None
 

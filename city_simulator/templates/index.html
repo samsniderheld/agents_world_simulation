@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>City Simulator</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/history.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/agents.css') }}">
+</head>
+<body>
+
+<header>
+  <h1>City Simulator</h1>
+  <nav class="tabs">
+    <button class="tab-btn active" data-tab="history">History</button>
+    <button class="tab-btn" data-tab="agents">Agents</button>
+    <button class="tab-btn" data-tab="soon" disabled title="Coming soon">Soon</button>
+  </nav>
+</header>
+
+{% include "_history_tab.html" %}
+{% include "_agents_tab.html" %}
+{% include "_soon_tab.html" %}
+
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+<script src="{{ url_for('static', filename='js/history.js') }}"></script>
+<script src="{{ url_for('static', filename='js/agents.js') }}"></script>
+</body>
+</html>

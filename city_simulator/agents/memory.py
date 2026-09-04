@@ -9,10 +9,10 @@ from dataclasses import dataclass, field
 import itertools
 import math
 
-import display
-import agent_llm as llm
-import recorder
-from agent_config import (
+from . import display
+from . import llm
+from . import recorder
+from .config import (
     RECENCY_DECAY,
     RECENCY_WEIGHT,
     IMPORTANCE_WEIGHT,

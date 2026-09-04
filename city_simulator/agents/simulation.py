@@ -5,13 +5,13 @@ does is streamed live through recorder.py rather than returned, since the
 frontend is watching the event log, not this function's return value.
 """
 
-import agent_config as config
-import display
-import agent_llm as llm
-from agent import Agent
-from treatment import generate_treatment
-from world import World
-import recorder
+from . import config
+from . import display
+from . import llm
+from .agent import Agent
+from .treatment import generate_treatment
+from .world import World
+from . import recorder
 
 AGENT_ROSTER = {
     "Oswald": dict(

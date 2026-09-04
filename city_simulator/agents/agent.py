@@ -1,10 +1,10 @@
 """The Agent: identity + memory stream + perceive/react/converse behavior."""
 
-import display
-import agent_llm as llm
-import recorder
-from memory import MemoryStream
-from textutil import cast_constraint, first_spoken_line
+from . import display
+from . import llm
+from . import recorder
+from .memory import MemoryStream
+from .textutil import cast_constraint, first_spoken_line
 
 
 class Agent:

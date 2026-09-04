@@ -3,51 +3,28 @@ a specific piece of the generated history -- a place, its domain, its
 founder, and a real recorded incident there -- rather than being generic
 NPCs. The LLM is genuinely better at weaving specific facts into a natural
 bio than a template is, so it's the primary path here (unlike the grammar-
-first approach for the bulk of history generation); a plain fallback still
-keeps this working with Ollama offline.
+first approach for the bulk of history generation); a plain fallback (its
+sentence pools live in characters.yaml) still keeps this working with
+Ollama offline.
 """
 
 import random
+from pathlib import Path
 
-import history_config as config
-import entities
-import history_llm as llm
-import names
+import yaml
 
-_RELATIONSHIP_HINTS_ACTIVE = [
-    "a descendant of the founder, who still runs the place today",
-    "the current owner, unrelated by blood but a little obsessed with its history",
-    "a longtime employee who knows every story the walls could tell",
-    "a regular who has practically lived there for decades",
-]
-_RELATIONSHIP_HINTS_GONE = [
-    "a descendant of the founder, who never quite got over losing it",
-    "someone who grew up on family stories about the place, told long after it was gone",
-    "a local historian fixated on what the place used to be",
-    "an old-timer who still tells stories about it to anyone who'll listen",
-]
+from . import config
+from . import entities
+from . import llm
+from . import names
 
-# Fallback (no-LLM) bio sentences -- separate pools per (place still
-# standing vs. gone) x (a founder exists to reference or not), each a
-# complete sentence with {name}/{place}/{founder} slots, unlike the free
-# prose hints above which only need to work as loose LLM instructions.
-_TEMPLATES_ACTIVE_WITH_FOUNDER = [
-    "{name}, descended from {founder}, still runs {place} to this day.",
-    "{name} owns {place} now -- no blood relation to {founder}, the original "
-    "founder, but you would never know it from how they talk about the place.",
-]
-_TEMPLATES_ACTIVE_NO_FOUNDER = [
-    "{name} has worked at {place} so long that half the neighborhood assumes they own it.",
-    "{name} has been a regular at {place} for as long as anyone can remember.",
-]
-_TEMPLATES_GONE_WITH_FOUNDER = [
-    "{name}, descended from {founder}, never quite got over losing {place}.",
-    "{name} grew up on family stories about {place}, stories that always started with {founder}.",
-]
-_TEMPLATES_GONE_NO_FOUNDER = [
-    "{name} is the closest thing the neighborhood has to a historian of {place}.",
-    "{name} still tells stories about {place} to anyone who'll listen.",
-]
+_YAML_PATH = Path(__file__).parent / "data" / "characters.yaml"
+
+with open(_YAML_PATH) as _f:
+    _RAW = yaml.safe_load(_f)
+
+_RELATIONSHIP_HINTS = _RAW["relationship_hints"]  # {"active": [...], "gone": [...]}
+_BIO_TEMPLATES = _RAW["bio_templates"]             # {"active_with_founder": [...], ...}
 
 
 def _pick_grounding(places: list, figures: list, rng: random.Random, exclude: set) -> dict:
@@ -58,7 +35,7 @@ def _pick_grounding(places: list, figures: list, rng: random.Random, exclude: se
     place = rng.choices(candidates, weights=weights, k=1)[0]
     founder = figures_by_id.get(place.founding_figure_id)
     anecdote = rng.choice(place.history) if place.history else None
-    hints = _RELATIONSHIP_HINTS_ACTIVE if place.status == "active" else _RELATIONSHIP_HINTS_GONE
+    hints = _RELATIONSHIP_HINTS["active"] if place.status == "active" else _RELATIONSHIP_HINTS["gone"]
     return {
         "place": place, "founder": founder, "anecdote": anecdote,
         "relationship": rng.choice(hints),
@@ -128,9 +105,9 @@ def _fallback_character(grounding: dict, rng: random.Random) -> dict:
     # "descended from" clause spliced into it, and {place} never dangles
     # awkwardly at a sentence's end.
     if place.status == "active":
-        pool = _TEMPLATES_ACTIVE_WITH_FOUNDER if founder else _TEMPLATES_ACTIVE_NO_FOUNDER
+        pool = _BIO_TEMPLATES["active_with_founder"] if founder else _BIO_TEMPLATES["active_no_founder"]
     else:
-        pool = _TEMPLATES_GONE_WITH_FOUNDER if founder else _TEMPLATES_GONE_NO_FOUNDER
+        pool = _BIO_TEMPLATES["gone_with_founder"] if founder else _BIO_TEMPLATES["gone_no_founder"]
     relationship_sentence = rng.choice(pool).format(
         name=name, place=place.name, founder=founder.name if founder else "",
     )

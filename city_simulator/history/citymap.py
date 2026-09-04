@@ -22,26 +22,29 @@ import colorsys
 import math
 import random
 
-import history_config as config
-import history_llm as llm
-from eras import ERAS
+from . import config
+from . import llm
+from .eras import ERAS
 
-CHAR_WIDTH = 74
-CHAR_HEIGHT = 44
+# All of these are tunable knobs in config.yaml (see history/config.py) --
+# aliased to module-level names here so the rest of this file reads exactly
+# as it would with hardcoded constants.
+CHAR_WIDTH = config.CHAR_WIDTH
+CHAR_HEIGHT = config.CHAR_HEIGHT
 DOT_W = CHAR_WIDTH * 2
 DOT_H = CHAR_HEIGHT * 4
 
-LAND_DENSITY = 0.62   # fraction of land sub-dots actually drawn, for texture
-WATER_DENSITY = 0.10  # fraction of water sub-dots drawn, so the sea isn't a void
+LAND_DENSITY = config.LAND_DENSITY     # fraction of land sub-dots actually drawn, for texture
+WATER_DENSITY = config.WATER_DENSITY   # fraction of water sub-dots drawn, so the sea isn't a void
 
-NOISE_SCALE = 0.05       # smaller = broader, smoother terrain features
-NOISE_OCTAVES = 5
-NOISE_PERSISTENCE = 0.5
-FALLOFF_POWER = 2.2      # higher = sharper edge, lower = softer/larger island
-SEA_LEVEL = -0.20        # higher = smaller/patchier landmass, lower = bigger/more solid
-SATELLITE_SEA_LEVEL = -0.30  # more generous than SEA_LEVEL -- a small island
-                             # needs a lower bar to read as solid rather than
-                             # fragmenting away to nothing at its small size
+NOISE_SCALE = config.NOISE_SCALE             # smaller = broader, smoother terrain features
+NOISE_OCTAVES = config.NOISE_OCTAVES
+NOISE_PERSISTENCE = config.NOISE_PERSISTENCE
+FALLOFF_POWER = config.FALLOFF_POWER         # higher = sharper edge, lower = softer/larger island
+SEA_LEVEL = config.SEA_LEVEL                 # higher = smaller/patchier landmass, lower = bigger/more solid
+SATELLITE_SEA_LEVEL = config.SATELLITE_SEA_LEVEL  # more generous than SEA_LEVEL -- a small
+                                                   # island needs a lower bar to read as solid
+                                                   # rather than fragmenting away to nothing
 
 _BRAILLE_BASE = 0x2800
 _BRAILLE_BIT = {
@@ -60,7 +63,7 @@ _BRAILLE_BIT = {
 DEFAULT_NEIGHBORHOOD_COLOR = "#d4d4d4"  # land with no era/column mapped (shouldn't happen)
 WATER_COLOR = "#3b5f7a"
 
-NEIGHBORHOOD_COLUMNS = 2
+NEIGHBORHOOD_COLUMNS = config.NEIGHBORHOOD_COLUMNS
 _COLUMN_LABELS = ["West", "East"]  # sized to NEIGHBORHOOD_COLUMNS -- update together
 
 

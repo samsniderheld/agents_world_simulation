@@ -1,0 +1,45 @@
+# The eras the generated history is segmented into. Each spawns
+# config.FIGURES_PER_ERA new Figures whose event chains run within that
+# era's years, but whose events can act on Places founded in any earlier
+# era -- see generate.py.
+eras:
+  - id: dutch_colonial
+    name: "New Amsterdam (Dutch Colonial)"
+    start_year: 1624
+    end_year: 1664
+    description: "A fur-trading outpost of the Dutch West India Company at the tip of Manhattan island."
+  - id: english_colonial
+    name: "New York (English Colonial)"
+    start_year: 1664
+    end_year: 1783
+    description: "Renamed and ruled by the English crown; a growing port city under royal governors."
+  - id: early_republic
+    name: "Early Republic"
+    start_year: 1783
+    end_year: 1825
+    description: "The young nation's largest city, rebuilding after the Revolutionary War."
+  - id: antebellum
+    name: "Antebellum & Immigration Boom"
+    start_year: 1825
+    end_year: 1861
+    description: "Waves of Irish and German immigration swell the city as canals and rail make it a commercial hub."
+  - id: gilded_age
+    name: "Civil War & Gilded Age"
+    start_year: 1861
+    end_year: 1900
+    description: "Industrial fortunes, political machines, and a skyline beginning to climb."
+  - id: progressive
+    name: "Progressive Era & Tenement City"
+    start_year: 1900
+    end_year: 1917
+    description: "Reformers battle tenement squalor and machine politics as the subway opens and skyscrapers rise."
+  - id: prohibition
+    name: "Prohibition & Jazz Age"
+    start_year: 1920
+    end_year: 1933
+    description: "Speakeasies, bootleggers, and nightlife flourish in defiance of the Volstead Act."
+  - id: depression_war
+    name: "Depression, War & Postwar"
+    start_year: 1933
+    end_year: 1959
+    description: "The Depression, the Second World War, and a postwar boom remake the city once more."

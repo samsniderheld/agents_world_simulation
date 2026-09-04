@@ -8,7 +8,13 @@ simulation. The cause is a rationalization mediated by that state, exactly
 as the talk describes its cats/frogs example: state set by an earlier event
 becomes the "reason" a later, otherwise-unrelated event gives for itself.
 
-Each template is a dict:
+The templates themselves (grammar text, word-list content like disasters/
+scandal tags/political outcomes) live in events.yaml; this module holds the
+actual behavior -- the effects/place_filter/precondition functions each
+template's YAML entry references by name (see _EFFECTS/_PLACE_FILTERS/
+_PRECONDITIONS and _load_template below).
+
+Runtime template shape (what _load_template produces from one YAML entry):
   id             unique string
   requires_place "new" | "existing" | None
   place_filter   optional (place, figure) -> bool, only for "existing"
@@ -23,21 +29,26 @@ Each template is a dict:
 """
 
 import random
+from pathlib import Path
 
-import history_config as config
-import entities
-import grammar
-import history_llm as llm
-import names
+import yaml
 
-_GENERIC_CAUSES = [
-    # domain values may themselves start with "the" (e.g. "the press"), so
-    # these deliberately don't prepend their own article before {domain}.
-    "a matter of {domain}",
-    "reasons the old records leave unclear",
-    "a dispute no one now remembers clearly",
-    "what was once called simply \"{domain} business\"",
-]
+from . import config
+from . import entities
+from . import grammar
+from . import llm
+from . import names
+
+_YAML_PATH = Path(__file__).parent / "data" / "events.yaml"
+
+with open(_YAML_PATH) as _f:
+    _RAW = yaml.safe_load(_f)
+
+_GENERIC_CAUSES = _RAW["generic_causes"]
+_DISASTERS = _RAW["disasters"]
+_SCANDAL_TAGS = _RAW["scandal_tags"]
+_POLITICAL_OUTCOMES = _RAW["political_outcomes"]
+_NOTABLE_TEMPLATE_IDS = set(_RAW["notable_template_ids"])
 
 
 def _pick_cause(figure: "entities.Figure", rng: random.Random) -> str:
@@ -73,11 +84,6 @@ def _build_context(figure, place, era, year: int, extra: dict) -> dict:
     return ctx
 
 
-# A subset of dramatic event kinds get a shot at an LLM prose flourish
-# (config.LLM_FLOURISH_RATE); everything else stays pure grammar output.
-_NOTABLE_TEMPLATE_IDS = {"found_place", "place_destroyed", "rebuilt_place", "expansion"}
-
-
 def _maybe_flourish(text: str, template_id: str, rng: random.Random) -> str:
     if template_id not in _NOTABLE_TEMPLATE_IDS:
         return text
@@ -111,10 +117,7 @@ def _fx_expansion(figure, place, era, year, rng):
 
 
 def _fx_place_destroyed(figure, place, era, year, rng):
-    # Mixed articles are deliberate: every template phrases these as
-    # "lost to {disaster}" / "consumed by {disaster}", which both read fine
-    # whether or not the phrase itself carries an article.
-    disaster = rng.choice(["fire", "a storm", "a riot", "a flood"])
+    disaster = rng.choice(_DISASTERS)
     place.status = "destroyed"
     place.closed_year = year
     return {"disaster": disaster, "cause": _pick_cause(figure, rng)}
@@ -161,16 +164,13 @@ def _fx_rivalry_formed(figure, place, era, year, rng):
 
 
 def _fx_scandal(figure, place, era, year, rng):
-    tag = rng.choice(["bribery", "smuggling", "adultery", "embezzlement", "blasphemy", "forgery"])
+    tag = rng.choice(_SCANDAL_TAGS)
     figure.properties["reputation"].append(tag)
     return {"tag": tag, "cause": _pick_cause(figure, rng)}
 
 
 def _fx_political_trouble(figure, place, era, year, rng):
-    outcome = rng.choice([
-        "a night in the Tombs", "a heavy fine", "a public apology",
-        "quiet exile from the ward", "a pardon bought with favors",
-    ])
+    outcome = rng.choice(_POLITICAL_OUTCOMES)
     figure.properties["reputation"].append("investigated")
     return {"outcome": outcome, "cause": _pick_cause(figure, rng)}
 
@@ -221,167 +221,54 @@ def _destroyed_place(place, figure):
     return place.status == "destroyed"
 
 
-EVENT_TEMPLATES = [
-    {
-        "id": "found_place", "requires_place": "new", "effects": _fx_found_place,
-        "grammar": {
-            "TEXT": [
-                "In {year}, {figure} of {domain} founded {place}, a {place_noun}, {founding_flourish}.",
-                "{figure} opened the doors of {place} in {year}, a {place_noun} that would carry the mark of {domain} for years to come.",
-            ],
-            "founding_flourish": [
-                "on a corner that was then little more than mud and ambition",
-                "with borrowed money and a great deal of nerve",
-                "in the shadow of the harbor",
-                "on ground still remembered as farmland",
-            ],
-        },
-    },
-    {
-        "id": "expansion", "requires_place": "new", "effects": _fx_expansion,
-        "precondition": _has_founded_a_place,
-        "grammar": {
-            "TEXT": [
-                "Flush with earlier success, {figure} opened a second {place_noun}, {place}, in {year}.",
-                "By {year}, {figure}'s ambitions had outgrown one address; {place}, a new {place_noun}, followed.",
-            ],
-        },
-    },
-    {
-        "id": "place_destroyed", "requires_place": "existing", "place_filter": _active_place,
-        "effects": _fx_place_destroyed,
-        "grammar": {
-            "TEXT": [
-                "In {year}, {place} was lost to {disaster}; some blamed {cause}.",
-                "{place} was consumed by {disaster} in {year}, leaving little of what {figure} had built there.",
-            ],
-        },
-    },
-    {
-        "id": "rebuilt_place", "requires_place": "existing", "place_filter": _destroyed_place,
-        "effects": _fx_rebuilt_place,
-        "grammar": {
-            "TEXT": [
-                "{figure} rebuilt {place} in {year}, raising it again as a {place_noun}.",
-                "Where ashes had stood, {figure} raised {place} anew in {year}.",
-            ],
-        },
-    },
-    {
-        "id": "ownership_change", "requires_place": "existing", "place_filter": _active_place,
-        "effects": _fx_ownership_change,
-        "grammar": {
-            "TEXT": [
-                "{place}, the old {place_noun}, changed hands in {year} when {figure} took it over.",
-                "In {year}, {figure} bought out the previous proprietor of {place}, citing {cause}.",
-            ],
-        },
-    },
-    {
-        "id": "renamed", "requires_place": "existing", "place_filter": _active_place,
-        "effects": _fx_renamed,
-        "grammar": {
-            "TEXT": [
-                "{figure} renamed the old {place_noun} -- once known as {old_name} -- to {place} in {year}.",
-            ],
-        },
-    },
-    {
-        "id": "alliance_formed", "requires_place": None, "effects": _fx_alliance_formed,
-        "grammar": {
-            "TEXT": [
-                "By {year}, {figure} had made fast friends with {faction}, a bond that would shape years to come.",
-                "{figure} threw in with {faction} in {year}, for {domain}'s sake if nothing else.",
-            ],
-        },
-    },
-    {
-        "id": "rivalry_formed", "requires_place": None, "effects": _fx_rivalry_formed,
-        "grammar": {
-            "TEXT": [
-                "In {year}, {figure} earned the lasting enmity of {faction}.",
-                "{figure} and {faction} became bitter rivals in {year}, over {domain} as much as anything else.",
-            ],
-        },
-    },
-    {
-        "id": "scandal", "requires_place": None, "effects": _fx_scandal,
-        "grammar": {
-            "TEXT": [
-                "Rumors of {tag} dogged {figure} from {year} onward, whispered to be over {cause}.",
-            ],
-        },
-    },
-    {
-        "id": "political_trouble", "requires_place": None, "effects": _fx_political_trouble,
-        "grammar": {
-            "TEXT": [
-                "{figure} was hauled before the magistrates in {year} over {cause}, and it ended in {outcome}.",
-            ],
-        },
-    },
-    {
-        "id": "philanthropy", "requires_place": "existing", "place_filter": _active_place,
-        "effects": _fx_philanthropy,
-        "grammar": {
-            "TEXT": [
-                "{figure} funded repairs to {place} in {year}, out of devotion to {domain} -- or so it was said.",
-            ],
-        },
-    },
-    {
-        "id": "feud_violence", "requires_place": "existing", "place_filter": _active_place,
-        "effects": _fx_feud_violence,
-        "grammar": {
-            "TEXT": [
-                "Blood was spilled at {place} in {year} over {cause}.",
-                "A brawl broke out at {place} in {year}, said to be about {cause}.",
-            ],
-            "TEXT_DEATH": [
-                "{figure} was killed in a brawl at {place} in {year} over {cause} -- the {place_noun} was never quite the same.",
-            ],
-        },
-    },
-    {
-        "id": "visited_by_notable", "requires_place": "existing", "place_filter": _active_place_not_own,
-        "effects": _fx_visited_by_notable,
-        "grammar": {
-            "TEXT": [
-                "{figure} was known to frequent {place} around {year}, and the old {place_noun} was never quite the same after.",
-            ],
-        },
-    },
-    {
-        "id": "prospered", "requires_place": "existing", "place_filter": _active_place,
-        "effects": _fx_prospered,
-        "grammar": {
-            "TEXT": [
-                "{place} prospered under {figure}'s hand, and by {year} its name was known across the city.",
-            ],
-        },
-    },
-    {
-        "id": "decline", "requires_place": "existing", "place_filter": _active_place,
-        "effects": _fx_decline,
-        "grammar": {
-            "TEXT": [
-                "By {year}, {place} had fallen on hard times, a decline some blamed on {cause}.",
-            ],
-        },
-    },
-]
+_EFFECTS = {
+    "found_place": _fx_found_place,
+    "expansion": _fx_expansion,
+    "place_destroyed": _fx_place_destroyed,
+    "rebuilt_place": _fx_rebuilt_place,
+    "ownership_change": _fx_ownership_change,
+    "renamed": _fx_renamed,
+    "alliance_formed": _fx_alliance_formed,
+    "rivalry_formed": _fx_rivalry_formed,
+    "scandal": _fx_scandal,
+    "political_trouble": _fx_political_trouble,
+    "philanthropy": _fx_philanthropy,
+    "feud_violence": _fx_feud_violence,
+    "visited_by_notable": _fx_visited_by_notable,
+    "prospered": _fx_prospered,
+    "decline": _fx_decline,
+}
 
+_PLACE_FILTERS = {
+    "active_place": _active_place,
+    "active_place_not_own": _active_place_not_own,
+    "destroyed_place": _destroyed_place,
+}
+
+_PRECONDITIONS = {
+    "has_founded_a_place": _has_founded_a_place,
+}
+
+
+def _load_template(raw: dict) -> dict:
+    template = {
+        "id": raw["id"],
+        "requires_place": raw.get("requires_place"),
+        "grammar": raw["grammar"],
+    }
+    if "effects" in raw:
+        template["effects"] = _EFFECTS[raw["effects"]]
+    if "place_filter" in raw:
+        template["place_filter"] = _PLACE_FILTERS[raw["place_filter"]]
+    if "precondition" in raw:
+        template["precondition"] = _PRECONDITIONS[raw["precondition"]]
+    return template
+
+
+EVENT_TEMPLATES = [_load_template(t) for t in _RAW["event_templates"]]
 EVENT_TEMPLATES_BY_ID = {t["id"]: t for t in EVENT_TEMPLATES}
 
-DEATH_TEMPLATE = {
-    "id": "death",
-    "grammar": {
-        "TEXT": [
-            "{figure} died in {year}, remembered -- if at all -- for their ties to {domain}.",
-            "By {year}, {figure} was gone, and whatever they had built was left to others to keep or lose.",
-        ],
-    },
-}
+DEATH_TEMPLATE = _RAW["death_template"]
 
 
 def pick_event_template(figure, places: list, rng: random.Random) -> dict:
