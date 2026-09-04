@@ -75,14 +75,24 @@ def _column_ranges(n: int) -> list:
 COLUMN_RANGES = _column_ranges(NEIGHBORHOOD_COLUMNS)
 
 
-def _neighborhood_palette(n: int) -> list:
-    """n evenly-hued, parchment-friendly pastel colors -- fixed saturation
-    and lightness so every neighborhood reads as equally legible on the
-    map, only the hue rotates."""
+_GOLDEN_RATIO_CONJUGATE = 0.618033988749895
+
+
+def _neighborhood_palette(n: int, start_hue: float = 0.0) -> list:
+    """n richly-saturated, well-separated colors. Hues step by the golden
+    ratio's conjugate rather than a simple 1/n division -- list order is
+    era-major/column-minor, which is also usually map-adjacent (the next
+    column over, or the next era band up), so a plain linear hue sweep put
+    neighbors only a few degrees apart on the color wheel and they read as
+    near-identical. The golden-ratio step scatters consecutive entries far
+    apart in hue instead, however many there are. Lower lightness/higher
+    saturation than a pastel gives real contrast against the dark UI."""
     colors = []
-    for i in range(n):
-        r, g, b = colorsys.hls_to_rgb(i / n, 0.72, 0.55)
+    hue = start_hue % 1.0
+    for _ in range(n):
+        r, g, b = colorsys.hls_to_rgb(hue, 0.58, 0.75)
         colors.append("#{:02x}{:02x}{:02x}".format(round(r * 255), round(g * 255), round(b * 255)))
+        hue = (hue + _GOLDEN_RATIO_CONJUGATE) % 1.0
     return colors
 
 
@@ -418,7 +428,8 @@ def build_map(places: list, figures: list, seed=None) -> dict:
     claimed = set()
 
     neighborhood_ids = [f"{era.id}_{ci}" for era in ERAS for ci in range(NEIGHBORHOOD_COLUMNS)]
-    neighborhood_colors = dict(zip(neighborhood_ids, _neighborhood_palette(len(neighborhood_ids))))
+    palette_colors = _neighborhood_palette(len(neighborhood_ids), start_hue=rng.random())
+    neighborhood_colors = dict(zip(neighborhood_ids, palette_colors))
 
     legend = []              # (number, place) in display order
     used_names = set()       # lowercased, for case-insensitive dedup checks

@@ -1,4 +1,4 @@
-"""The primary interface: a local web server serving index.html plus a
+"""The primary interface: a local Flask server serving index.html plus a
 small JSON/SSE API for both halves of the app -- history generation
 (/api/history/*) and the agent simulation (/api/agents/*). Each runs on its
 own background thread with its own status, so the frontend can drive both
@@ -9,13 +9,15 @@ Usage:
     python3 server.py
 """
 
-import http.server
 import json
+import logging
 import os
 import threading
 import time
 import webbrowser
-from urllib.parse import urlparse, parse_qs
+
+from flask import Flask, Response, request, send_from_directory
+from werkzeug.serving import make_server
 
 import agent_llm as llm
 import history_generate
@@ -25,6 +27,21 @@ import simulation
 
 DIRECTORY = os.path.dirname(os.path.abspath(__file__))
 STREAM_POLL_SECONDS = 0.25
+
+# The frontend is the interface now; keep the terminal quiet (matches the
+# old bare http.server Handler's log_message no-op).
+logging.getLogger("werkzeug").setLevel(logging.ERROR)
+
+app = Flask(__name__)
+
+
+def _json_response(payload, status=200):
+    # Plain json.dumps (with default=str, same as the rest of this app's
+    # JSON output) instead of Flask's jsonify -- keeps datetime/dataclass
+    # leftovers from breaking a response the same defensive way the rest
+    # of the app already handles them.
+    return Response(json.dumps(payload, default=str), status=status, mimetype="application/json")
+
 
 # --- history generation job (tab 1) -------------------------------------
 
@@ -94,157 +111,152 @@ def _start_agents(params: dict):
     return True, None
 
 
-class Handler(http.server.SimpleHTTPRequestHandler):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, directory=DIRECTORY, **kwargs)
+# --- static ---------------------------------------------------------------
 
-    def log_message(self, format, *args):
-        pass  # the frontend is the interface now; keep the terminal quiet
+@app.get("/")
+def index():
+    return send_from_directory(DIRECTORY, "index.html")
 
-    def _send_json(self, payload, status=200):
-        body = json.dumps(payload, default=str).encode()
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
 
-    def _query(self) -> dict:
-        return parse_qs(urlparse(self.path).query)
+# --- history routes ---------------------------------------------------------
 
-    def _path(self) -> str:
-        return urlparse(self.path).path
+@app.get("/api/history/status")
+def history_status():
+    with _history_lock:
+        return _json_response(dict(_history_status))
 
-    # --- GET routes ---------------------------------------------------
 
-    def do_GET(self):
-        path = self._path()
+@app.get("/api/history/data")
+def history_data():
+    with _history_lock:
+        data = _history_data
+    if data is None:
+        return _json_response({"error": "no history generated yet"}, status=404)
+    return _json_response(data)
 
-        if path == "/api/history/status":
-            with _history_lock:
-                return self._send_json(dict(_history_status))
 
-        if path == "/api/history/data":
-            with _history_lock:
-                data = _history_data
-            if data is None:
-                return self._send_json({"error": "no history generated yet"}, status=404)
-            return self._send_json(data)
+@app.get("/api/history/log")
+def history_log_route():
+    since = int(request.args.get("since", "0"))
+    lines, total = history_log.snapshot(since)
+    return _json_response({"lines": lines, "next": total})
 
-        if path == "/api/history/log":
-            since = int(self._query().get("since", ["0"])[0])
-            lines, total = history_log.snapshot(since)
-            return self._send_json({"lines": lines, "next": total})
 
-        if path == "/api/agents/roster":
-            return self._send_json({"roster": simulation.roster_summary()})
+@app.post("/api/history/generate")
+def history_generate_route():
+    body = request.get_json(silent=True) or {}
+    params = {
+        "seed": body.get("seed"),
+        "figures_per_era": body.get("figures_per_era") or None,
+        "events_per_figure": body.get("events_per_figure") or None,
+        "characters_count": int(body.get("characters") or 10),
+        "use_llm": not bool(body.get("no_llm", False)),
+    }
+    ok, error = _start_history(params)
+    return _json_response({"ok": ok, "error": error}, status=200 if ok else 409)
 
-        if path == "/api/agents/models":
-            try:
-                return self._send_json({"models": llm.list_models()})
-            except Exception as e:
-                return self._send_json({"models": [], "error": str(e)})
 
-        if path == "/api/agents/state":
-            with _agents_lock:
-                status = dict(_agents_status)
-            _, total = recorder.snapshot(0)
-            return self._send_json({
-                "status": status,
-                "agents": recorder.get_agents(),
-                "meta": recorder.get_meta(),
-                "started_at": recorder.get_started_at(),
-                "event_count": total,
-            })
+# --- agent routes -----------------------------------------------------------
 
-        if path == "/api/agents/events":
-            since = int(self._query().get("since", ["0"])[0])
-            events, total = recorder.snapshot(since)
-            return self._send_json({"events": events, "next": total})
+@app.get("/api/agents/roster")
+def agents_roster():
+    return _json_response({"roster": simulation.roster_summary()})
 
-        if path == "/api/agents/stream":
-            return self._stream()
 
-        return super().do_GET()
+@app.get("/api/agents/models")
+def agents_models():
+    try:
+        return _json_response({"models": llm.list_models()})
+    except Exception as e:
+        return _json_response({"models": [], "error": str(e)})
 
-    def _stream(self):
-        """Server-Sent Events: push new recorder events as they land."""
-        since = int(self._query().get("since", ["0"])[0])
-        self.send_response(200)
-        self.send_header("Content-Type", "text/event-stream")
-        self.send_header("Cache-Control", "no-cache")
-        self.send_header("Connection", "keep-alive")
-        self.end_headers()
-        try:
-            while True:
-                events, total = recorder.snapshot(since)
+
+@app.get("/api/agents/state")
+def agents_state():
+    with _agents_lock:
+        status = dict(_agents_status)
+    _, total = recorder.snapshot(0)
+    return _json_response({
+        "status": status,
+        "agents": recorder.get_agents(),
+        "meta": recorder.get_meta(),
+        "started_at": recorder.get_started_at(),
+        "event_count": total,
+    })
+
+
+@app.get("/api/agents/events")
+def agents_events():
+    since = int(request.args.get("since", "0"))
+    events, total = recorder.snapshot(since)
+    return _json_response({"events": events, "next": total})
+
+
+@app.get("/api/agents/stream")
+def agents_stream():
+    """Server-Sent Events: push new recorder events as they land."""
+    since = int(request.args.get("since", "0"))
+
+    def generate():
+        # An immediate SSE comment line (ignored by EventSource, unlike a
+        # "data:" line) so Werkzeug flushes the response headers right
+        # away instead of buffering until the first real event -- without
+        # this, a client connecting before anything has happened yet sees
+        # no response at all until something finally occurs. The same
+        # comment doubles as a keepalive on every empty poll after that.
+        yield ": connected\n\n"
+        cursor = since
+        while True:
+            events, total = recorder.snapshot(cursor)
+            if events:
                 for ev in events:
-                    chunk = f"data: {json.dumps(ev, default=str)}\n\n".encode()
-                    self.wfile.write(chunk)
-                if events:
-                    self.wfile.flush()
-                since = total
-                time.sleep(STREAM_POLL_SECONDS)
-        except (BrokenPipeError, ConnectionResetError):
-            return
+                    yield f"data: {json.dumps(ev, default=str)}\n\n"
+            else:
+                yield ": keepalive\n\n"
+            cursor = total
+            time.sleep(STREAM_POLL_SECONDS)
 
-    # --- POST routes ----------------------------------------------------
+    return Response(generate(), mimetype="text/event-stream",
+                     headers={"Cache-Control": "no-cache", "Connection": "keep-alive"})
 
-    def do_POST(self):
-        path = self._path()
-        length = int(self.headers.get("Content-Length", 0) or 0)
-        raw = self.rfile.read(length) if length else b"{}"
-        try:
-            body = json.loads(raw or b"{}")
-        except json.JSONDecodeError:
-            return self._send_json({"ok": False, "error": "invalid JSON body"}, status=400)
 
-        if path == "/api/history/generate":
-            params = {
-                "seed": body.get("seed"),
-                "figures_per_era": body.get("figures_per_era") or None,
-                "events_per_figure": body.get("events_per_figure") or None,
-                "characters_count": int(body.get("characters") or 10),
-                "use_llm": not bool(body.get("no_llm", False)),
-            }
-            ok, error = _start_history(params)
-            return self._send_json({"ok": ok, "error": error}, status=200 if ok else 409)
+@app.post("/api/agents/run")
+def agents_run():
+    body = request.get_json(silent=True) or {}
+    params = {
+        "ticks": int(body.get("ticks", 8)),
+        "tick_sleep": float(body.get("tick_sleep", 0)),
+        "chat_model": body.get("chat_model") or None,
+        "embed_model": body.get("embed_model") or None,
+        "context_tokens": body.get("context_tokens") or None,
+        "agent_names": body.get("agent_names") or None,
+        "verbose": bool(body.get("verbose", False)),
+    }
+    ok, error = _start_agents(params)
+    return _json_response({"ok": ok, "error": error}, status=200 if ok else 409)
 
-        if path == "/api/agents/run":
-            params = {
-                "ticks": int(body.get("ticks", 8)),
-                "tick_sleep": float(body.get("tick_sleep", 0)),
-                "chat_model": body.get("chat_model") or None,
-                "embed_model": body.get("embed_model") or None,
-                "context_tokens": body.get("context_tokens") or None,
-                "agent_names": body.get("agent_names") or None,
-                "verbose": bool(body.get("verbose", False)),
-            }
-            ok, error = _start_agents(params)
-            return self._send_json({"ok": ok, "error": error}, status=200 if ok else 409)
 
-        if path == "/api/agents/stop":
-            _agents_stop_flag.set()
-            return self._send_json({"ok": True})
-
-        return self._send_json({"ok": False, "error": "not found"}, status=404)
+@app.post("/api/agents/stop")
+def agents_stop():
+    _agents_stop_flag.set()
+    return _json_response({"ok": True})
 
 
 def main():
-    # ThreadingHTTPServer (not plain ThreadingTCPServer) sets
-    # daemon_threads=True, so long-lived SSE connection threads don't block
-    # process exit on Ctrl+C.
-    with http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler) as httpd:
-        url = f"http://127.0.0.1:{httpd.server_address[1]}/"
-        print(f"Serving City Simulator at {url} (Ctrl+C to stop)")
-        try:
-            webbrowser.open(url)
-        except Exception:
-            pass
-        try:
-            httpd.serve_forever()
-        except KeyboardInterrupt:
-            print("\nStopped.")
+    # make_server (not app.run()) so an ephemeral port (0) resolves to a
+    # real port we can print/open a browser to, and threaded=True so the
+    # long-lived SSE stream doesn't block other requests.
+    srv = make_server("127.0.0.1", 0, app, threaded=True)
+    url = f"http://127.0.0.1:{srv.server_port}/"
+    print(f"Serving City Simulator at {url} (Ctrl+C to stop)")
+    try:
+        webbrowser.open(url)
+    except Exception:
+        pass
+    try:
+        srv.serve_forever()
+    except KeyboardInterrupt:
+        print("\nStopped.")
 
 
 if __name__ == "__main__":
