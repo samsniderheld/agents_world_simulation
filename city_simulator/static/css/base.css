@@ -1,0 +1,247 @@
+/* Shared design system: tokens, page chrome, and generic components both
+   tabs build on (buttons, form fields, list rows, layout). Tab-specific
+   look lives in history.css / agents.css. */
+
+:root{
+  --bg: #0a0a0b;
+  --panel: #111113;
+  --border: #232326;
+  --text: #e5e5e8;
+  --text-dim: #8a8a92;
+  --text-faint: #55555c;
+  --accent: #f5c451;
+  --ok: #4ade80;
+  --bad: #f87171;
+  --mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  --sans: -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+*{ box-sizing: border-box; }
+
+html, body{
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+}
+
+body{
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+header{
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+  flex: none;
+}
+header h1{
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin: 0;
+}
+
+.tabs{ display: flex; gap: 4px; margin-left: 8px; }
+.tab-btn{
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  background: transparent;
+  color: var(--text-dim);
+  border: 1px solid transparent;
+  border-radius: 3px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+.tab-btn:hover:not(:disabled):not(.active){ color: var(--text); border-color: var(--border); }
+.tab-btn.active{ color: var(--accent); border-color: var(--accent); background: rgba(245,196,81,0.08); }
+.tab-btn:disabled{ opacity: 0.35; cursor: default; }
+
+.status-pill{
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  color: var(--text-dim);
+}
+.status-pill .dot{ width: 7px; height: 7px; border-radius: 50%; background: var(--text-faint); }
+.status-pill.running .dot{ background: var(--accent); animation: pulse 1.4s ease-in-out infinite; }
+.status-pill.running{ color: var(--accent); border-color: var(--accent); }
+.status-pill.done .dot{ background: var(--ok); }
+.status-pill.done{ color: var(--ok); border-color: var(--ok); }
+.status-pill.error .dot{ background: var(--bad); }
+.status-pill.error{ color: var(--bad); border-color: var(--bad); }
+@keyframes pulse{ 0%,100%{ opacity:1 } 50%{ opacity:.3 } }
+
+.toolbar{
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+  flex: none;
+}
+.toolbar .error-msg{
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--bad);
+  max-width: 360px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.toolbar .spacer{ flex: 1; }
+
+button{
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 7px 14px;
+  cursor: pointer;
+  border-radius: 3px;
+}
+button:hover:not(:disabled){ border-color: var(--text-dim); }
+button:disabled{ opacity: 0.35; cursor: default; }
+button.primary{ border-color: var(--accent); color: var(--accent); }
+button.danger{ border-color: var(--bad); color: var(--bad); }
+
+.tab-panel{ flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.tab-panel[hidden]{ display: none; }
+
+.layout{ flex: 1; display: flex; min-height: 0; }
+
+aside{
+  width: 270px;
+  flex: none;
+  border-right: 1px solid var(--border);
+  background: var(--panel);
+  overflow-y: auto;
+  padding: 16px;
+}
+aside h2{
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin: 0 0 8px;
+}
+.section{ margin-bottom: 20px; }
+
+.field{ margin-bottom: 10px; }
+.field label{
+  display: block;
+  font-size: 10.5px;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+}
+.field input[type="text"], .field input[type="number"]{
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 6px 8px;
+  border-radius: 3px;
+}
+.field input:focus{ outline: 1px solid var(--accent); }
+.field-row{ display: flex; gap: 8px; }
+.field-row .field{ flex: 1; }
+
+.checkbox-row{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 2px;
+  font-size: 12.5px;
+  cursor: pointer;
+  border-radius: 3px;
+}
+.checkbox-row:hover{ background: rgba(255,255,255,0.04); }
+.checkbox-row input{ accent-color: var(--accent); }
+.checkbox-row .sub{ color: var(--text-faint); font-size: 10px; }
+
+.agent-row{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 4px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 12.5px;
+}
+.agent-row:hover{ background: rgba(255,255,255,0.04); }
+.agent-row.off{ opacity: 0.35; }
+.swatch{ width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.agent-row .name{ font-weight: 600; }
+
+.kind-row{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+.kind-row:hover{ background: rgba(255,255,255,0.04); }
+.kind-row.off{ opacity: 0.3; }
+.kind-row .swatch{ border-radius: 2px; }
+
+.search-box{
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 7px 8px;
+  border-radius: 3px;
+}
+.search-box:focus{ outline: 1px solid var(--accent); }
+
+main{ flex: 1; display: flex; overflow-x: auto; overflow-y: hidden; }
+main.history-main{ display: block; overflow-x: hidden; overflow-y: auto; padding-bottom: 60px; }
+
+.empty{
+  max-width: 480px;
+  margin: 60px auto;
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+/* Generic collapsible marker -- both tabs' <details> elements (place-card
+   history, era figures-toggle, agent plan/step blocks) rely on this base
+   look; history.css adds more specific overrides on top where needed. */
+details{ margin-bottom: 2px; }
+details > summary{
+  cursor: pointer;
+  list-style: none;
+  padding: 4px 0;
+}
+details > summary::-webkit-details-marker{ display: none; }
+details > summary::before{ content: '▸ '; color: var(--text-faint); }
+details[open] > summary::before{ content: '▾ '; }

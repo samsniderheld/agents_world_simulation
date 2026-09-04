@@ -1,0 +1,101 @@
+# Recurring thematic motifs assigned to a Figure at creation (Qud's
+# fire/ice "domain") -- inherited by any Place they found, coloring that
+# place's language for its whole history even after ownership changes.
+domains:
+  - "the harbor"
+  - "iron"
+  - "smoke"
+  - "the ledger"
+  - "temperance"
+  - "brass"
+  - "the tide"
+  - "granite"
+  - "the press"
+  - "steam"
+  - "the vote"
+  - "velvet"
+  - "frost"
+  - "the pulpit"
+  - "salt"
+  - "copper"
+
+# Abstract allegiance targets a figure can become allied/rival with --
+# the direct analog of the talk's "frogs"/"cats" factions.
+factions:
+  - "the dockworkers"
+  - "the harbor pilots"
+  - "the temperance league"
+  - "the ward bosses"
+  - "the immigrant aid society"
+  - "the press"
+  - "the police"
+  - "the abolitionists"
+  - "the merchants' guild"
+  - "the parish poor"
+  - "the longshoremen"
+  - "the suffragists"
+  - "the volunteer firemen"
+  - "the stagehands' union"
+  - "the settlement house"
+
+# role -> list of valid era ids, or null for "any era"
+roles:
+  Merchant: null
+  Ship Captain: [dutch_colonial, english_colonial, early_republic, antebellum, gilded_age]
+  Alderman: [english_colonial, early_republic, antebellum, gilded_age, progressive]
+  Reverend: null
+  Tavern Keeper: null
+  Madam: [antebellum, gilded_age, progressive, prohibition]
+  Gang Boss: [antebellum, gilded_age, progressive, prohibition]
+  Industrialist: [gilded_age, progressive, depression_war]
+  Newspaper Editor: [early_republic, antebellum, gilded_age, progressive, prohibition, depression_war]
+  Union Organizer: [progressive, prohibition, depression_war]
+  Speakeasy Owner: [prohibition]
+  Physician: null
+  Architect: [early_republic, antebellum, gilded_age, progressive, depression_war]
+  Immigrant Entrepreneur: [antebellum, gilded_age, progressive, prohibition, depression_war]
+  Society Matron: [gilded_age, progressive, depression_war]
+  Police Captain: [antebellum, gilded_age, progressive, prohibition, depression_war]
+  Detective: [progressive, prohibition, depression_war]
+  Reporter: [progressive, prohibition, depression_war]
+
+# place_type -> list of valid era ids, or null for "any era"
+place_types:
+  Tavern/Bar: null
+  Restaurant: null
+  General Store/Shop: null
+  Market: null
+  Church/House of Worship: null
+  Theater/Hall: [early_republic, antebellum, gilded_age, progressive, prohibition, depression_war]
+  Hotel/Boarding House: null
+  Newspaper/Print Shop: [early_republic, antebellum, gilded_age, progressive, prohibition, depression_war]
+  Shipyard/Dock/Warehouse: null
+  Bank/Counting House: null
+  Tenement/Residence: [antebellum, gilded_age, progressive, prohibition, depression_war]
+  Park/Public Square: null
+  Government/Civic Building: null
+  Factory/Mill: [gilded_age, progressive, prohibition, depression_war]
+  Speakeasy: [prohibition]
+  Department Store: [gilded_age, progressive, prohibition, depression_war]
+  Social/Fraternal Club: null
+  School: null
+
+place_type_nouns:
+  Tavern/Bar: tavern
+  Restaurant: restaurant
+  General Store/Shop: general store
+  Market: market
+  Church/House of Worship: church
+  Theater/Hall: theater
+  Hotel/Boarding House: hotel
+  Newspaper/Print Shop: print shop
+  Shipyard/Dock/Warehouse: shipyard
+  Bank/Counting House: counting house
+  Tenement/Residence: tenement
+  Park/Public Square: public square
+  Government/Civic Building: civic hall
+  Factory/Mill: mill
+  Speakeasy: speakeasy
+  Department Store: department store
+  Social/Fraternal Club: social club
+  School: schoolhouse

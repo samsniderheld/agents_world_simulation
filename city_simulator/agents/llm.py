@@ -7,7 +7,7 @@ just the two functions below.
 
 import requests
 
-import config
+from . import config
 
 
 def chat(messages, model=None, temperature=0.7, context_tokens=None) -> str:

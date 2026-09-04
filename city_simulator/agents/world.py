@@ -21,12 +21,12 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 
-import display
-import planning
-import recorder
-import reflection
-from agent import Agent
-from config import TICK_MINUTES
+from . import display
+from . import planning
+from . import recorder
+from . import reflection
+from .agent import Agent
+from .config import TICK_MINUTES
 
 _DIALOGUE_HINTS = ("talk", "chat", "greet", "ask", "convers", "say hi", "wave")
 

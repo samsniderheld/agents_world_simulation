@@ -3,3 +3,6 @@ __pycache__/
 *.pyc
 .DS_Store
 run_log.json
+history.json
+map.txt
+characters.json

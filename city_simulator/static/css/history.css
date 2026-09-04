@@ -1,0 +1,203 @@
+/* History tab -- generated-city map, generation log, era/place browser,
+   present-day residents. Builds on base.css's tokens/layout/aside/field/
+   details styling. */
+
+.masthead-inline{ padding: 20px 18px 0; }
+.masthead-inline h2{ font-size: 22px; font-weight: 700; margin: 0 0 4px; color: var(--text); letter-spacing: 0.02em; }
+.masthead-inline .subtitle{ font-size: 12.5px; color: var(--text-dim); margin-bottom: 6px; }
+.masthead-inline .stats{
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.log-panel{
+  margin: 20px 18px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  padding: 14px 16px;
+}
+.log-panel .label{
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 8px;
+}
+.log-panel pre{
+  margin: 0;
+  max-height: 280px;
+  overflow-y: auto;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-dim);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.map-plate{
+  margin: 20px 18px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  padding: 18px 20px;
+}
+.map-plate .label{
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 10px;
+}
+.map-plate pre{
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text);
+  overflow-x: auto;
+}
+.map-plate .caption{
+  margin-top: 14px;
+  font-style: italic;
+  color: var(--text-dim);
+  font-size: 13px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+.map-plate .neighborhood-key{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.map-plate .neighborhood-key .entry{
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.map-plate .neighborhood-key .swatch{
+  width: 10px;
+  height: 10px;
+  border: 1px solid var(--border);
+  flex: none;
+}
+
+.hcontrols{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  padding: 12px 18px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+.hcontrols input[type="text"], .hcontrols select{
+  font-family: var(--sans);
+  font-size: 13px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 6px 10px;
+  border-radius: 3px;
+}
+.hcontrols input[type="text"]{ flex: 1; min-width: 160px; }
+.hcontrols .count{
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+.era-section{ margin: 28px 18px 0; }
+.era-section.hidden{ display: none; }
+.era-header{ border-bottom: 1px solid var(--border); padding-bottom: 8px; margin-bottom: 14px; }
+.era-header h2{ font-size: 18px; font-weight: 700; margin: 0; color: var(--accent); letter-spacing: 0.02em; }
+.era-header .years{ font-family: var(--mono); font-size: 11px; color: var(--text-faint); }
+.era-header .desc{ font-style: italic; color: var(--text-dim); font-size: 13px; margin-top: 4px; }
+
+.place-grid{ display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+
+.place-card{ border: 1px solid var(--border); background: var(--panel); padding: 12px 14px; border-radius: 3px; }
+.place-card.hidden{ display: none; }
+.place-card .name{ font-weight: 700; font-size: 15px; margin: 0 0 2px; color: var(--text); }
+.place-card .meta{ font-size: 12px; color: var(--text-dim); margin-bottom: 8px; }
+.place-card .meta .status-destroyed{ color: var(--bad); font-style: italic; }
+.place-card details summary{
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  list-style: none;
+}
+.place-card details summary::-webkit-details-marker{ display: none; }
+.place-card details summary::before{ content: '▸ '; color: var(--text-faint); }
+.place-card details[open] summary::before{ content: '▾ '; }
+.place-card .history{
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border);
+  display: grid;
+  gap: 6px;
+}
+.place-card .history .entry{ font-size: 13px; line-height: 1.5; color: var(--text); }
+.place-card .history .entry .year{ font-family: var(--mono); font-size: 10.5px; color: var(--text-faint); margin-right: 4px; }
+
+details.figures-toggle{ margin-top: 18px; }
+details.figures-toggle summary{
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  list-style: none;
+}
+details.figures-toggle summary::-webkit-details-marker{ display: none; }
+details.figures-toggle summary::before{ content: '▸ '; }
+details.figures-toggle[open] summary::before{ content: '▾ '; }
+.figures-list{
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 6px 18px;
+}
+.figures-list .figure-row{ font-size: 13px; color: var(--text); }
+.figures-list .figure-row .role{ color: var(--text-dim); font-size: 11.5px; }
+
+.hempty-note{ text-align: center; color: var(--text-faint); font-style: italic; padding: 60px 20px; }
+
+.residents-section{ margin: 40px 18px 24px; padding-top: 20px; border-top: 1px solid var(--border); }
+.residents-section .section-header h2{ font-size: 20px; font-weight: 700; color: var(--accent); margin: 0; }
+.residents-section .section-header .desc{ font-style: italic; color: var(--text-dim); font-size: 13px; margin: 4px 0 16px; }
+.resident-grid{ display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+.resident-card{ border: 1px solid var(--border); background: var(--panel); padding: 14px 16px; border-radius: 3px; }
+.resident-card .name{ font-weight: 700; font-size: 16px; margin: 0; color: var(--text); }
+.resident-card .role{ font-size: 12px; color: var(--text-dim); margin-bottom: 6px; }
+.resident-card .quirk{ font-style: italic; font-size: 11.5px; color: var(--accent); margin-bottom: 10px; }
+.resident-card .bio{ font-size: 13px; line-height: 1.6; color: var(--text); }
+.resident-card .link{
+  display: inline-block;
+  margin-top: 12px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  text-decoration: none;
+}

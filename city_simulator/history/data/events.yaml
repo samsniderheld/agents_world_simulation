@@ -1,0 +1,187 @@
+# domain values may themselves start with "the" (e.g. "the press"), so
+# these deliberately don't prepend their own article before {domain}.
+generic_causes:
+  - "a matter of {domain}"
+  - "reasons the old records leave unclear"
+  - "a dispute no one now remembers clearly"
+  - "what was once called simply \"{domain} business\""
+
+# Mixed articles are deliberate: every template phrases these as
+# "lost to {disaster}" / "consumed by {disaster}", which both read fine
+# whether or not the phrase itself carries an article.
+disasters:
+  - fire
+  - a storm
+  - a riot
+  - a flood
+
+scandal_tags:
+  - bribery
+  - smuggling
+  - adultery
+  - embezzlement
+  - blasphemy
+  - forgery
+
+political_outcomes:
+  - a night in the Tombs
+  - a heavy fine
+  - a public apology
+  - quiet exile from the ward
+  - a pardon bought with favors
+
+# A subset of dramatic event kinds get a shot at an LLM prose flourish
+# (config.LLM_FLOURISH_RATE); everything else stays pure grammar output.
+notable_template_ids:
+  - found_place
+  - place_destroyed
+  - rebuilt_place
+  - expansion
+
+# Each template: id (unique string), requires_place ("new" | "existing" |
+# null), place_filter (optional, only for "existing" -- name of a function
+# in events.py's _PLACE_FILTERS), precondition (optional -- name of a
+# function in _PRECONDITIONS, gates whether this template is even eligible
+# this turn), effects (name of a function in _EFFECTS -- mutates
+# figure/place in place and returns extra Gospel-text context slots), and
+# grammar (a grammar.expand() dict; must have a "TEXT" symbol, may have
+# others, including alternate text symbols an effects function can
+# redirect to via the special "_text_symbol" context key -- see
+# feud_violence's TEXT_DEATH branch).
+event_templates:
+  - id: found_place
+    requires_place: new
+    effects: found_place
+    grammar:
+      TEXT:
+        - "In {year}, {figure} of {domain} founded {place}, a {place_noun}, {founding_flourish}."
+        - "{figure} opened the doors of {place} in {year}, a {place_noun} that would carry the mark of {domain} for years to come."
+      founding_flourish:
+        - "on a corner that was then little more than mud and ambition"
+        - "with borrowed money and a great deal of nerve"
+        - "in the shadow of the harbor"
+        - "on ground still remembered as farmland"
+
+  - id: expansion
+    requires_place: new
+    effects: expansion
+    precondition: has_founded_a_place
+    grammar:
+      TEXT:
+        - "Flush with earlier success, {figure} opened a second {place_noun}, {place}, in {year}."
+        - "By {year}, {figure}'s ambitions had outgrown one address; {place}, a new {place_noun}, followed."
+
+  - id: place_destroyed
+    requires_place: existing
+    place_filter: active_place
+    effects: place_destroyed
+    grammar:
+      TEXT:
+        - "In {year}, {place} was lost to {disaster}; some blamed {cause}."
+        - "{place} was consumed by {disaster} in {year}, leaving little of what {figure} had built there."
+
+  - id: rebuilt_place
+    requires_place: existing
+    place_filter: destroyed_place
+    effects: rebuilt_place
+    grammar:
+      TEXT:
+        - "{figure} rebuilt {place} in {year}, raising it again as a {place_noun}."
+        - "Where ashes had stood, {figure} raised {place} anew in {year}."
+
+  - id: ownership_change
+    requires_place: existing
+    place_filter: active_place
+    effects: ownership_change
+    grammar:
+      TEXT:
+        - "{place}, the old {place_noun}, changed hands in {year} when {figure} took it over."
+        - "In {year}, {figure} bought out the previous proprietor of {place}, citing {cause}."
+
+  - id: renamed
+    requires_place: existing
+    place_filter: active_place
+    effects: renamed
+    grammar:
+      TEXT:
+        - "{figure} renamed the old {place_noun} -- once known as {old_name} -- to {place} in {year}."
+
+  - id: alliance_formed
+    requires_place: null
+    effects: alliance_formed
+    grammar:
+      TEXT:
+        - "By {year}, {figure} had made fast friends with {faction}, a bond that would shape years to come."
+        - "{figure} threw in with {faction} in {year}, for {domain}'s sake if nothing else."
+
+  - id: rivalry_formed
+    requires_place: null
+    effects: rivalry_formed
+    grammar:
+      TEXT:
+        - "In {year}, {figure} earned the lasting enmity of {faction}."
+        - "{figure} and {faction} became bitter rivals in {year}, over {domain} as much as anything else."
+
+  - id: scandal
+    requires_place: null
+    effects: scandal
+    grammar:
+      TEXT:
+        - "Rumors of {tag} dogged {figure} from {year} onward, whispered to be over {cause}."
+
+  - id: political_trouble
+    requires_place: null
+    effects: political_trouble
+    grammar:
+      TEXT:
+        - "{figure} was hauled before the magistrates in {year} over {cause}, and it ended in {outcome}."
+
+  - id: philanthropy
+    requires_place: existing
+    place_filter: active_place
+    effects: philanthropy
+    grammar:
+      TEXT:
+        - "{figure} funded repairs to {place} in {year}, out of devotion to {domain} -- or so it was said."
+
+  - id: feud_violence
+    requires_place: existing
+    place_filter: active_place
+    effects: feud_violence
+    grammar:
+      TEXT:
+        - "Blood was spilled at {place} in {year} over {cause}."
+        - "A brawl broke out at {place} in {year}, said to be about {cause}."
+      TEXT_DEATH:
+        - "{figure} was killed in a brawl at {place} in {year} over {cause} -- the {place_noun} was never quite the same."
+
+  - id: visited_by_notable
+    requires_place: existing
+    place_filter: active_place_not_own
+    effects: visited_by_notable
+    grammar:
+      TEXT:
+        - "{figure} was known to frequent {place} around {year}, and the old {place_noun} was never quite the same after."
+
+  - id: prospered
+    requires_place: existing
+    place_filter: active_place
+    effects: prospered
+    grammar:
+      TEXT:
+        - "{place} prospered under {figure}'s hand, and by {year} its name was known across the city."
+
+  - id: decline
+    requires_place: existing
+    place_filter: active_place
+    effects: decline
+    grammar:
+      TEXT:
+        - "By {year}, {place} had fallen on hard times, a decline some blamed on {cause}."
+
+death_template:
+  id: death
+  grammar:
+    TEXT:
+      - "{figure} died in {year}, remembered -- if at all -- for their ties to {domain}."
+      - "By {year}, {figure} was gone, and whatever they had built was left to others to keep or lose."
