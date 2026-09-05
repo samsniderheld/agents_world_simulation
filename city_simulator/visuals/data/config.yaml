@@ -1,0 +1,23 @@
+# Which provider implementation backs the Visuals tab (see
+# visuals/providers/__init__.py's get_provider()). "fal" today; adding a
+# "local" entry here (once visuals/providers/local.py exists) is the whole
+# story for switching to a local model server -- routes.py/jobs.py/the
+# frontend never change.
+provider: fal
+
+fal:
+  text_to_image_model: "fal-ai/gemini-3-pro-image-preview"
+  image_edit_model: "fal-ai/gemini-3-pro-image-preview/edit"
+  image_to_video_model: "google/gemini-omni-flash/v1.1/image-to-video"
+  poll_interval_seconds: 2
+  timeout_seconds: 600
+
+image_defaults:
+  aspect_ratio: "1:1"
+  resolution: "1K"
+  output_format: "png"
+
+video_defaults:
+  aspect_ratio: "16:9"
+  resolution: "720p"
+  duration: 8

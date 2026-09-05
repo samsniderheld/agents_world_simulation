@@ -16,9 +16,15 @@ via [Ollama](https://ollama.com):
    few shared locations so they can actually meet and talk (see
    `agents/simulation.py`'s `roster_from_history`); without a generated
    history, a fixed five-person noir cast is used instead.
+3. **Visuals** (`visuals/`) — image and video generation through
+   [fal.ai](https://fal.ai)'s hosted API: text-to-image, image editing
+   (animate/transform an uploaded or generated image), and image-to-video.
+   Built around a small `Provider` interface (`visuals/providers/base.py`)
+   so the backend is swappable -- fal.ai today, a local model server later
+   -- without touching the tab's routes or frontend.
 
-Both are driven from one web UI (Jinja templates in `templates/`, assets in
-`static/`) with a tab per half. A third tab is reserved for later.
+All three are driven from one web UI (Jinja templates in `templates/`,
+assets in `static/`) with a tab per half.
 
 ## Setup
 
@@ -45,7 +51,19 @@ Both are driven from one web UI (Jinja templates in `templates/`, assets in
    python3 -m venv ../.venv && source ../.venv/bin/activate
    pip install -r requirements.txt
    ```
-4. Run it:
+4. For the Visuals tab, get an API key from [fal.ai](https://fal.ai/dashboard/keys)
+   (`FAL_KEY` is fal's own env var convention -- never put this in a
+   committed file). Easiest via a `.env` file, loaded automatically:
+   ```bash
+   cp .env.example .env
+   # then edit .env and set FAL_KEY=...
+   ```
+   or just export it directly (either works; a real `export`ed value always
+   wins over `.env`):
+   ```bash
+   export FAL_KEY=...
+   ```
+5. Run it:
    ```bash
    python3 app.py
    ```
@@ -56,7 +74,9 @@ Both are driven from one web UI (Jinja templates in `templates/`, assets in
 Everything also still works without Ollama running: the History tab's
 "Skip Ollama" checkbox falls back to pure-grammar names/prose, and the
 Agents tab will raise a clear error at the start of a run if the configured
-model isn't pulled.
+model isn't pulled. Without `FAL_KEY` set, the Visuals tab starts a
+generation normally but its status flips to `error` with a clear message
+the moment fal.ai is actually called.
 
 ## Layout
 
@@ -88,20 +108,36 @@ city_simulator/
     jobs.py                   background-thread job state
     routes.py                   Blueprint: /api/agents/*
 
+  visuals/             image/video generation + its API
+    data/
+      config.yaml              provider selection, fal model ids, poll/
+                                 timeout, image/video generation defaults
+      uploads/, outputs/         uploaded starting images / downloaded
+                                   results (gitignored, kept via .gitkeep)
+    config.py                  loads config.yaml; FAL_API_KEY from $FAL_KEY
+    providers/
+      base.py                    Provider interface: generate_image(),
+                                   generate_video()
+      fal.py                       FalProvider -- fal.ai's queue submit/
+                                     poll/fetch REST API
+    storage.py                 save_upload() / save_url() -> local path
+    jobs.py                    background-thread job state (one slot)
+    routes.py                    Blueprint: /api/visuals/*
+
   templates/            Jinja2 templates
     index.html            page shell (tabs nav, links static/, includes below)
-    _history_tab.html, _agents_tab.html, _soon_tab.html
+    _history_tab.html, _agents_tab.html, _visuals_tab.html
 
   static/
     css/base.css           shared tokens/layout/components
-    css/history.css, css/agents.css   per-tab styling
+    css/history.css, css/agents.css, css/visuals.css   per-tab styling
     js/main.js               escapeHtml() + tab switching
-    js/history.js, js/agents.js        per-tab logic (state, rendering, polling/SSE)
+    js/history.js, js/agents.js, js/visuals.js        per-tab logic (state, rendering, polling/SSE)
 ```
 
-Both `history/` and `agents/` are plain Python packages (relative imports
-between their own modules); `hardware.py`/`jsonutil.py` stay at the project
-root since both packages' configs and both blueprints need them.
+`history/`, `agents/`, and `visuals/` are plain Python packages (relative
+imports between their own modules); `hardware.py`/`jsonutil.py` stay at the
+project root since more than one package/blueprint needs them.
 
 ## How it works
 
@@ -125,31 +161,45 @@ templates/index.html (3 tabs)
   |                     v
   |                   GET /api/history/status (poll) --> GET /api/history/data (once done)
   |
-  `-- Agents tab --> POST /api/agents/run --> agents/jobs.start() --> simulation.run()
-                        |                                                |
-                        |                                                |-- simulation.build_agents()   roster_from_history() if a
-                        |                                                |                                history was generated this
-                        |                                                |                                session, else the hardcoded
-                        |                                                |                                noir AGENT_ROSTER
-                        |                                                `-- world.World.run()          tick loop: plan / decompose,
-                        |                                                                                 perceive + react (+ dialogue),
-                        |                                                                                 reflect -- see world.py's docstring
+  |-- Agents tab --> POST /api/agents/run --> agents/jobs.start() --> simulation.run()
+  |                     |                                                |
+  |                     |                                                |-- simulation.build_agents()   roster_from_history() if a
+  |                     |                                                |                                history was generated this
+  |                     |                                                |                                session, else the hardcoded
+  |                     |                                                |                                noir AGENT_ROSTER
+  |                     |                                                `-- world.World.run()          tick loop: plan / decompose,
+  |                     |                                                                                 perceive + react (+ dialogue),
+  |                     |                                                                                 reflect -- see world.py's docstring
+  |                     v
+  |                   GET /api/agents/state (poll) + GET /api/agents/stream (SSE)  -->  live per-agent columns
+  |
+  `-- Visuals tab --> POST /api/visuals/generate-image (or /generate-video) --> visuals/jobs.start()
+                        |                                                          |
+                        |                                                          `-- providers.get_provider()   FalProvider today (config.yaml's
+                        |                                                                |                        `provider` key selects it) -- a
+                        |                                                                |                        local.py implementing the same
+                        |                                                                |                        Provider interface is the whole
+                        |                                                                |                        story for swapping backends later
+                        |                                                                `-- submit to fal.ai's queue, poll until done,
+                        |                                                                     storage.save_url() the result into data/outputs/
                         v
-                      GET /api/agents/state (poll) + GET /api/agents/stream (SSE)  -->  live per-agent columns
+                      GET /api/visuals/status (poll) --> GET /api/visuals/result (once done) --> gallery card
 ```
 
-`history/jobs.py` and `agents/jobs.py` each run their half's work on its own
-background thread with its own status, so generating a history and running
-agents are independent jobs the frontend can drive separately.
+`history/jobs.py`, `agents/jobs.py`, and `visuals/jobs.py` each run their half's work on its own
+background thread with its own status, so generating a history, running
+agents, and generating images/video are all independent jobs the frontend
+can drive separately.
 `history/routes.py`'s `POST /api/history/generate` hands `agents/jobs.py`'s
 `set_history_roster` (re-exported from `simulation.py`) to `history/jobs.py`
-as an on-done callback -- the only place the two packages actually touch.
+as an on-done callback -- the only place the history/agents packages touch;
+`visuals/` doesn't touch either of the other two.
 
 ## Architecture
 
 | File(s) | Half | What it does |
 |---|---|---|
-| `app.py` | both | Flask app factory + entrypoint: registers both blueprints, serves `templates/index.html`. |
+| `app.py` | all | Flask app factory + entrypoint: registers all three blueprints, serves `templates/index.html`. |
 | `history/data/config.yaml` / `history/config.py` / `history/llm.py` | history | Every tunable knob (LLM behavior, figure/event counts, map-noise parameters) lives in `data/config.yaml`; `config.py` just loads it and picks a chat-model tier for this machine. `llm.py` is a thin Ollama chat wrapper, tuned for many short name/prose-fill calls. |
 | `history/eras.py`, `entities.py`, `events.py`, `grammar.py`, `names.py` | history | The procedural-history engine itself -- modeled on Jason Grinblat's GDC talk on Caves of Qud's mythic-biography generator: entities as mutable-property bags, events resolved by reading current state (not simulated causality), text produced by a real replacement grammar (`grammar.py`). All *content* -- eras, domains/factions/roles/place types, era-flavored name word lists, and event templates (grammar text; `requires_place`/`effects`/`place_filter`/`precondition` reference Python functions by name) -- lives in the matching `.yaml` file in `data/`; the `.py` file loads it and holds only behavior. |
 | `history/citymap.py` | history | The ASCII map: Perlin-noise-generated island + satellite landmasses, rendered as braille dot-density, each era's row-band a separately colored/named neighborhood. |
@@ -162,15 +212,21 @@ as an on-done callback -- the only place the two packages actually touch.
 | `agents/jobs.py` / `routes.py` | agents | Background-thread job orchestration and the `/api/agents/*` Flask blueprint. |
 | `agents/treatment.py` | agents | One LLM call after a run finishes: a film-noir video-vignette treatment (cast, synopsis, storyboard) over the full transcript. |
 | `agents/recorder.py` / `display.py` / `textutil.py` | agents | Structured event log the frontend streams live (`recorder.py`), terminal color helpers for `--verbose` tracing (`display.py`), small text-parsing helpers (`textutil.py`). |
-| `hardware.py` | both | Detects available memory (Apple unified memory or NVIDIA VRAM) so each config can size its chat model to the machine it's running on. |
-| `jsonutil.py` | both | Shared `json_response()` helper both blueprints use. |
-| `templates/`, `static/` | both | Jinja2 page shell + per-tab partials; shared/per-tab CSS and JS (see Layout above). |
+| `visuals/data/config.yaml` / `visuals/config.py` | visuals | Provider selection (`fal` today), fal.ai model ids, poll/timeout, image/video generation defaults. The API key is deliberately *not* here -- `config.py` reads it from the `FAL_KEY` environment variable (or a `.env` file at the project root, via `python-dotenv`; see `.env.example`). |
+| `visuals/providers/base.py` | visuals | The `Provider` interface (`generate_image()`, `generate_video()`) every backend implements. |
+| `visuals/providers/fal.py` | visuals | `FalProvider` -- submits to fal.ai's queue REST API (`POST queue.fal.run/{model_id}`), polls `.../requests/{id}/status` until done, fetches the result, and downloads it locally via `storage.py`. Talks to three fal models: text-to-image, image-edit (used automatically when a starting image is given), and image-to-video. |
+| `visuals/storage.py` | visuals | Saves uploaded/downloaded bytes under `data/uploads/` or `data/outputs/` with a uuid filename; provider-agnostic. |
+| `visuals/jobs.py` / `routes.py` | visuals | Background-thread job orchestration (one slot) and the `/api/visuals/*` Flask blueprint, including `/api/visuals/upload` and `/api/visuals/files/<path>` for serving local media back to the browser. |
+| `hardware.py` | history, agents | Detects available memory (Apple unified memory or NVIDIA VRAM) so each config can size its chat model to the machine it's running on. |
+| `jsonutil.py` | all | Shared `json_response()` helper all three blueprints use. |
+| `templates/`, `static/` | all | Jinja2 page shell + per-tab partials; shared/per-tab CSS and JS (see Layout above). |
 
 ## Extending
 
-- The third tab (`templates/_soon_tab.html`) is a placeholder -- add a
-  `soon/` package with its own `jobs.py`/`routes.py` (mirroring `history/`
-  or `agents/`) and register its blueprint in `app.py`.
+- Add a `visuals/providers/local.py` implementing `Provider`'s two methods
+  against a local model server (ComfyUI, A1111, whatever), then flip
+  `visuals/data/config.yaml`'s `provider` to `local` -- `jobs.py`/
+  `routes.py`/the frontend don't need to change at all.
 - `agents/simulation.py`'s `roster_from_history()` hub-clustering
   (`_HUB_COUNT`, `_pick_hubs`) is the seam to change if you want a
   different way of staging generated characters for a live run -- e.g.
