@@ -6,3 +6,10 @@ run_log.json
 history.json
 map.txt
 characters.json
+.env
+
+# Visuals tab: uploaded/generated media, not source
+city_simulator/visuals/data/uploads/*
+city_simulator/visuals/data/outputs/*
+!city_simulator/visuals/data/uploads/.gitkeep
+!city_simulator/visuals/data/outputs/.gitkeep

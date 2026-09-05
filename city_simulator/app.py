@@ -18,6 +18,7 @@ from werkzeug.serving import make_server
 
 from agents.routes import bp as agents_bp
 from history.routes import bp as history_bp
+from visuals.routes import bp as visuals_bp
 
 # The frontend is the interface now; keep the terminal quiet (matches the
 # old bare http.server Handler's log_message no-op).
@@ -28,6 +29,7 @@ def create_app() -> Flask:
     app = Flask(__name__)
     app.register_blueprint(history_bp)
     app.register_blueprint(agents_bp)
+    app.register_blueprint(visuals_bp)
 
     @app.get("/")
     def index():
