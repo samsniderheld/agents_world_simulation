@@ -6,9 +6,38 @@ from flask import Blueprint, request, send_from_directory
 
 from jsonutil import json_response
 
-from . import config, jobs, storage
+from . import config, jobs, providers, storage
 
 bp = Blueprint("visuals", __name__, url_prefix="/api/visuals")
+
+
+@bp.get("/providers")
+def providers_list():
+    return json_response({"available": providers.AVAILABLE_PROVIDERS, "current": config.PROVIDER})
+
+
+@bp.post("/provider")
+def set_provider():
+    body = request.get_json(silent=True) or {}
+    name = body.get("provider")
+    if name not in providers.AVAILABLE_PROVIDERS:
+        return json_response({"ok": False, "error": f"unknown provider {name!r}"}, status=400)
+    try:
+        # Constructing (and, for "local", importing torch/diffusers) here
+        # means a missing dependency or unavailable backend surfaces right
+        # away, in response to picking it, rather than on the next generate
+        # call.
+        providers.get_provider(name)
+    except ImportError as e:
+        return json_response({
+            "ok": False,
+            "error": f"'{name}' provider isn't installed ({e}). "
+                     f"Run: pip install -r requirements-local-visuals.txt",
+        }, status=500)
+    except Exception as e:
+        return json_response({"ok": False, "error": str(e)}, status=500)
+    config.PROVIDER = name
+    return json_response({"ok": True, "provider": name})
 
 
 @bp.get("/status")

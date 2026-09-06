@@ -9,6 +9,7 @@ const vState = {
   editImagePath: null,     // server-side path of the uploaded "starting image" for Generate Image
   videoSourcePath: null,   // server-side path of the source image for Generate Video
   lastPhase: null,
+  currentProvider: null,   // "fal" | "local"
 };
 
 const visualsStatusPill = document.getElementById('visualsStatusPill');
@@ -16,10 +17,62 @@ const visualsStatusText = document.getElementById('visualsStatusText');
 const visualsErrorMsg = document.getElementById('visualsErrorMsg');
 const generateImageBtn = document.getElementById('generateImageBtn');
 const generateVideoBtn = document.getElementById('generateVideoBtn');
+const providerSelect = document.getElementById('providerSelect');
+const providerHint = document.getElementById('providerHint');
 
 function fileUrl(relativeUrl){
   return '/api/visuals/files/' + relativeUrl;
 }
+
+// --- provider switching -------------------------------------------------
+
+function applyProviderRestrictions(name){
+  vState.currentProvider = name;
+  const isLocal = name === 'local';
+
+  document.getElementById('imageFileInput').disabled = isLocal;
+  document.getElementById('startingImageField').classList.toggle('disabled-field', isLocal);
+
+  const videoSection = document.getElementById('generateVideoSection');
+  videoSection.querySelectorAll('input, textarea, select').forEach(el => { el.disabled = isLocal; });
+  videoSection.classList.toggle('disabled-field', isLocal);
+
+  if (isLocal) {
+    providerHint.style.display = '';
+    providerHint.textContent = 'Local mode: text-to-image only (Z-Image Turbo, Apple Silicon). '
+      + 'No starting image or video generation. First use downloads the model (several GB) and may take a while.';
+  } else {
+    providerHint.style.display = 'none';
+  }
+
+  // Button-disabled states also depend on job phase/selected source image --
+  // recompute those against the new provider immediately rather than
+  // waiting for the next poll tick.
+  pollVisualsStatus();
+}
+
+function loadProviders(){
+  fetch('/api/visuals/providers').then(r => r.json()).then(d => {
+    providerSelect.value = d.current;
+    applyProviderRestrictions(d.current);
+  });
+}
+
+providerSelect.addEventListener('change', () => {
+  const chosen = providerSelect.value;
+  const previous = vState.currentProvider;
+  fetch('/api/visuals/provider', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ provider: chosen }),
+  }).then(r => r.json()).then(d => {
+    if (!d.ok) {
+      providerSelect.value = previous;
+      providerHint.style.display = '';
+      providerHint.textContent = d.error || 'could not switch provider';
+      return;
+    }
+    applyProviderRestrictions(chosen);
+  });
+});
 
 function uploadImage(file){
   const formData = new FormData();
@@ -104,7 +157,7 @@ function pollVisualsStatus(){
     visualsStatusText.textContent = phase;
     visualsErrorMsg.textContent = d.error || '';
     generateImageBtn.disabled = phase === 'running';
-    generateVideoBtn.disabled = (phase === 'running') || !vState.videoSourcePath;
+    generateVideoBtn.disabled = (phase === 'running') || !vState.videoSourcePath || vState.currentProvider === 'local';
 
     if (phase === 'done' && vState.lastPhase !== 'done') {
       fetch('/api/visuals/result').then(r => r.json()).then(result => {
@@ -122,6 +175,7 @@ function pollVisualsStatus(){
   }).catch(() => {});
 }
 
+loadProviders();
 setInterval(pollVisualsStatus, 1200);
 pollVisualsStatus();
 

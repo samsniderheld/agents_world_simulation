@@ -21,3 +21,20 @@ video_defaults:
   aspect_ratio: "16:9"
   resolution: "720p"
   duration: 8
+
+# Local text-to-image generation (Hugging Face Diffusers on PyTorch MPS).
+# See visuals/NOTES.md for why only Z-Image Turbo is wired up (FLUX.2
+# [klein] and Qwen-Image were researched and are not implemented -- one's
+# blocked on tooling, the other's requested variant doesn't exist; see
+# that file before changing model_id here).
+local:
+  model_id: "Tongyi-MAI/Z-Image-Turbo"
+  num_inference_steps: 9
+  guidance_scale: 0.0
+  # SDNQ post-load quantization of the transformer + text encoder --
+  # meaningful memory headroom for a small quality cost. See NOTES.md for
+  # why this needs the standalone sdnq_post_load_quant() call rather than
+  # diffusers' native quantization_config= (that needs diffusers>=0.40.0;
+  # we're on 0.36.0).
+  quantize: true
+  quantize_dtype: "int8"

@@ -34,5 +34,11 @@ FAL_TIMEOUT_SECONDS = _RAW["fal"]["timeout_seconds"]
 IMAGE_DEFAULTS = _RAW["image_defaults"]
 VIDEO_DEFAULTS = _RAW["video_defaults"]
 
+LOCAL_MODEL_ID = _RAW["local"]["model_id"]
+LOCAL_NUM_INFERENCE_STEPS = _RAW["local"]["num_inference_steps"]
+LOCAL_GUIDANCE_SCALE = _RAW["local"]["guidance_scale"]
+LOCAL_QUANTIZE = _RAW["local"]["quantize"]
+LOCAL_QUANTIZE_DTYPE = _RAW["local"]["quantize_dtype"]
+
 UPLOADS_DIR = _PACKAGE_DIR / "data" / "uploads"
 OUTPUTS_DIR = _PACKAGE_DIR / "data" / "outputs"

@@ -2,7 +2,9 @@
 downloaded generation results both end up here (under data/uploads/ and
 data/outputs/ respectively), named by uuid so concurrent/repeat requests
 never collide. Kept provider-agnostic on purpose: any Provider
-implementation can call save_bytes()/save_url() the same way.
+implementation can call save_bytes()/save_url()/save_pil_image() the same
+way (fal.py downloads a URL; local.py hands back an in-memory PIL Image
+directly, with no URL to download).
 """
 
 import mimetypes
@@ -52,6 +54,16 @@ def save_url(url: str, directory: Path = None) -> Path:
     resp.raise_for_status()
     content_type = resp.headers.get("Content-Type", "").split(";")[0].strip()
     return save_bytes(resp.content, directory or config.OUTPUTS_DIR, content_type=content_type, fallback_name=url)
+
+
+def save_pil_image(image, directory: Path = None) -> Path:
+    """Saves an in-memory PIL Image (what local diffusers pipelines return
+    directly, with no hosted URL to download)."""
+    directory = directory or config.OUTPUTS_DIR
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / f"{uuid.uuid4().hex}.png"
+    image.save(path, format="PNG")
+    return path
 
 
 def relative_path(path: Path) -> str:

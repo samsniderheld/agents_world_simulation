@@ -16,12 +16,13 @@ via [Ollama](https://ollama.com):
    few shared locations so they can actually meet and talk (see
    `agents/simulation.py`'s `roster_from_history`); without a generated
    history, a fixed five-person noir cast is used instead.
-3. **Visuals** (`visuals/`) — image and video generation through
-   [fal.ai](https://fal.ai)'s hosted API: text-to-image, image editing
-   (animate/transform an uploaded or generated image), and image-to-video.
-   Built around a small `Provider` interface (`visuals/providers/base.py`)
-   so the backend is swappable -- fal.ai today, a local model server later
-   -- without touching the tab's routes or frontend.
+3. **Visuals** (`visuals/`) — image and video generation, switchable at
+   runtime (a selector right in the tab) between two backends behind a
+   small `Provider` interface (`visuals/providers/base.py`): **fal.ai**
+   (hosted -- text-to-image, image editing, image-to-video) and **local**
+   (Z-Image Turbo running on-device via Hugging Face Diffusers on
+   PyTorch's MPS backend, Apple Silicon only, text-to-image only -- see
+   `visuals/NOTES.md` for the hardware/model research behind it).
 
 All three are driven from one web UI (Jinja templates in `templates/`,
 assets in `static/`) with a tab per half.
@@ -51,9 +52,10 @@ assets in `static/`) with a tab per half.
    python3 -m venv ../.venv && source ../.venv/bin/activate
    pip install -r requirements.txt
    ```
-4. For the Visuals tab, get an API key from [fal.ai](https://fal.ai/dashboard/keys)
-   (`FAL_KEY` is fal's own env var convention -- never put this in a
-   committed file). Easiest via a `.env` file, loaded automatically:
+4. For the Visuals tab's **fal.ai** provider, get an API key from
+   [fal.ai](https://fal.ai/dashboard/keys) (`FAL_KEY` is fal's own env var
+   convention -- never put this in a committed file). Easiest via a `.env`
+   file, loaded automatically:
    ```bash
    cp .env.example .env
    # then edit .env and set FAL_KEY=...
@@ -63,6 +65,18 @@ assets in `static/`) with a tab per half.
    ```bash
    export FAL_KEY=...
    ```
+   For the Visuals tab's **local** provider (Apple Silicon only -- Z-Image
+   Turbo via Diffusers/MPS, no API key needed), install the extra,
+   separate dependency set first (torch/diffusers/transformers/accelerate/
+   sdnq -- several GB, not part of the main install):
+   ```bash
+   pip install -r requirements-local-visuals.txt
+   ```
+   Switch to it from the Visuals tab's own provider selector, or by
+   setting `visuals/data/config.yaml`'s `provider` to `local` before
+   starting the app. First use downloads the model (several GB); see
+   `visuals/NOTES.md` for the hardware/memory details this was built
+   against.
 5. Run it:
    ```bash
    python3 app.py
@@ -109,20 +123,28 @@ city_simulator/
     routes.py                   Blueprint: /api/agents/*
 
   visuals/             image/video generation + its API
+    NOTES.md                   local-generation research: verified pipeline
+                                 classes, repo ids, settings, what's blocked
     data/
-      config.yaml              provider selection, fal model ids, poll/
-                                 timeout, image/video generation defaults
-      uploads/, outputs/         uploaded starting images / downloaded
-                                   results (gitignored, kept via .gitkeep)
+      config.yaml              default provider, fal model ids, poll/
+                                 timeout, image/video/local generation
+                                 defaults
+      uploads/, outputs/         uploaded starting images / downloaded or
+                                   generated results (gitignored, .gitkeep)
     config.py                  loads config.yaml; FAL_API_KEY from $FAL_KEY
     providers/
       base.py                    Provider interface: generate_image(),
                                    generate_video()
       fal.py                       FalProvider -- fal.ai's queue submit/
                                      poll/fetch REST API
-    storage.py                 save_upload() / save_url() -> local path
+      local.py                      LocalProvider -- Z-Image Turbo via
+                                      Diffusers on MPS (Apple Silicon)
+    storage.py                 save_upload() / save_url() / save_pil_image()
+                                 -> local path
     jobs.py                    background-thread job state (one slot)
-    routes.py                    Blueprint: /api/visuals/*
+    routes.py                    Blueprint: /api/visuals/*, incl.
+                                   GET/POST .../providers, .../provider for
+                                   runtime switching
 
   templates/            Jinja2 templates
     index.html            page shell (tabs nav, links static/, includes below)
@@ -173,15 +195,21 @@ templates/index.html (3 tabs)
   |                     v
   |                   GET /api/agents/state (poll) + GET /api/agents/stream (SSE)  -->  live per-agent columns
   |
+  `-- Visuals tab --> POST /api/visuals/provider {name}  switches providers.get_provider()'s active
+  |                                                        backend at runtime -- the tab's own selector
+  |
   `-- Visuals tab --> POST /api/visuals/generate-image (or /generate-video) --> visuals/jobs.start()
                         |                                                          |
-                        |                                                          `-- providers.get_provider()   FalProvider today (config.yaml's
-                        |                                                                |                        `provider` key selects it) -- a
-                        |                                                                |                        local.py implementing the same
-                        |                                                                |                        Provider interface is the whole
-                        |                                                                |                        story for swapping backends later
-                        |                                                                `-- submit to fal.ai's queue, poll until done,
-                        |                                                                     storage.save_url() the result into data/outputs/
+                        |                                                          `-- providers.get_provider()   FalProvider or LocalProvider,
+                        |                                                                |                        memoized per name (see
+                        |                                                                |                        providers/__init__.py) -- a
+                        |                                                                |                        third provider implementing
+                        |                                                                |                        the same interface is the whole
+                        |                                                                |                        story for adding another backend
+                        |                                                                |-- fal:   submit to fal.ai's queue, poll until done,
+                        |                                                                |            storage.save_url() the result into data/outputs/
+                        |                                                                `-- local: run Z-Image Turbo on MPS (load once, reuse),
+                        |                                                                            storage.save_pil_image() the result
                         v
                       GET /api/visuals/status (poll) --> GET /api/visuals/result (once done) --> gallery card
 ```
@@ -212,21 +240,29 @@ as an on-done callback -- the only place the history/agents packages touch;
 | `agents/jobs.py` / `routes.py` | agents | Background-thread job orchestration and the `/api/agents/*` Flask blueprint. |
 | `agents/treatment.py` | agents | One LLM call after a run finishes: a film-noir video-vignette treatment (cast, synopsis, storyboard) over the full transcript. |
 | `agents/recorder.py` / `display.py` / `textutil.py` | agents | Structured event log the frontend streams live (`recorder.py`), terminal color helpers for `--verbose` tracing (`display.py`), small text-parsing helpers (`textutil.py`). |
-| `visuals/data/config.yaml` / `visuals/config.py` | visuals | Provider selection (`fal` today), fal.ai model ids, poll/timeout, image/video generation defaults. The API key is deliberately *not* here -- `config.py` reads it from the `FAL_KEY` environment variable (or a `.env` file at the project root, via `python-dotenv`; see `.env.example`). |
+| `visuals/data/config.yaml` / `visuals/config.py` | visuals | Default provider (`fal` or `local` -- overridable at runtime, see below), fal.ai model ids, poll/timeout, image/video/local generation defaults. The fal API key is deliberately *not* here -- `config.py` reads it from the `FAL_KEY` environment variable (or a `.env` file at the project root, via `python-dotenv`; see `.env.example`). |
 | `visuals/providers/base.py` | visuals | The `Provider` interface (`generate_image()`, `generate_video()`) every backend implements. |
 | `visuals/providers/fal.py` | visuals | `FalProvider` -- submits to fal.ai's queue REST API (`POST queue.fal.run/{model_id}`), polls `.../requests/{id}/status` until done, fetches the result, and downloads it locally via `storage.py`. Talks to three fal models: text-to-image, image-edit (used automatically when a starting image is given), and image-to-video. |
-| `visuals/storage.py` | visuals | Saves uploaded/downloaded bytes under `data/uploads/` or `data/outputs/` with a uuid filename; provider-agnostic. |
-| `visuals/jobs.py` / `routes.py` | visuals | Background-thread job orchestration (one slot) and the `/api/visuals/*` Flask blueprint, including `/api/visuals/upload` and `/api/visuals/files/<path>` for serving local media back to the browser. |
+| `visuals/providers/local.py` | visuals | `LocalProvider` -- Z-Image Turbo (6B DiT + bundled Qwen3-sized text encoder) via Diffusers on PyTorch's MPS backend. bfloat16, SDNQ int8 post-load quantization, `enable_model_cpu_offload()` for encode-then-denoise sequencing, one-time warmup, `torch.Generator(device="mps")` seeding. Text-to-image only (raises a clear error for edits/video). See `visuals/NOTES.md` for why FLUX.2 and Qwen-Image aren't here. |
+| `visuals/providers/__init__.py` | visuals | `get_provider(name=None)` -- memoized per provider name (not just once), so switching backends at runtime doesn't discard/reload an already-built one (`LocalProvider`'s loaded pipeline in particular). Falls back to `config.PROVIDER` when no name is given. |
+| `visuals/storage.py` | visuals | Saves uploaded/downloaded/generated bytes under `data/uploads/` or `data/outputs/` with a uuid filename (`save_upload()`, `save_url()`, `save_pil_image()`); provider-agnostic. |
+| `visuals/jobs.py` / `routes.py` | visuals | Background-thread job orchestration (one slot) and the `/api/visuals/*` Flask blueprint: generation, `/upload`, `/files/<path>`, and `GET /providers` + `POST /provider` for the tab's runtime provider switch (constructing the target provider inside the route surfaces a missing-dependency error immediately, before `config.PROVIDER` is actually updated). |
 | `hardware.py` | history, agents | Detects available memory (Apple unified memory or NVIDIA VRAM) so each config can size its chat model to the machine it's running on. |
 | `jsonutil.py` | all | Shared `json_response()` helper all three blueprints use. |
 | `templates/`, `static/` | all | Jinja2 page shell + per-tab partials; shared/per-tab CSS and JS (see Layout above). |
 
 ## Extending
 
-- Add a `visuals/providers/local.py` implementing `Provider`'s two methods
-  against a local model server (ComfyUI, A1111, whatever), then flip
-  `visuals/data/config.yaml`'s `provider` to `local` -- `jobs.py`/
-  `routes.py`/the frontend don't need to change at all.
+- Add a third `visuals/providers/*.py` implementing `Provider`'s two
+  methods (against another local model server, a different hosted API,
+  whatever), add it to `providers/__init__.py`'s `get_provider()` and
+  `AVAILABLE_PROVIDERS`, and it shows up in the tab's provider selector
+  automatically -- `jobs.py`/`routes.py` don't need to change at all.
+- `LocalProvider` only supports Z-Image Turbo text-to-image today. See
+  `visuals/NOTES.md` before adding FLUX.2 or Qwen-Image support -- both
+  were researched and are currently blocked or not real as specced; that
+  file has the exact repo ids/pipeline classes/versions to re-verify
+  against if you revisit them later.
 - `agents/simulation.py`'s `roster_from_history()` hub-clustering
   (`_HUB_COUNT`, `_pick_hubs`) is the seam to change if you want a
   different way of staging generated characters for a live run -- e.g.
