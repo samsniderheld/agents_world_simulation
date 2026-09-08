@@ -8,12 +8,23 @@
   <div class="layout">
     <aside>
       <div class="section">
+        <h2>Provider</h2>
+        <div class="field">
+          <select id="providerSelect">
+            <option value="fal">fal.ai (hosted)</option>
+            <option value="local">Local (Z-Image Turbo, Apple Silicon)</option>
+          </select>
+        </div>
+        <div class="thumb-preview" id="providerHint" style="display:none"></div>
+      </div>
+
+      <div class="section" id="generateImageSection">
         <h2>Generate Image</h2>
         <div class="field">
           <label>Prompt</label>
           <textarea id="imagePromptInput" rows="3" placeholder="A neon-lit noir street at midnight…"></textarea>
         </div>
-        <div class="field">
+        <div class="field" id="startingImageField">
           <label>Starting image (optional -- edits it instead of generating from scratch)</label>
           <input type="file" id="imageFileInput" accept="image/*" />
           <div class="thumb-preview" id="imageFilePreview" style="display:none"></div>
@@ -45,7 +56,7 @@
         <button class="primary" id="generateImageBtn" style="width:100%">▶ Generate Image</button>
       </div>
 
-      <div class="section">
+      <div class="section" id="generateVideoSection">
         <h2>Generate Video</h2>
         <div class="field">
           <label>Source image</label>
@@ -79,6 +90,48 @@
           </select>
         </div>
         <button class="primary" id="generateVideoBtn" style="width:100%" disabled>▶ Generate Video</button>
+      </div>
+
+      <div class="section" id="videoReferenceSection">
+        <h2>Video to Video</h2>
+        <div class="thumb-preview">Generates a new video from these references (not an in-place edit); a reference video is capped at 3s by fal.</div>
+        <div class="field">
+          <label>Video to reference</label>
+          <input type="file" id="videoRefFileInput" accept="video/*" />
+          <div class="thumb-preview" id="videoRefFilePreview" style="display:none"></div>
+        </div>
+        <div class="field">
+          <label>Reference image (optional)</label>
+          <input type="file" id="videoRefImageInput" accept="image/*" />
+          <div class="thumb-preview" id="videoRefImagePreview" style="display:none"></div>
+        </div>
+        <div class="field">
+          <label>Prompt</label>
+          <textarea id="videoRefPromptInput" rows="3" placeholder="Blend the subject from the reference image into the scene…"></textarea>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label>Aspect ratio</label>
+            <select id="videoRefAspectInput">
+              <option value="16:9" selected>16:9</option>
+              <option value="9:16">9:16</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Duration (s)</label>
+            <input type="number" id="videoRefDurationInput" value="8" min="3" max="10" />
+          </div>
+        </div>
+        <div class="field">
+          <label>Resolution</label>
+          <select id="videoRefResolutionInput">
+            <option value="360p">360p</option>
+            <option value="720p" selected>720p</option>
+            <option value="1080p">1080p</option>
+            <option value="4k">4k</option>
+          </select>
+        </div>
+        <button class="primary" id="generateVideoRefBtn" style="width:100%" disabled>▶ Generate Video</button>
       </div>
     </aside>
 

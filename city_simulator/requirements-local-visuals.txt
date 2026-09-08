@@ -1,0 +1,15 @@
+# Only needed if visuals/data/config.yaml's `provider` is set to "local"
+# (local text-to-image generation via Hugging Face Diffusers on PyTorch's
+# MPS backend -- Apple Silicon only). The default `provider: fal` needs
+# none of this; most installs can skip this file entirely.
+#
+#   pip install -r requirements-local-visuals.txt
+#
+# See visuals/NOTES.md for the research behind these choices (verified
+# pipeline classes, versions, MPS/quantization compatibility).
+torch
+torchvision
+diffusers>=0.36.0
+transformers
+accelerate
+sdnq

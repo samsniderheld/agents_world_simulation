@@ -38,8 +38,8 @@ def _require_api_key() -> str:
     return config.FAL_API_KEY
 
 
-def _to_data_uri(path: str) -> str:
-    mime = mimetypes.guess_type(path)[0] or "image/png"
+def _to_data_uri(path: str, default_mime: str = "application/octet-stream") -> str:
+    mime = mimetypes.guess_type(path)[0] or default_mime
     data = base64.b64encode(open(path, "rb").read()).decode("ascii")
     return f"data:{mime};base64,{data}"
 
@@ -88,7 +88,7 @@ class FalProvider(Provider):
         model_id = config.FAL_IMAGE_EDIT_MODEL if image_paths else config.FAL_TEXT_TO_IMAGE_MODEL
         payload = {"prompt": prompt, **config.IMAGE_DEFAULTS, **options}
         if image_paths:
-            payload["image_urls"] = [_to_data_uri(p) for p in image_paths]
+            payload["image_urls"] = [_to_data_uri(p, default_mime="image/png") for p in image_paths]
 
         result = self._submit_and_wait(model_id, payload)
 
@@ -104,14 +104,28 @@ class FalProvider(Provider):
 
     def generate_video(self, prompt: str, image_path: str, **options) -> dict:
         payload = {
-            "prompt": prompt, "image_url": _to_data_uri(image_path),
+            "prompt": prompt, "image_url": _to_data_uri(image_path, default_mime="image/png"),
             **config.VIDEO_DEFAULTS, **options,
         }
         result = self._submit_and_wait(config.FAL_IMAGE_TO_VIDEO_MODEL, payload)
+        return {"video": self._save_video(result["video"])}
 
-        video = result["video"]
+    def generate_video_from_reference(self, prompt: str, video_path: str = None,
+                                       image_paths: list = None, **options) -> dict:
+        payload = {"prompt": prompt, **config.VIDEO_REFERENCE_DEFAULTS, **options}
+        if image_paths:
+            payload["image_urls"] = [_to_data_uri(p, default_mime="image/png") for p in image_paths]
+        if video_path:
+            # fal caps each reference video at 3 seconds -- see
+            # config.yaml's comment on reference_to_video_model.
+            payload["reference_video_urls"] = [_to_data_uri(video_path, default_mime="video/mp4")]
+
+        result = self._submit_and_wait(config.FAL_REFERENCE_TO_VIDEO_MODEL, payload)
+        return {"video": self._save_video(result["video"])}
+
+    def _save_video(self, video: dict) -> dict:
         local_path = storage.save_url(video["url"])
-        return {"video": {
+        return {
             "local_path": str(local_path), "url": storage.relative_path(local_path),
             "content_type": video.get("content_type"), "file_size": video.get("file_size"),
-        }}
+        }

@@ -8,7 +8,10 @@ const vState = {
   gallery: [],             // {kind: "image"|"video", url, prompt} newest-first
   editImagePath: null,     // server-side path of the uploaded "starting image" for Generate Image
   videoSourcePath: null,   // server-side path of the source image for Generate Video
+  videoRefPath: null,      // server-side path of the uploaded video for Video to Video
+  videoRefImagePath: null, // server-side path of the optional reference image for Video to Video
   lastPhase: null,
+  currentProvider: null,   // "fal" | "local"
 };
 
 const visualsStatusPill = document.getElementById('visualsStatusPill');
@@ -16,10 +19,67 @@ const visualsStatusText = document.getElementById('visualsStatusText');
 const visualsErrorMsg = document.getElementById('visualsErrorMsg');
 const generateImageBtn = document.getElementById('generateImageBtn');
 const generateVideoBtn = document.getElementById('generateVideoBtn');
+const generateVideoRefBtn = document.getElementById('generateVideoRefBtn');
+const providerSelect = document.getElementById('providerSelect');
+const providerHint = document.getElementById('providerHint');
 
 function fileUrl(relativeUrl){
   return '/api/visuals/files/' + relativeUrl;
 }
+
+// --- provider switching -------------------------------------------------
+
+function applyProviderRestrictions(name){
+  vState.currentProvider = name;
+  const isLocal = name === 'local';
+
+  document.getElementById('imageFileInput').disabled = isLocal;
+  document.getElementById('startingImageField').classList.toggle('disabled-field', isLocal);
+
+  const videoSection = document.getElementById('generateVideoSection');
+  videoSection.querySelectorAll('input, textarea, select').forEach(el => { el.disabled = isLocal; });
+  videoSection.classList.toggle('disabled-field', isLocal);
+
+  const videoRefSection = document.getElementById('videoReferenceSection');
+  videoRefSection.querySelectorAll('input, textarea, select').forEach(el => { el.disabled = isLocal; });
+  videoRefSection.classList.toggle('disabled-field', isLocal);
+
+  if (isLocal) {
+    providerHint.style.display = '';
+    providerHint.textContent = 'Local mode: text-to-image only (Z-Image Turbo, Apple Silicon). '
+      + 'No starting image, video, or video-to-video generation. First use downloads the model (several GB) and may take a while.';
+  } else {
+    providerHint.style.display = 'none';
+  }
+
+  // Button-disabled states also depend on job phase/selected source image --
+  // recompute those against the new provider immediately rather than
+  // waiting for the next poll tick.
+  pollVisualsStatus();
+}
+
+function loadProviders(){
+  fetch('/api/visuals/providers').then(r => r.json()).then(d => {
+    providerSelect.value = d.current;
+    applyProviderRestrictions(d.current);
+  });
+}
+
+providerSelect.addEventListener('change', () => {
+  const chosen = providerSelect.value;
+  const previous = vState.currentProvider;
+  fetch('/api/visuals/provider', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ provider: chosen }),
+  }).then(r => r.json()).then(d => {
+    if (!d.ok) {
+      providerSelect.value = previous;
+      providerHint.style.display = '';
+      providerHint.textContent = d.error || 'could not switch provider';
+      return;
+    }
+    applyProviderRestrictions(chosen);
+  });
+});
 
 function uploadImage(file){
   const formData = new FormData();
@@ -59,6 +119,41 @@ document.getElementById('videoFileInput').addEventListener('change', (e) => {
   const localPreview = URL.createObjectURL(file);
   uploadImage(file).then(d => {
     if (d.ok) setVideoSource(d.path, `<img src="${localPreview}" alt="video source preview" />`);
+    else visualsErrorMsg.textContent = d.error || 'upload failed';
+  });
+});
+
+// --- Video to Video (reference video + optional reference image) -------
+
+document.getElementById('videoRefFileInput').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  const preview = document.getElementById('videoRefFilePreview');
+  if (!file) {
+    vState.videoRefPath = null;
+    preview.style.display = 'none';
+    generateVideoRefBtn.disabled = true;
+    return;
+  }
+  preview.style.display = '';
+  preview.innerHTML = `<video src="${URL.createObjectURL(file)}" controls></video>`;
+  uploadImage(file).then(d => {
+    if (d.ok) { vState.videoRefPath = d.path; pollVisualsStatus(); }
+    else visualsErrorMsg.textContent = d.error || 'upload failed';
+  });
+});
+
+document.getElementById('videoRefImageInput').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  const preview = document.getElementById('videoRefImagePreview');
+  if (!file) {
+    vState.videoRefImagePath = null;
+    preview.style.display = 'none';
+    return;
+  }
+  preview.style.display = '';
+  preview.innerHTML = `<img src="${URL.createObjectURL(file)}" alt="reference image preview" />`;
+  uploadImage(file).then(d => {
+    if (d.ok) vState.videoRefImagePath = d.path;
     else visualsErrorMsg.textContent = d.error || 'upload failed';
   });
 });
@@ -104,7 +199,8 @@ function pollVisualsStatus(){
     visualsStatusText.textContent = phase;
     visualsErrorMsg.textContent = d.error || '';
     generateImageBtn.disabled = phase === 'running';
-    generateVideoBtn.disabled = (phase === 'running') || !vState.videoSourcePath;
+    generateVideoBtn.disabled = (phase === 'running') || !vState.videoSourcePath || vState.currentProvider === 'local';
+    generateVideoRefBtn.disabled = (phase === 'running') || !vState.videoRefPath || vState.currentProvider === 'local';
 
     if (phase === 'done' && vState.lastPhase !== 'done') {
       fetch('/api/visuals/result').then(r => r.json()).then(result => {
@@ -114,6 +210,8 @@ function pollVisualsStatus(){
           });
         } else if (result.kind === 'video') {
           vState.gallery.unshift({ kind: 'video', url: result.video.url, localPath: result.video.local_path, prompt: vState.lastVideoPrompt || '' });
+        } else if (result.kind === 'video_reference') {
+          vState.gallery.unshift({ kind: 'video', url: result.video.url, localPath: result.video.local_path, prompt: vState.lastVideoRefPrompt || '' });
         }
         renderGallery();
       });
@@ -122,6 +220,7 @@ function pollVisualsStatus(){
   }).catch(() => {});
 }
 
+loadProviders();
 setInterval(pollVisualsStatus, 1200);
 pollVisualsStatus();
 
@@ -163,6 +262,29 @@ generateVideoBtn.addEventListener('click', () => {
   }).then(r => r.json()).then(d => {
     if (!d.ok) { visualsErrorMsg.textContent = d.error || 'could not start generation'; return; }
     vState.lastVideoPrompt = prompt;
+    pollVisualsStatus();
+  });
+});
+
+generateVideoRefBtn.addEventListener('click', () => {
+  const prompt = document.getElementById('videoRefPromptInput').value.trim();
+  if (!prompt) { visualsErrorMsg.textContent = 'enter a prompt first'; return; }
+  if (!vState.videoRefPath) { visualsErrorMsg.textContent = 'upload a video first'; return; }
+  const payload = {
+    prompt,
+    video_path: vState.videoRefPath,
+    image_paths: vState.videoRefImagePath ? [vState.videoRefImagePath] : null,
+    options: {
+      aspect_ratio: document.getElementById('videoRefAspectInput').value,
+      resolution: document.getElementById('videoRefResolutionInput').value,
+      duration: parseInt(document.getElementById('videoRefDurationInput').value, 10) || 8,
+    },
+  };
+  fetch('/api/visuals/generate-video-from-reference', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+  }).then(r => r.json()).then(d => {
+    if (!d.ok) { visualsErrorMsg.textContent = d.error || 'could not start generation'; return; }
+    vState.lastVideoRefPrompt = prompt;
     pollVisualsStatus();
   });
 });

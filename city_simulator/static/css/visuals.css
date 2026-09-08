@@ -2,6 +2,19 @@
    (visuals/providers/*). Builds on base.css's tokens/layout/aside/field
    styling; adds textarea/file-input looks that no other tab needed yet. */
 
+#providerSelect{
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 12.5px;
+  padding: 6px 8px;
+  border-radius: 3px;
+}
+
+.disabled-field{ opacity: 0.4; }
+
 .field textarea{
   width: 100%;
   background: var(--bg);

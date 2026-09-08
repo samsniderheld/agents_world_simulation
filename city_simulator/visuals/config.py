@@ -28,11 +28,19 @@ FAL_API_KEY = os.environ.get("FAL_KEY")
 FAL_TEXT_TO_IMAGE_MODEL = _RAW["fal"]["text_to_image_model"]
 FAL_IMAGE_EDIT_MODEL = _RAW["fal"]["image_edit_model"]
 FAL_IMAGE_TO_VIDEO_MODEL = _RAW["fal"]["image_to_video_model"]
+FAL_REFERENCE_TO_VIDEO_MODEL = _RAW["fal"]["reference_to_video_model"]
 FAL_POLL_INTERVAL_SECONDS = _RAW["fal"]["poll_interval_seconds"]
 FAL_TIMEOUT_SECONDS = _RAW["fal"]["timeout_seconds"]
 
 IMAGE_DEFAULTS = _RAW["image_defaults"]
 VIDEO_DEFAULTS = _RAW["video_defaults"]
+VIDEO_REFERENCE_DEFAULTS = _RAW["video_reference_defaults"]
+
+LOCAL_MODEL_ID = _RAW["local"]["model_id"]
+LOCAL_NUM_INFERENCE_STEPS = _RAW["local"]["num_inference_steps"]
+LOCAL_GUIDANCE_SCALE = _RAW["local"]["guidance_scale"]
+LOCAL_QUANTIZE = _RAW["local"]["quantize"]
+LOCAL_QUANTIZE_DTYPE = _RAW["local"]["quantize_dtype"]
 
 UPLOADS_DIR = _PACKAGE_DIR / "data" / "uploads"
 OUTPUTS_DIR = _PACKAGE_DIR / "data" / "outputs"

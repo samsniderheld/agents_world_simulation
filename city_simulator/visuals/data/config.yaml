@@ -9,6 +9,14 @@ fal:
   text_to_image_model: "fal-ai/gemini-3-pro-image-preview"
   image_edit_model: "fal-ai/gemini-3-pro-image-preview/edit"
   image_to_video_model: "google/gemini-omni-flash/v1.1/image-to-video"
+  # Confirmed via fal's own OpenAPI schema that google/gemini-omni-flash/edit
+  # (and its v1.1) take ONLY prompt + video_url -- no reference-image field
+  # exists on that endpoint despite the name. reference-to-video is the
+  # actual model that combines a reference video + reference image(s) +
+  # prompt; it generates a new video from those references rather than
+  # editing the upload in place, and any reference_video_urls entry is
+  # capped by fal at 3 seconds.
+  reference_to_video_model: "google/gemini-omni-flash/v1.1/reference-to-video"
   poll_interval_seconds: 2
   timeout_seconds: 600
 
@@ -21,3 +29,25 @@ video_defaults:
   aspect_ratio: "16:9"
   resolution: "720p"
   duration: 8
+
+video_reference_defaults:
+  aspect_ratio: "16:9"
+  resolution: "720p"
+  duration: 8
+
+# Local text-to-image generation (Hugging Face Diffusers on PyTorch MPS).
+# See visuals/NOTES.md for why only Z-Image Turbo is wired up (FLUX.2
+# [klein] and Qwen-Image were researched and are not implemented -- one's
+# blocked on tooling, the other's requested variant doesn't exist; see
+# that file before changing model_id here).
+local:
+  model_id: "Tongyi-MAI/Z-Image-Turbo"
+  num_inference_steps: 9
+  guidance_scale: 0.0
+  # SDNQ post-load quantization of the transformer + text encoder --
+  # meaningful memory headroom for a small quality cost. See NOTES.md for
+  # why this needs the standalone sdnq_post_load_quant() call rather than
+  # diffusers' native quantization_config= (that needs diffusers>=0.40.0;
+  # we're on 0.36.0).
+  quantize: true
+  quantize_dtype: "int8"
