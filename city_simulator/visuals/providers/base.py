@@ -16,3 +16,10 @@ class Provider:
         """Animates a single starting image. Returns {"video": {"local_path",
         "url", "content_type", "file_size"}}."""
         raise NotImplementedError
+
+    def generate_video_from_reference(self, prompt: str, video_path: str = None,
+                                       image_paths: list = None, **options) -> dict:
+        """Generates a new video conditioned on an optional reference video
+        and/or reference image(s) -- not an in-place edit of `video_path`.
+        Returns {"video": {"local_path", "url", "content_type", "file_size"}}."""
+        raise NotImplementedError

@@ -137,3 +137,9 @@ class LocalProvider(Provider):
         raise NotImplementedError(
             "the local provider does not support video generation -- only fal.ai does right now"
         )
+
+    def generate_video_from_reference(self, prompt: str, video_path: str = None,
+                                       image_paths: list = None, **options) -> dict:
+        raise NotImplementedError(
+            "the local provider does not support video generation -- only fal.ai does right now"
+        )
