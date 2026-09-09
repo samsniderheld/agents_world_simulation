@@ -74,6 +74,158 @@
   line-height: 1.7;
   color: var(--text);
 }
+.city-map-wrap{ position: relative; }
+#cityCanvas{
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--border);
+  background: #0c1014;
+}
+.city-map-hint{
+  margin-top: 8px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+}
+
+/* Detail modals for neighborhoods/places, opened by clicking the map. */
+.city-modal-overlay{
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 60;
+}
+.city-modal{
+  width: min(560px, 92vw);
+  max-height: 82vh;
+  overflow-y: auto;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0 0 16px;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.6);
+}
+.city-modal .modal-header{
+  position: relative;
+  padding: 16px 44px 12px 18px;
+  border-bottom: 1px solid var(--border);
+  border-left: 4px solid var(--border);
+  margin-bottom: 4px;
+}
+.city-modal .modal-header h3{
+  margin: 0;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+.city-modal .modal-sub{
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-top: 4px;
+}
+.city-modal .modal-close{
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  border: none;
+  font-size: 18px;
+  padding: 2px 8px;
+  color: var(--text-dim);
+}
+.city-modal .modal-back{
+  margin-bottom: 8px;
+  padding: 2px 8px;
+  font-size: 10px;
+}
+.city-modal .modal-desc{
+  padding: 10px 18px 6px;
+  font-style: italic;
+  font-size: 13px;
+  color: var(--text-dim);
+  line-height: 1.6;
+}
+.city-modal .modal-stats{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  padding: 8px 18px 10px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-faint);
+  border-bottom: 1px dashed var(--border);
+}
+.city-modal .modal-section-label{
+  padding: 12px 18px 6px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.city-modal .modal-row{
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 7px 18px;
+  font-size: 13px;
+  color: var(--text);
+}
+.city-modal .modal-row.clickable{ cursor: pointer; }
+.city-modal .modal-row.clickable:hover{ background: rgba(255, 255, 255, 0.04); }
+.city-modal .modal-row .row-num{
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-faint);
+  flex: none;
+  min-width: 30px;
+}
+.city-modal .modal-row .row-main{ font-weight: 600; }
+.city-modal .modal-row .row-sub{
+  font-size: 11.5px;
+  color: var(--text-dim);
+  margin-left: auto;
+  text-align: right;
+}
+.city-modal .modal-event{
+  padding: 6px 18px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text);
+}
+.city-modal .modal-event .year{
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-faint);
+  margin-right: 8px;
+}
+.city-modal .modal-empty{
+  padding: 10px 18px;
+  font-style: italic;
+  font-size: 12.5px;
+  color: var(--text-faint);
+}
+.city-modal details.modal-figures{ padding: 10px 18px 0; }
+.city-modal details.modal-figures summary{
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.city-modal details.modal-figures .modal-row{ padding-left: 0; padding-right: 0; }
+.map-plate .neighborhood-key .entry{ cursor: pointer; }
+
 .map-plate .map-columns{
   display: flex;
   gap: 24px;
