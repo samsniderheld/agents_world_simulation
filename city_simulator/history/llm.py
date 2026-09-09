@@ -27,8 +27,11 @@ def available() -> bool:
     return _available
 
 
-def chat(messages, model=None, temperature=0.7, context_tokens=None) -> str:
-    """Send a chat-style prompt to Ollama and return the reply text."""
+def chat(messages, model=None, temperature=0.7, context_tokens=None, timeout=None) -> str:
+    """Send a chat-style prompt to Ollama and return the reply text.
+    `timeout` overrides config.REQUEST_TIMEOUT_SECONDS for calls that
+    genuinely need more room -- see summary.py's end-of-run call, which
+    also overrides context_tokens for the same reason."""
     resp = requests.post(
         f"{config.OLLAMA_HOST}/api/chat",
         json={
@@ -41,16 +44,16 @@ def chat(messages, model=None, temperature=0.7, context_tokens=None) -> str:
             },
             "think": config.ENABLE_THINKING,
         },
-        timeout=config.REQUEST_TIMEOUT_SECONDS,
+        timeout=timeout or config.REQUEST_TIMEOUT_SECONDS,
     )
     resp.raise_for_status()
     return resp.json()["message"]["content"].strip()
 
 
-def complete(prompt: str, model=None, temperature=0.7, context_tokens=None) -> str:
+def complete(prompt: str, model=None, temperature=0.7, context_tokens=None, timeout=None) -> str:
     """Convenience wrapper for a single user-turn prompt."""
-    return chat([{"role": "user", "content": prompt}], model=model,
-                temperature=temperature, context_tokens=context_tokens)
+    return chat([{"role": "user", "content": prompt}], model=model, temperature=temperature,
+                context_tokens=context_tokens, timeout=timeout)
 
 
 def list_models() -> list:

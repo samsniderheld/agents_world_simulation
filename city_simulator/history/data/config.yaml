@@ -31,7 +31,7 @@ chat_model_tiers:
 chat_context_tokens: 2048
 
 generation:
-  figures_per_era: 4      # how many central figures each era spawns
+  figures_per_era: 10      # how many central figures each era spawns
   events_per_figure: 10   # roughly how many life events drive each figure's arc
   random_seed: null       # set an int for a reproducible run
   # Hard ceiling: a figure born late in the final era, running a full
@@ -65,3 +65,22 @@ map:
   # small size.
   satellite_sea_level: -0.30
   neighborhood_columns: 2     # east-west slices per era row-band (see citymap.py)
+
+# Opt-in LLM-drawn map (citymap.py's _try_llm_map) -- the LLM draws the
+# whole map as freeform ASCII art instead of the procedural noise-generated
+# island. A malformed reply (missing a place's [N] label, wrong size) gets
+# retried this many extra times, pointing out the specific problem, before
+# silently falling back to the procedural map.
+llm_map:
+  context_tokens: 4096
+  timeout_seconds: 120
+  max_retries: 2
+
+# summary.py's one-time end-of-run call: the whole chronological event
+# record is a lot more text than the short per-fill prompts elsewhere in
+# this file, so it gets its own larger context window and a longer
+# timeout, the same way agents/config.py's TREATMENT_CONTEXT_TOKENS does
+# for the agent side's post-run treatment.
+summary:
+  context_tokens: 8192
+  timeout_seconds: 180

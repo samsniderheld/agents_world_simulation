@@ -59,3 +59,12 @@ FALLOFF_POWER = _RAW["map"]["falloff_power"]
 SEA_LEVEL = _RAW["map"]["sea_level"]
 SATELLITE_SEA_LEVEL = _RAW["map"]["satellite_sea_level"]
 NEIGHBORHOOD_COLUMNS = _RAW["map"]["neighborhood_columns"]
+
+# --- LLM-drawn map, opt-in (citymap.py's _try_llm_map) ---------------------
+LLM_MAP_CONTEXT_TOKENS = _RAW["llm_map"]["context_tokens"]
+LLM_MAP_TIMEOUT_SECONDS = _RAW["llm_map"]["timeout_seconds"]
+LLM_MAP_MAX_RETRIES = _RAW["llm_map"]["max_retries"]
+
+# --- End-of-run history summary (summary.py) -------------------------------
+SUMMARY_CONTEXT_TOKENS = _RAW["summary"]["context_tokens"]
+SUMMARY_REQUEST_TIMEOUT_SECONDS = _RAW["summary"]["timeout_seconds"]

@@ -3,17 +3,27 @@
 # these groups.
 name_groups:
   dutch:
-    given: [Jan, Pieter, Willem, Cornelis, Hendrick, Anneke, Griet, Marritje, Trijntje, Aeltje]
-    surname: ["Van der Berg", "De Groot", Bogaert, "Van Dyck", Kuyper, Stuyvesant, Verplanck, Rutgers]
+    given: [Jan, Pieter, Willem, Cornelis, Hendrick, Anneke, Griet, Marritje, Trijntje, Aeltje,
+            Dirk, Jacob, Barent, Gerrit, Claes, Femmetje, Geertruyd, Lysbeth, Neeltje, Styntje]
+    surname: ["Van der Berg", "De Groot", Bogaert, "Van Dyck", Kuyper, Stuyvesant, Verplanck, Rutgers,
+              "Van Wyck", "De Witt", "Van Cortlandt", "Ten Eyck", "Van Der Donck", Schuyler, Brouwer,
+              "Van Zandt", "De Peyster", Bleecker]
   english:
-    given: [William, John, Thomas, Samuel, Elizabeth, Margaret, Abigail, Josiah, Nathaniel, Prudence]
-    surname: [Beekman, Livingston, Morris, Hamilton, Bayard, Fish, Roosevelt, Whitfield]
+    given: [William, John, Thomas, Samuel, Elizabeth, Margaret, Abigail, Josiah, Nathaniel, Prudence,
+            Benjamin, Richard, Edward, Charles, Hannah, Sarah, Mercy, Increase, Jonathan, Deborah]
+    surname: [Beekman, Livingston, Morris, Hamilton, Bayard, Fish, Roosevelt, Whitfield,
+              "Van Rensselaer", Clinton, Duane, Jay, Schermerhorn, Rhinelander, Cruger, Waddington,
+              Ludlow, Pell]
   "19c":
-    given: [Patrick, Seamus, Bridget, Katharina, Heinrich, Mary, Michael, Anna, Cornelius, Delia]
-    surname: ["O'Malley", Schmidt, Muller, Fitzgerald, Costello, Weber, Doyle, Kessler]
+    given: [Patrick, Seamus, Bridget, Katharina, Heinrich, Mary, Michael, Anna, Cornelius, Delia,
+            Liam, Fiona, Wilhelm, Greta, Sean, Kathleen, Otto, Margarethe, Declan, Aoife]
+    surname: ["O'Malley", Schmidt, Muller, Fitzgerald, Costello, Weber, Doyle, Kessler,
+              Kelly, Braun, Sullivan, Hoffmann, Byrne, Krueger, Flanagan, Zimmerman, Casey, Wagner]
   "20c":
-    given: [Rose, Sal, Frank, Dorothy, Irving, Ruth, Vincent, Gloria, Moe, Sadie]
-    surname: [Russo, Cohen, Bianchi, Kowalski, Moretti, Feldman, Lombardi, Sullivan]
+    given: [Rose, Sal, Frank, Dorothy, Irving, Ruth, Vincent, Gloria, Moe, Sadie,
+            Tony, Esther, Nick, Pearl, Sam, Angela, Murray, Lucille, Benny, Fannie]
+    surname: [Russo, Cohen, Bianchi, Kowalski, Moretti, Feldman, Lombardi, Sullivan,
+              Greco, Silverman, Marino, Novak, Rizzo, Katz, Romano, Walsh, Esposito, Goldstein]
 
 # era id -> which name_groups entry it draws from. An era with no entry
 # here falls back to "english" (see names.py's _names_for_era).
@@ -28,12 +38,21 @@ era_name_groups:
   depression_war: "20c"
 
 place_name_words:
-  adjectives: [Gilded, Broken, Crooked, Copper, Weeping, Rusty, Silver, Drowsy, Iron, "Salt-worn"]
-  animals: [Sparrow, Anchor, Fox, Gull, Stag, Eel, Raven, Hare]
-  saints_virtues: ["St. Nicholas", "St. Andrew", "the Redeemer", Grace, "the Good Shepherd", "St. Brigid"]
-  press_words: [Herald, Ledger, Courier, Gazette, Tribune, Sentinel]
-  streets: ["Mulberry Street", "Cherry Street", "Orchard Street", "Bowery Lane", "Water Street", "Delancey Street"]
-  products: [Ironworks, Textile, Foundry, Glassworks, Tannery, Print]
+  adjectives: [Gilded, Broken, Crooked, Copper, Weeping, Rusty, Silver, Drowsy, Iron, "Salt-worn",
+               Faded, Hollow, Battered, Restless, Tarnished, Weathered, Forgotten, Lucky, Stubborn,
+               Threadbare]
+  animals: [Sparrow, Anchor, Fox, Gull, Stag, Eel, Raven, Hare,
+            Crow, Wolf, Heron, Pike, Owl, Terrier, Falcon, Otter, Wren, Boar]
+  saints_virtues: ["St. Nicholas", "St. Andrew", "the Redeemer", Grace, "the Good Shepherd", "St. Brigid",
+                   "St. Patrick", "St. Anthony", "the Sacred Heart", Mercy, "St. Joseph", "the Holy Cross",
+                   Charity, "St. Agnes", "the Ascension", "St. Francis"]
+  press_words: [Herald, Ledger, Courier, Gazette, Tribune, Sentinel,
+                Chronicle, Dispatch, Bulletin, Register, Observer, Standard, Examiner, Post, Record, Beacon]
+  streets: ["Mulberry Street", "Cherry Street", "Orchard Street", "Bowery Lane", "Water Street", "Delancey Street",
+            "Hester Street", "Ludlow Street", "Rivington Street", "Canal Street", "Pearl Street",
+            "Fulton Street", "Grand Street", "Essex Street", "Stanton Street", "Broome Street"]
+  products: [Ironworks, Textile, Foundry, Glassworks, Tannery, Print,
+             Brewing, Milling, Rope, Brass, Lumber, Leather, Chemical, Machine, Boiler, Wire]
 
 # place_type -> which naming pattern _grammar_place_name uses for it.
 naming_style:

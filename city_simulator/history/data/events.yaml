@@ -5,6 +5,16 @@ generic_causes:
   - "reasons the old records leave unclear"
   - "a dispute no one now remembers clearly"
   - "what was once called simply \"{domain} business\""
+  - "an old grudge nobody could quite explain"
+  - "a matter tied up with {domain} somehow"
+  - "money that changed hands more than once"
+  - "a promise made and later regretted"
+  - "a falling-out no one wanted to discuss"
+  - "whatever was left unsaid about {domain}"
+  - "a debt several people claimed to have forgotten"
+  - "words exchanged that couldn't be taken back"
+  - "a secret that was never quite kept"
+  - "a bet that went badly for someone"
 
 # Mixed articles are deliberate: every template phrases these as
 # "lost to {disaster}" / "consumed by {disaster}", which both read fine
@@ -14,6 +24,16 @@ disasters:
   - a storm
   - a riot
   - a flood
+  - an explosion
+  - a collapse
+  - a blackout
+  - vandals
+  - a gas leak
+  - looters
+  - a blizzard
+  - a boiler burst
+  - an epidemic
+  - the wrecking crews
 
 scandal_tags:
   - bribery
@@ -22,6 +42,16 @@ scandal_tags:
   - embezzlement
   - blasphemy
   - forgery
+  - perjury
+  - arson
+  - counterfeiting
+  - extortion
+  - nepotism
+  - profiteering
+  - desertion
+  - bigamy
+  - sedition
+  - graft
 
 political_outcomes:
   - a night in the Tombs
@@ -29,6 +59,16 @@ political_outcomes:
   - a public apology
   - quiet exile from the ward
   - a pardon bought with favors
+  - a suspended sentence
+  - a transfer to another precinct
+  - a closed-door settlement
+  - a demotion no one dared mention
+  - a favor owed to the judge
+  - a story that never made the papers
+  - a resignation dressed up as retirement
+  - a stern word from the alderman
+  - a wager settled quietly
+  - a debt paid in political capital
 
 # A subset of dramatic event kinds get a shot at an LLM prose flourish
 # (config.LLM_FLOURISH_RATE); everything else stays pure grammar output.
@@ -56,11 +96,31 @@ event_templates:
       TEXT:
         - "In {year}, {figure} of {domain} founded {place}, a {place_noun}, {founding_flourish}."
         - "{figure} opened the doors of {place} in {year}, a {place_noun} that would carry the mark of {domain} for years to come."
+        - "{figure} laid the first stone of {place} in {year}, {founding_flourish}."
+        - "{place} first opened for business in {year}, {figure}'s answer to {domain}."
+        - "By {year}, {figure} had turned a notion into {place}, a new {place_noun} {founding_flourish}."
+        - "{figure} christened {place} in {year}, a {place_noun} built {founding_flourish}."
+        - "In {year}, what would become {place} started as little more than {figure}'s idea, {founding_flourish}."
+        - "{figure} threw open the doors of {place}, a {place_noun}, {founding_flourish}, in {year}."
+        - "{place} owes its start to {figure}, who founded it in {year} {founding_flourish}."
+        - "{figure} staked everything on {place} in {year}, a {place_noun} devoted to {domain}."
+        - "The {place_noun} known as {place} began, in {year}, as {figure}'s gamble on {domain}."
+        - "{figure} broke ground on {place} in {year}, {founding_flourish}."
       founding_flourish:
         - "on a corner that was then little more than mud and ambition"
         - "with borrowed money and a great deal of nerve"
         - "in the shadow of the harbor"
         - "on ground still remembered as farmland"
+        - "against the advice of everyone who knew better"
+        - "with nothing but a lease and good timing"
+        - "after years of saving every spare cent"
+        - "on the strength of a single good idea"
+        - "in a building nobody else wanted"
+        - "with a partner who didn't last the year"
+        - "using money that wasn't entirely their own"
+        - "on a street that hadn't yet found its name"
+        - "with more hope than capital"
+        - "in the space where a failed venture had stood before"
 
   - id: expansion
     requires_place: new
@@ -70,6 +130,16 @@ event_templates:
       TEXT:
         - "Flush with earlier success, {figure} opened a second {place_noun}, {place}, in {year}."
         - "By {year}, {figure}'s ambitions had outgrown one address; {place}, a new {place_noun}, followed."
+        - "{figure} couldn't resist opening a second location, {place}, in {year}."
+        - "In {year}, {figure} bet on a second {place_noun}: {place}."
+        - "One {place_noun} wasn't enough for {figure}, who opened {place} in {year}."
+        - "{figure} expanded into {place}, a new {place_noun}, by {year}."
+        - "Success bred more success in {year}, when {figure} opened {place}."
+        - "{figure} doubled down in {year}, adding {place} to what they already had."
+        - "By {year}, {figure} had a second {place_noun} to their name: {place}."
+        - "{place} was {figure}'s attempt to repeat what had already worked, opened in {year}."
+        - "{figure} took the profits from one venture and sank them into {place} in {year}."
+        - "In {year}, {figure} answered demand the only way they knew how -- with {place}, a second {place_noun}."
 
   - id: place_destroyed
     requires_place: existing
@@ -79,6 +149,16 @@ event_templates:
       TEXT:
         - "In {year}, {place} was lost to {disaster}; some blamed {cause}."
         - "{place} was consumed by {disaster} in {year}, leaving little of what {figure} had built there."
+        - "{place} did not survive {year}'s {disaster}."
+        - "{figure} watched {place} go down to {disaster} in {year}, and blamed {cause}."
+        - "By {year}, {disaster} had taken {place}, the {place_noun} {figure} had built."
+        - "{place} was gone by {year}, undone by {disaster}."
+        - "In {year}, {disaster} left nothing standing of {place}."
+        - "The {place_noun} called {place} met its end in {year}'s {disaster}."
+        - "{figure}'s {place_noun}, {place}, fell to {disaster} in {year} -- some pointed to {cause}."
+        - "{place} was reduced to nothing by {disaster} in {year}."
+        - "After {disaster} struck in {year}, {place} never reopened."
+        - "{year} was the year {disaster} finally caught up with {place}."
 
   - id: rebuilt_place
     requires_place: existing
@@ -88,6 +168,16 @@ event_templates:
       TEXT:
         - "{figure} rebuilt {place} in {year}, raising it again as a {place_noun}."
         - "Where ashes had stood, {figure} raised {place} anew in {year}."
+        - "{place} rose again in {year}, thanks to {figure}."
+        - "{figure} refused to let {place} stay closed, and rebuilt it by {year}."
+        - "By {year}, {figure} had restored {place} to something like its old self."
+        - "{place} reopened in {year}, rebuilt from the ground up by {figure}."
+        - "{figure} put everything into rebuilding {place}, finishing in {year}."
+        - "In {year}, {place} returned, the {place_noun} {figure} wouldn't abandon."
+        - "{figure} would not let {place} die, and reopened its doors in {year}."
+        - "The {place_noun} known as {place} came back in {year}, rebuilt board by board."
+        - "{place} was reborn in {year} under {figure}'s hand."
+        - "{figure} rebuilt {place} from nothing in {year}, out of stubbornness as much as anything."
 
   - id: ownership_change
     requires_place: existing
@@ -97,6 +187,16 @@ event_templates:
       TEXT:
         - "{place}, the old {place_noun}, changed hands in {year} when {figure} took it over."
         - "In {year}, {figure} bought out the previous proprietor of {place}, citing {cause}."
+        - "{figure} took over {place} in {year}, over {cause}."
+        - "By {year}, {place} belonged to {figure}."
+        - "{place} passed to {figure} in {year}, the latest in a line of owners."
+        - "{figure} won control of {place} in {year}, a story involving {cause}."
+        - "The {place_noun} called {place} had a new owner by {year}: {figure}."
+        - "{figure} signed the papers on {place} in {year}, citing {cause}."
+        - "In {year}, {place} quietly changed hands, ending up with {figure}."
+        - "{figure} acquired {place} in {year}, though the details involved {cause}."
+        - "{place} became {figure}'s in {year}, for reasons tied to {cause}."
+        - "By {year}, {figure} had maneuvered their way into owning {place}."
 
   - id: renamed
     requires_place: existing
@@ -105,6 +205,16 @@ event_templates:
     grammar:
       TEXT:
         - "{figure} renamed the old {place_noun} -- once known as {old_name} -- to {place} in {year}."
+        - "In {year}, {figure} gave the {place_noun} a new name: {place}, replacing {old_name}."
+        - "{old_name} became {place} in {year}, at {figure}'s insistence."
+        - "{figure} decided {old_name} no longer suited the place, and renamed it {place} in {year}."
+        - "By {year}, the sign over the door read {place}, not {old_name}, thanks to {figure}."
+        - "{figure} rechristened {old_name} as {place} in {year}."
+        - "The {place_noun} once called {old_name} became {place} under {figure} in {year}."
+        - "{year} saw {old_name} disappear, replaced by {figure}'s choice: {place}."
+        - "{figure} had little patience for {old_name}, and renamed it {place} in {year}."
+        - "In {year}, {place} was born from what had been {old_name}, at {figure}'s hand."
+        - "{figure} painted over {old_name} in {year}, and {place} took its place."
 
   - id: alliance_formed
     requires_place: null
@@ -113,6 +223,16 @@ event_templates:
       TEXT:
         - "By {year}, {figure} had made fast friends with {faction}, a bond that would shape years to come."
         - "{figure} threw in with {faction} in {year}, for {domain}'s sake if nothing else."
+        - "In {year}, {figure} and {faction} found common cause."
+        - "{figure} allied with {faction} in {year}, a partnership neither would forget."
+        - "By {year}, {figure} could count {faction} among their friends."
+        - "{figure} struck a bargain with {faction} in {year} that would outlast the decade."
+        - "{year} marked the start of an understanding between {figure} and {faction}."
+        - "{figure} and {faction} became unlikely allies in {year}."
+        - "In {year}, {figure} found a useful friend in {faction}."
+        - "{figure} owed {faction} a favor after {year}, and both knew it."
+        - "By {year}, {figure}'s fortunes were tied to {faction}'s goodwill."
+        - "{figure} cast their lot with {faction} in {year}."
 
   - id: rivalry_formed
     requires_place: null
@@ -121,6 +241,16 @@ event_templates:
       TEXT:
         - "In {year}, {figure} earned the lasting enmity of {faction}."
         - "{figure} and {faction} became bitter rivals in {year}, over {domain} as much as anything else."
+        - "By {year}, {figure} and {faction} were openly at odds."
+        - "{figure} made an enemy of {faction} in {year}."
+        - "{year} marked the start of a feud between {figure} and {faction}."
+        - "{figure} crossed {faction} in {year}, and paid for it for years after."
+        - "In {year}, {faction} decided {figure} was a problem worth solving."
+        - "{figure} never forgave {faction} for what happened in {year}."
+        - "By {year}, {figure} counted {faction} among their enemies."
+        - "{figure} and {faction} traded grudges starting in {year}."
+        - "{year} was when {figure} first crossed swords with {faction}."
+        - "{figure} drew the lasting suspicion of {faction} in {year}."
 
   - id: scandal
     requires_place: null
@@ -128,6 +258,16 @@ event_templates:
     grammar:
       TEXT:
         - "Rumors of {tag} dogged {figure} from {year} onward, whispered to be over {cause}."
+        - "In {year}, whispers of {tag} began following {figure} everywhere."
+        - "{figure}'s name became attached to {tag} in {year}, fairly or not."
+        - "By {year}, half the ward was talking about {figure} and {tag}."
+        - "{year} brought {figure} a reputation for {tag} that never quite faded."
+        - "Talk of {tag} trailed {figure} from {year} on, tied to {cause}."
+        - "{figure} could not shake the talk of {tag} that started in {year}."
+        - "In {year}, {figure} became a byword for {tag} in certain circles."
+        - "The rumors started in {year}: {figure}, and {tag}."
+        - "{figure}'s reputation never recovered after {year}'s talk of {tag}."
+        - "By {year}, {tag} had become the word most often used alongside {figure}'s name."
 
   - id: political_trouble
     requires_place: null
@@ -135,6 +275,16 @@ event_templates:
     grammar:
       TEXT:
         - "{figure} was hauled before the magistrates in {year} over {cause}, and it ended in {outcome}."
+        - "In {year}, {figure} found themselves answering questions about {cause}, which led to {outcome}."
+        - "{figure} ran afoul of the law in {year} over {cause}; {outcome} followed."
+        - "By {year}, {figure}'s troubles over {cause} had become public, ending in {outcome}."
+        - "{year} brought {figure} face to face with the authorities over {cause}, and {outcome}."
+        - "{figure} was called to account in {year} for {cause}, settled with {outcome}."
+        - "Questions were asked in {year} about {figure} and {cause}; the answer was {outcome}."
+        - "{figure} spent {year} explaining {cause} to people who didn't want excuses, and got {outcome}."
+        - "In {year}, {cause} caught up with {figure}, resulting in {outcome}."
+        - "{figure}'s dealings with {cause} came to a head in {year}: {outcome}."
+        - "By {year}, {figure} had traded {cause} for {outcome}, one way or another."
 
   - id: philanthropy
     requires_place: existing
@@ -143,6 +293,16 @@ event_templates:
     grammar:
       TEXT:
         - "{figure} funded repairs to {place} in {year}, out of devotion to {domain} -- or so it was said."
+        - "In {year}, {figure} quietly paid for repairs at {place}."
+        - "{figure} gave generously to {place} in {year}, and made sure people knew it."
+        - "By {year}, {figure} had become the {place_noun}'s most reliable benefactor."
+        - "{figure} funded a new wing at {place} in {year}."
+        - "{year} saw {figure} pour money into {place}, calling it a debt to {domain}."
+        - "{figure} covered the costs at {place} in {year} without being asked twice."
+        - "In {year}, {place} owed its survival to {figure}'s generosity."
+        - "{figure} endowed {place} in {year}, in the name of {domain}."
+        - "By {year}, {figure}'s name was etched somewhere in {place}, in gratitude."
+        - "{figure} quietly kept {place} solvent through {year}, and never spoke of it."
 
   - id: feud_violence
     requires_place: existing
@@ -152,8 +312,28 @@ event_templates:
       TEXT:
         - "Blood was spilled at {place} in {year} over {cause}."
         - "A brawl broke out at {place} in {year}, said to be about {cause}."
+        - "{place} saw violence in {year}, the cause traced back to {cause}."
+        - "In {year}, a dispute over {cause} turned bloody at {place}."
+        - "{figure} was caught up in violence at {place} in {year}, over {cause}."
+        - "{year} brought a beating at {place}, the reason given as {cause}."
+        - "Knives came out at {place} in {year}, over {cause}."
+        - "{place} earned a reputation for trouble after {year}'s violence, tied to {cause}."
+        - "A fight at {place} in {year} left more than bruises, all over {cause}."
+        - "In {year}, {cause} led to blows at {place}."
+        - "{figure} settled {cause} with fists at {place} in {year}."
+        - "{place} was the scene of an ugly dispute in {year}, over {cause}."
       TEXT_DEATH:
         - "{figure} was killed in a brawl at {place} in {year} over {cause} -- the {place_noun} was never quite the same."
+        - "{figure} did not walk away from the fight at {place} in {year} -- {cause} saw to that."
+        - "In {year}, {figure} was struck down at {place} over {cause}."
+        - "{place} was where {figure}'s life ended, in {year}, over {cause}."
+        - "{figure} paid with their life at {place} in {year}, all over {cause}."
+        - "The brawl at {place} in {year} left {figure} dead, the cause traced to {cause}."
+        - "{figure} bled out at {place} in {year}, a dispute over {cause} gone too far."
+        - "{year} was the year {place} claimed {figure}'s life, over {cause}."
+        - "{figure} never left {place} alive after {year}'s violence over {cause}."
+        - "What started as {cause} ended with {figure} dead at {place} in {year}."
+        - "{figure} was buried not long after the trouble at {place} in {year}, over {cause}."
 
   - id: visited_by_notable
     requires_place: existing
@@ -162,6 +342,16 @@ event_templates:
     grammar:
       TEXT:
         - "{figure} was known to frequent {place} around {year}, and the old {place_noun} was never quite the same after."
+        - "In {year}, {figure} became a regular at {place}, and everyone noticed."
+        - "{place} gained a certain notoriety once {figure} started showing up, around {year}."
+        - "By {year}, {figure}'s visits to {place} were the talk of the neighborhood."
+        - "{figure} was seen at {place} often enough by {year} that people took note."
+        - "{place} became fashionable in {year}, once {figure} was seen there."
+        - "{year} brought {figure} through the doors of {place} more than once."
+        - "{figure} made a habit of {place} around {year}, for reasons of their own."
+        - "The {place_noun} called {place} saw an unusual visitor in {figure}, starting around {year}."
+        - "In {year}, {figure}'s presence at {place} raised more than a few eyebrows."
+        - "{place} was never quite an ordinary {place_noun} again after {figure} started coming around in {year}."
 
   - id: prospered
     requires_place: existing
@@ -170,6 +360,16 @@ event_templates:
     grammar:
       TEXT:
         - "{place} prospered under {figure}'s hand, and by {year} its name was known across the city."
+        - "By {year}, {place} was thriving under {figure}'s watch."
+        - "{figure} turned {place} into a genuine success by {year}."
+        - "In {year}, {place} was doing better than anyone expected."
+        - "{place} became the envy of the neighborhood by {year}, thanks to {figure}."
+        - "By {year}, {figure}'s {place_noun} was the talk of the ward, for once in a good way."
+        - "{place} flourished through {year}, and {figure} took the credit gladly."
+        - "{figure} built {place} into something people traveled for, by {year}."
+        - "In {year}, {place} was as busy as it had ever been."
+        - "{place}'s fortunes turned upward by {year}, and stayed there for a while."
+        - "By {year}, {figure} had made {place} a name worth knowing."
 
   - id: decline
     requires_place: existing
@@ -178,6 +378,16 @@ event_templates:
     grammar:
       TEXT:
         - "By {year}, {place} had fallen on hard times, a decline some blamed on {cause}."
+        - "{place} was fading fast by {year}, and {cause} took the blame."
+        - "In {year}, {place} was a shadow of what it had been, over {cause}."
+        - "By {year}, fewer and fewer came to {place}, a decline tied to {cause}."
+        - "{place} struggled through {year}, weighed down by {cause}."
+        - "{year} was not kind to {place}, thanks to {cause}."
+        - "{figure}'s {place_noun} slid into decline by {year}, over {cause}."
+        - "By {year}, {place} was barely holding on, and {cause} was why."
+        - "{place} had seen better days by {year}, all because of {cause}."
+        - "In {year}, {place}'s best years were clearly behind it, thanks to {cause}."
+        - "{place} limped through {year}, undone slowly by {cause}."
 
 death_template:
   id: death
@@ -185,3 +395,13 @@ death_template:
     TEXT:
       - "{figure} died in {year}, remembered -- if at all -- for their ties to {domain}."
       - "By {year}, {figure} was gone, and whatever they had built was left to others to keep or lose."
+      - "{figure} passed in {year}, one more name folded into the city's history."
+      - "By {year}, {figure} was gone, though {domain} outlasted them."
+      - "{figure} died in {year}, having spent a life tangled up in {domain}."
+      - "In {year}, {figure}'s story ended, quietly or otherwise."
+      - "{figure} did not live to see {year} out."
+      - "By {year}, {figure} had gone the way of everyone eventually does."
+      - "{figure}'s death in {year} closed a chapter few had been paying attention to."
+      - "{figure} was buried in {year}, remembered mostly for {domain}."
+      - "The city carried on without {figure} after {year}."
+      - "{figure} left this world in {year}, as tied to {domain} at the end as at the start."

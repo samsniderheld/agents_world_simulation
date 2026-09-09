@@ -111,7 +111,7 @@ city_simulator/
                                  bio templates
     config.py, llm.py, log.py
     eras.py, entities.py, events.py, grammar.py, names.py
-    citymap.py, characters.py
+    citymap.py, characters.py, summary.py
     generate.py           run_history() + a standalone CLI
     jobs.py                 background-thread job state
     routes.py                 Blueprint: /api/history/*
@@ -179,9 +179,12 @@ templates/index.html (3 tabs)
   |                     |                                    |-- citymap.build_map()      ASCII map, braille
   |                     |                                    |                             dot-density, colored
   |                     |                                    |                             by era neighborhood
-  |                     |                                    `-- characters.generate_characters()  present-day
-  |                     |                                                                            residents grounded
-  |                     |                                                                            in real places/figures
+  |                     |                                    |-- characters.generate_characters()  present-day
+  |                     |                                    |                                      residents grounded
+  |                     |                                    |                                      in real places/figures
+  |                     |                                    `-- summary.generate_summary()   one LLM call over the
+  |                     |                                                                       whole event record,
+  |                     |                                                                       printed below the map
   |                     v
   |                   GET /api/history/status (poll) --> GET /api/history/data (once done)
   |
@@ -234,6 +237,7 @@ as an on-done callback -- the only place the history/agents packages touch;
 | `history/eras.py`, `entities.py`, `events.py`, `grammar.py`, `names.py` | history | The procedural-history engine itself -- modeled on Jason Grinblat's GDC talk on Caves of Qud's mythic-biography generator: entities as mutable-property bags, events resolved by reading current state (not simulated causality), text produced by a real replacement grammar (`grammar.py`). All *content* -- eras, domains/factions/roles/place types, era-flavored name word lists, and event templates (grammar text; `requires_place`/`effects`/`place_filter`/`precondition` reference Python functions by name) -- lives in the matching `.yaml` file in `data/`; the `.py` file loads it and holds only behavior. |
 | `history/citymap.py` | history | The ASCII map: Perlin-noise-generated island + satellite landmasses, rendered as braille dot-density, each era's row-band a separately colored/named neighborhood. |
 | `history/characters.py` | history | Present-day residents, each grounded in one real place's founder/domain/history. Fallback relationship hints and bio-sentence templates live in `data/characters.yaml`. |
+| `history/summary.py` | history | One LLM call at the very end of a run: reads the whole chronological event record and writes a short narrative summary of the city's history, printed below the map (`summary` field in the JSON payload). Its own larger context window/timeout (`data/config.yaml`'s `summary:` section), same pattern as `agents/treatment.py`'s post-run treatment; falls back to a plain stats sentence with no LLM. |
 | `history/generate.py` | history | `run_history()` (called by `jobs.py`) and a standalone CLI (`python3 -m history.generate --seed 42`) that does the same thing plus writes `history.json`/`map.txt`/`characters.json`. |
 | `history/jobs.py` / `routes.py` | history | Background-thread job orchestration and the `/api/history/*` Flask blueprint. |
 | `agents/config.py` / `agents/llm.py` | agents | Config (recency/reflection/retrieval tuning, from the reference implementation) and a thin Ollama chat+embeddings wrapper. |

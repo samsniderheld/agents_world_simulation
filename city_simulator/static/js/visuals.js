@@ -6,7 +6,7 @@
 
 const vState = {
   gallery: [],             // {kind: "image"|"video", url, prompt} newest-first
-  editImagePath: null,     // server-side path of the uploaded "starting image" for Generate Image
+  editImagePaths: [],      // server-side paths of the uploaded "starting image(s)" for Generate Image
   videoSourcePath: null,   // server-side path of the source image for Generate Video
   videoRefPath: null,      // server-side path of the uploaded video for Video to Video
   videoRefImagePath: null, // server-side path of the optional reference image for Video to Video
@@ -90,18 +90,20 @@ function uploadImage(file){
 // --- starting image for Generate Image (optional -- edit vs. from scratch) ---
 
 document.getElementById('imageFileInput').addEventListener('change', (e) => {
-  const file = e.target.files[0];
+  const files = Array.from(e.target.files);
   const preview = document.getElementById('imageFilePreview');
-  if (!file) {
-    vState.editImagePath = null;
+  if (!files.length) {
+    vState.editImagePaths = [];
     preview.style.display = 'none';
+    preview.innerHTML = '';
     return;
   }
   preview.style.display = '';
-  preview.innerHTML = `<img src="${URL.createObjectURL(file)}" alt="starting image preview" />`;
-  uploadImage(file).then(d => {
-    if (d.ok) vState.editImagePath = d.path;
-    else visualsErrorMsg.textContent = d.error || 'upload failed';
+  preview.innerHTML = files.map(f => `<img src="${URL.createObjectURL(f)}" alt="starting image preview" />`).join('');
+  Promise.all(files.map(uploadImage)).then(results => {
+    const failed = results.find(d => !d.ok);
+    if (failed) { visualsErrorMsg.textContent = failed.error || 'upload failed'; return; }
+    vState.editImagePaths = results.map(d => d.path);
   });
 });
 
@@ -229,7 +231,7 @@ generateImageBtn.addEventListener('click', () => {
   if (!prompt) { visualsErrorMsg.textContent = 'enter a prompt first'; return; }
   const payload = {
     prompt,
-    image_paths: vState.editImagePath ? [vState.editImagePath] : null,
+    image_paths: vState.editImagePaths.length ? vState.editImagePaths : null,
     options: {
       aspect_ratio: document.getElementById('imageAspectInput').value,
       resolution: document.getElementById('imageResolutionInput').value,

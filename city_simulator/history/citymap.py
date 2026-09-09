@@ -397,21 +397,36 @@ def _stamp(rows: list, row: int, col: int, text: str):
             rows[row][col + i] = ch
 
 
-def build_map(places: list, figures: list, seed=None) -> dict:
+def build_map(places: list, figures: list, seed=None, llm_map: bool = False) -> dict:
     """`places`/`figures` are the entities.Place/Figure objects generate.py
     holds in memory -- call this before (or after) serializing to JSON.
 
-    Returns {"text": <the plain multi-line map, for map.txt/console -- what
-    this function used to return outright>, "rows": <the grid's CHAR_HEIGHT
-    lines alone, no left-margin>, "cell_neighborhoods": <same-shaped grid of
-    era id per character cell, None for water -- each era's row-band IS a
-    neighborhood, so this is what divides every landmass into separately
-    colored sections instead of tinting it one flat color>, "palette":
-    <"{era_id}_{column}" -> hex color, plus "water"/"default">,
+    `llm_map=True` asks the LLM to draw the whole map itself as freeform
+    ASCII art (see _try_llm_map) instead of the procedural noise-generated
+    island -- validated (every place's numbered label must actually appear)
+    and retried a couple of times before silently falling back to the
+    procedural map, the same graceful-degradation shape as every other
+    LLM-fill path in this project. An LLM-drawn map has no per-cell era
+    coloring (that needs the exact structural grid alignment only the
+    procedural path produces) -- see "mode" in the return value below.
+
+    Returns {"text": <the plain multi-line map + legend + caption, for
+    map.txt/console>, "body": <just the map art, no legend/caption -- what
+    the web viewer displays>, "mode": "procedural" | "llm", "rows"/
+    "cell_neighborhoods"/"palette"/"header_lines"/"row_prefix"/
+    "border_line": <procedural-only, all empty in "llm" mode -- the exact
+    per-cell grid data the web viewer uses to render era coloring>,
     "neighborhoods": <era id/column/name/color per grid cell, in map
-    order, oldest to newest then west to east>, "caption": <the caption
-    line>}. Only the web viewer (which can actually render color) uses
-    anything past "text"."""
+    order, oldest to newest then west to east -- empty in "llm" mode>,
+    "caption": <the caption line>}."""
+    if llm_map:
+        result = _try_llm_map(places, figures, seed)
+        if result is not None:
+            return result
+    return _build_procedural_map(places, figures, seed)
+
+
+def _build_procedural_map(places: list, figures: list, seed=None) -> dict:
     rng = random.Random(seed)
     figure_era = {f.id: f.era_id for f in figures}
 
@@ -476,21 +491,22 @@ def build_map(places: list, figures: list, seed=None) -> dict:
                 legend.append((number, place))
                 number += 1
 
-    river_header = " " * 8 + "HUDSON RIVER".ljust(CHAR_WIDTH // 2) + "EAST RIVER"
+    # river_header = " " * 8 + "HUDSON RIVER".ljust(CHAR_WIDTH // 2) + "EAST RIVER"
     grid_lines = ["".join(r) for r in rows]
-    out = [river_header, "  N", "  ^"]
+    # out = [river_header, "  N", "  ^"]
+    out = []
     for line in grid_lines:
         out.append("  |" + line)
     out.append("  +" + "-" * CHAR_WIDTH + ">")
     out.append("")
-    out.append("Legend:")
-    for number, place in legend:
-        status_note = "" if place.status == "active" else f", {place.status} {place.closed_year}"
-        out.append(f"  {number:>2}. {place.name} ({place.place_type}, founded {place.founded_year}{status_note})")
+    # out.append("Legend:")
+    # for number, place in legend:
+    #     status_note = "" if place.status == "active" else f", {place.status} {place.closed_year}"
+    #     out.append(f"  {number:>2}. {place.name} ({place.place_type}, founded {place.founded_year}{status_note})")
 
-    out.append("")
-    caption = _caption(neighborhood_order)
-    out.append(caption)
+    # out.append("")
+    # caption = _caption(neighborhood_order)
+    # out.append(caption)
 
     palette = dict(neighborhood_colors)
     palette["water"] = WATER_COLOR
@@ -498,14 +514,146 @@ def build_map(places: list, figures: list, seed=None) -> dict:
 
     return {
         "text": "\n".join(out),
+        "body": "\n".join(out[:out.index("")]),
+        "mode": "procedural",
         "rows": grid_lines,
         "cell_neighborhoods": cell_neighborhoods,
         "palette": palette,
         "neighborhoods": neighborhoods_meta,
-        "caption": caption,
+        # "caption": caption,
         # so a colored (web-only) rendering of the grid doesn't have to
         # re-parse this framing back out of "text"
-        "header_lines": [river_header, "  N", "  ^"],
+        # "header_lines": [river_header, "  N", "  ^"],
         "row_prefix": "  |",
         "border_line": "  +" + "-" * CHAR_WIDTH + ">",
     }
+
+
+def _try_llm_map(places: list, figures: list, seed=None) -> dict:
+    """The whole-map alternative to _build_procedural_map: instead of a
+    noise-generated island with Python-placed labels, the LLM draws the
+    entire ASCII map itself -- freeform, including where it puts every
+    place's [N] label. That freedom costs the per-cell era coloring the
+    procedural path gives (see "mode" in the returned dict), so this is
+    strictly opt-in (build_map's llm_map=True).
+
+    Legend numbers are assigned up front, same era-then-shuffle order as
+    the procedural path, so both modes produce the same legend for the
+    same seed. Returns None (falls back to the procedural map) if the LLM
+    is unreachable/disabled, or every retry attempt comes back malformed."""
+    if not (config.LLM_FILL_NAMES and llm.available()):
+        return None
+
+    rng = random.Random(seed)
+    figure_era = {f.id: f.era_id for f in figures}
+    places_by_era = {era.id: [] for era in ERAS}
+    for place in places:
+        era_id = figure_era.get(place.founding_figure_id)
+        if era_id in places_by_era:
+            places_by_era[era_id].append(place)
+
+    legend = []  # (number, place), era order then shuffled within era
+    era_lines = []
+    number = 1
+    for era in ERAS:
+        places_here = places_by_era[era.id][:]
+        rng.shuffle(places_here)
+        entries = []
+        for place in places_here:
+            entries.append(f"[{number}] {place.name} ({place.place_type})")
+            legend.append((number, place))
+            number += 1
+        if entries:
+            era_lines.append(f"{era.name} ({era.start_year}-{era.end_year}): " + "; ".join(entries))
+
+    if not legend:
+        return None
+
+    places_block = "\n".join(era_lines)
+    feedback = None
+    body = None
+    caption = None
+
+    for _attempt in range(config.LLM_MAP_MAX_RETRIES + 1):
+        try:
+            raw = _generate_llm_map(places_block, feedback)
+        except Exception:
+            raw = None
+        if not raw:
+            feedback = "You did not reply with anything usable. Try again."
+            continue
+
+        parts = raw.rsplit("---", 1)
+        candidate_body = parts[0].strip("\n")
+        candidate_caption = parts[1].strip().strip('"') if len(parts) == 2 else ""
+
+        problems = []
+        lines = [l for l in candidate_body.split("\n") if l.strip()]
+        if not (8 <= len(lines) <= 80):
+            problems.append(f"the map had {len(lines)} non-blank lines, expected roughly 20-40")
+        missing = [n for n, _ in legend if f"[{n}]" not in candidate_body]
+        if missing:
+            problems.append(
+                f"these place labels were missing from the map: {', '.join(f'[{n}]' for n in missing)}"
+            )
+        if not candidate_caption:
+            problems.append("there was no caption sentence after the '---' delimiter line")
+
+        if not problems:
+            body, caption = candidate_body, candidate_caption
+            break
+        feedback = "Your last attempt had problems: " + "; ".join(problems) + "."
+
+    if body is None:
+        return None
+
+    out = [body, "", "Legend:"]
+    for number, place in legend:
+        status_note = "" if place.status == "active" else f", {place.status} {place.closed_year}"
+        out.append(f"  {number:>2}. {place.name} ({place.place_type}, founded {place.founded_year}{status_note})")
+    out.append("")
+    out.append(caption)
+
+    return {
+        "text": "\n".join(out),
+        "body": body,
+        "mode": "llm",
+        "rows": [],
+        "cell_neighborhoods": [],
+        "palette": {},
+        "neighborhoods": [],
+        "caption": caption,
+        "header_lines": [],
+        "row_prefix": "",
+        "border_line": "",
+    }
+
+
+def _generate_llm_map(places_block: str, feedback: str = None) -> str:
+    retry_note = f"\n\n{feedback} Please redraw the whole map, correcting this." if feedback else ""
+    prompt = (
+        "Draw a hand-drawn-style ASCII map of an east coast style "
+        "City, as it might appear in an old atlas. Use simple characters "
+        "for coastline, land, water, and streets (e.g. ~ for water, . or "
+        "blank for open land, - | + for streets/blocks). Roughly 60-70 "
+        "characters wide and 20-40 lines tall. Label the Hudson River on "
+        "the west side and the East River on the east side somewhere on "
+        "the map. Give a few neighborhoods evocative hand-lettered-looking "
+        "names directly on the land.\n\n"
+        "Every one of these places MUST appear on the map as its exact "
+        "bracketed number label (e.g. [3]), placed somewhere sensible for "
+        "its era (oldest era places further downtown/south, newer eras "
+        "further uptown/north):\n\n"
+        f"{places_block}\n\n"
+        "After the map, write a line containing only --- and then, on the "
+        "next line, one atmospheric caption sentence (max 20 words) for "
+        "the whole map."
+        f"{retry_note}\n\n"
+        "Reply with ONLY the map, the --- line, and the caption -- no "
+        "other commentary."
+    )
+    return llm.complete(
+        prompt, temperature=0.85,
+        context_tokens=config.LLM_MAP_CONTEXT_TOKENS,
+        timeout=config.LLM_MAP_TIMEOUT_SECONDS,
+    ).strip()

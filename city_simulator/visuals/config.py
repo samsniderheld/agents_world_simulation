@@ -42,5 +42,10 @@ LOCAL_GUIDANCE_SCALE = _RAW["local"]["guidance_scale"]
 LOCAL_QUANTIZE = _RAW["local"]["quantize"]
 LOCAL_QUANTIZE_DTYPE = _RAW["local"]["quantize_dtype"]
 
+SUBWAY_MAP_RENDER_FONT_SIZE = _RAW["subway_map"]["render_font_size"]
+SUBWAY_MAP_RENDER_PADDING = _RAW["subway_map"]["render_padding"]
+SUBWAY_MAP_PROMPT = _RAW["subway_map"]["prompt"]
+SUBWAY_MAP_STYLE_REFERENCE_IMAGE = _PROJECT_ROOT / _RAW["subway_map"]["style_reference_image"]
+
 UPLOADS_DIR = _PACKAGE_DIR / "data" / "uploads"
 OUTPUTS_DIR = _PACKAGE_DIR / "data" / "outputs"

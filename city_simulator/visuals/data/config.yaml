@@ -51,3 +51,32 @@ local:
   # we're on 0.36.0).
   quantize: true
   quantize_dtype: "int8"
+
+# The History tab's "1950s subway map" option (visuals/subway_map.py):
+# the generated history's ASCII map gets rendered to a plain image and
+# handed to fal's image-edit model (always fal -- this needs real
+# image-in/image-out editing, which the local provider doesn't support)
+# along with a real vintage map as a style reference.
+subway_map:
+  render_font_size: 14
+  render_padding: 24
+  # image_paths[0] (built at generate time) is the rendered ASCII map --
+  # the exact layout/labels to preserve. image_paths[1], below, is a real
+  # 1950s NYC subway/tourist map, provided purely as a style reference --
+  # resolved relative to the project root (city_simulator/).
+  style_reference_image: "history/map_ref.jpg"
+  prompt: >
+    You are given two reference images. The first is a plain rendering of
+    a fictional city's map: numbered place labels, neighborhood names, a
+    coastline, and river labels. The second is an authentic 1950s New York
+    City subway and tourist map, provided ONLY as a style reference.
+    Redraw the FIRST image's map in the illustration style of the SECOND:
+    the same muted mid-century color palette, hand-lettered typography, a
+    bordered legend box, and yellow-street/teal-water transit-map look.
+    Preserve the first image's numbered place labels exactly as shown, in
+    their same relative positions, its neighborhood names, and its overall
+    coastline/land shape and river labels. Do not invent additional
+    numbered labels beyond the ones shown, and do not copy the second
+    image's actual streets, place names, or geography -- only its
+    illustration style.
+

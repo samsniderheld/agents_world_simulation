@@ -38,10 +38,24 @@ function renderHeader(data){
     `${data.eras.length} eras · ${data.figures.length} figures · ${data.places.length} places · ${data.events.length} events`;
 }
 
+function renderSummary(data){
+  const plate = document.getElementById('summaryPlate');
+  if (!data.summary) { plate.style.display = 'none'; return; }
+  plate.style.display = '';
+  document.getElementById('summaryText').textContent = data.summary;
+}
+
 function renderMap(data){
   const map = data.map;
   if (!map || typeof map !== 'object') {
     document.getElementById('mapText').textContent = map || '';
+    return;
+  }
+
+  if (map.mode === 'llm') {
+    document.getElementById('mapText').textContent = map.body || '';
+    document.getElementById('mapCaption').textContent = map.caption || '';
+    document.getElementById('neighborhoodKey').innerHTML = '';
     return;
   }
 
@@ -83,6 +97,74 @@ function renderMap(data){
     `<span class="entry"><span class="swatch" style="background:${n.color}"></span>${escapeHtml(n.name)}</span>`
   ).join('');
 }
+
+// --- 1950s subway-map image (via the Visuals tab's fal-backed job slot) ---
+
+function resetSubwayMap(){
+  document.getElementById('subwayMapStatus').textContent = '';
+  document.getElementById('subwayMapPlate').style.display = 'none';
+  document.getElementById('subwayMapHideBtn').style.display = 'none';
+  document.getElementById('subwayMapBtn').disabled = false;
+  document.getElementById('subwayMapBtn').textContent = '🚇 Generate 1950s Subway Map (via fal)';
+}
+
+function showSubwayMap(url){
+  document.getElementById('subwayMapImg').src = '/api/visuals/files/' + url;
+  document.getElementById('subwayMapPlate').style.display = '';
+  document.getElementById('subwayMapHideBtn').style.display = '';
+  document.getElementById('subwayMapBtn').textContent = '🚇 Regenerate Subway Map (via fal)';
+}
+
+function pollSubwayMap(){
+  const statusEl = document.getElementById('subwayMapStatus');
+  fetch('/api/visuals/status').then(r => r.json()).then(d => {
+    const phase = d.phase || 'idle';
+    if (phase === 'running') { setTimeout(pollSubwayMap, 1500); return; }
+    document.getElementById('subwayMapBtn').disabled = false;
+    if (phase === 'error') { statusEl.textContent = d.error || 'generation failed'; return; }
+    if (phase !== 'done') { statusEl.textContent = ''; return; }
+    fetch('/api/visuals/result').then(r => r.json()).then(result => {
+      if (result.kind !== 'subway_map') return;  // some other visuals job finished first
+      if (!result.images || !result.images.length) {
+        statusEl.textContent = 'no image came back';
+        return;
+      }
+      statusEl.textContent = '';
+      showSubwayMap(result.images[0].url);
+    });
+  }).catch(() => {
+    statusEl.textContent = 'lost contact with the server';
+  });
+}
+
+document.getElementById('subwayMapBtn').addEventListener('click', () => {
+  const mapText = hState.data && hState.data.map && hState.data.map.text;
+  if (!mapText) return;
+  const statusEl = document.getElementById('subwayMapStatus');
+  document.getElementById('subwayMapBtn').disabled = true;
+  statusEl.textContent = 'starting…';
+  fetch('/api/visuals/generate-subway-map', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ map_text: mapText }),
+  }).then(r => r.json()).then(d => {
+    if (!d.ok) {
+      document.getElementById('subwayMapBtn').disabled = false;
+      statusEl.textContent = d.error || 'could not start generation';
+      return;
+    }
+    statusEl.textContent = 'generating (this can take a minute)…';
+    pollSubwayMap();
+  });
+});
+
+document.getElementById('subwayMapHideBtn').addEventListener('click', () => {
+  const plate = document.getElementById('subwayMapPlate');
+  const hideBtn = document.getElementById('subwayMapHideBtn');
+  const hidden = plate.style.display === 'none';
+  plate.style.display = hidden ? '' : 'none';
+  hideBtn.textContent = hidden ? 'Hide Subway Map' : 'Show Subway Map';
+});
 
 function populateTypeFilter(data){
   const select = document.getElementById('typeFilter');
@@ -212,7 +294,9 @@ function renderHistory(data){
   document.getElementById('historyContent').style.display = '';
   const indexes = buildIndexes(data);
   renderHeader(data);
+  renderSummary(data);
   renderMap(data);
+  resetSubwayMap();
   populateTypeFilter(data);
   renderEras(data, indexes);
   renderResidents(data);
@@ -262,6 +346,7 @@ generateBtn.addEventListener('click', () => {
     events_per_figure: parseIntOrNull(document.getElementById('eventsInput').value),
     characters: parseIntOrNull(document.getElementById('charactersInput').value) || 10,
     no_llm: document.getElementById('noLlmInput').checked,
+    llm_map: document.getElementById('llmMapInput').checked,
   };
   fetch('/api/history/generate', {
     method: 'POST',

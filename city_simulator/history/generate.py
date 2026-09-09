@@ -22,6 +22,7 @@ from . import entities
 from . import events
 from . import llm
 from . import log as history_log
+from . import summary
 from .eras import ERAS
 
 
@@ -125,9 +126,10 @@ def generate(seed=None, figures_per_era=None, events_per_figure=None):
     return all_figures, all_places, all_events
 
 
-def to_json(figures, places, events_list, map_data=None, characters_list=None):
+def to_json(figures, places, events_list, map_data=None, characters_list=None, summary_text=""):
     return {
         "generated_at": datetime.datetime.now().isoformat(),
+        "summary": summary_text,
         "eras": [
             {"id": e.id, "name": e.name, "start_year": e.start_year,
              "end_year": e.end_year, "description": e.description}
@@ -154,7 +156,7 @@ def to_json(figures, places, events_list, map_data=None, characters_list=None):
 
 
 def run_history(seed=None, figures_per_era=None, events_per_figure=None,
-                 characters_count=10, use_llm=True) -> dict:
+                 characters_count=10, use_llm=True, llm_map=False) -> dict:
     """Everything a full run produces, as one JSON-shaped dict -- no file
     I/O, no argparse. Called by server.py's /api/history/generate on a
     background thread; main() below is the standalone-file-writing CLI
@@ -171,7 +173,7 @@ def run_history(seed=None, figures_per_era=None, events_per_figure=None,
     history_log.log(f"{len(figures)} figures, {len(places)} places, {len(events_list)} events.")
 
     history_log.log("Drawing the map...")
-    map_data = citymap.build_map(places, figures, seed=seed)
+    map_data = citymap.build_map(places, figures, seed=seed, llm_map=llm_map)
     history_log.log("Map complete.")
 
     history_log.log(f"Generating {characters_count} present-day residents...")
@@ -180,8 +182,16 @@ def run_history(seed=None, figures_per_era=None, events_per_figure=None,
     )
     for c in characters_list:
         history_log.log(f"  {c['name']}, {c['age']} -- {c['occupation']} (connected to {c['place_name']})")
+
+    history_log.log("Writing a summary of the city's history...")
+    summary_text = summary.generate_summary(figures, places, events_list, ERAS)
+    history_log.log("Summary complete.")
     history_log.log("Done.")
-    return to_json(figures, places, events_list, map_data=map_data, characters_list=characters_list)
+
+    return to_json(
+        figures, places, events_list, map_data=map_data,
+        characters_list=characters_list, summary_text=summary_text,
+    )
 
 
 def main():
@@ -194,6 +204,7 @@ def main():
     parser.add_argument("--characters", type=int, default=10, help="number of present-day residents to generate")
     parser.add_argument("--characters-out", default="characters.json", help="path for the generated characters (blank to skip)")
     parser.add_argument("--no-llm", action="store_true", help="skip Ollama entirely (pure grammar output)")
+    parser.add_argument("--llm-map", action="store_true", help="let the LLM draw the whole map as freeform ASCII art")
     args = parser.parse_args()
 
     if not args.no_llm:
@@ -206,7 +217,7 @@ def main():
     payload = run_history(
         seed=args.seed, figures_per_era=args.figures_per_era,
         events_per_figure=args.events_per_figure,
-        characters_count=args.characters, use_llm=not args.no_llm,
+        characters_count=args.characters, use_llm=not args.no_llm, llm_map=args.llm_map,
     )
     with open(args.out, "w") as f:
         json.dump(payload, f, indent=2, default=str)
@@ -220,6 +231,8 @@ def main():
         with open(args.map_out, "w") as f:
             f.write(payload["map"]["text"] + "\n")
         print(f"\nSaved map to {args.map_out}")
+
+    print(f"\n{payload['summary']}")
 
     characters_list = payload["characters"]
     print(f"\n--- {len(characters_list)} residents of the city, c. 1959 ---")

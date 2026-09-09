@@ -42,6 +42,7 @@ def generate():
         "events_per_figure": body.get("events_per_figure") or None,
         "characters_count": int(body.get("characters") or 10),
         "use_llm": not bool(body.get("no_llm", False)),
+        "llm_map": bool(body.get("llm_map", False)),
     }
     ok, error = jobs.start(params, on_done=agents_jobs.set_history_roster)
     return json_response({"ok": ok, "error": error}, status=200 if ok else 409)

@@ -52,6 +52,17 @@
   border-radius: 2px;
 }
 
+.thumb-grid{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.thumb-grid img{
+  max-width: 64px;
+  max-height: 64px;
+  object-fit: cover;
+}
+
 main.visuals-main{ display: block; overflow-x: hidden; overflow-y: auto; padding: 20px 18px 60px; }
 
 .visuals-gallery{

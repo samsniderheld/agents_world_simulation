@@ -25,9 +25,9 @@
           <textarea id="imagePromptInput" rows="3" placeholder="A neon-lit noir street at midnight…"></textarea>
         </div>
         <div class="field" id="startingImageField">
-          <label>Starting image (optional -- edits it instead of generating from scratch)</label>
-          <input type="file" id="imageFileInput" accept="image/*" />
-          <div class="thumb-preview" id="imageFilePreview" style="display:none"></div>
+          <label>Starting image(s) (optional -- edits them instead of generating from scratch; pick multiple to combine)</label>
+          <input type="file" id="imageFileInput" accept="image/*" multiple />
+          <div class="thumb-preview thumb-grid" id="imageFilePreview" style="display:none"></div>
         </div>
         <div class="field-row">
           <div class="field">

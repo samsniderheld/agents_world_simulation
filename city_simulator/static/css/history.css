@@ -69,6 +69,44 @@
   border-top: 1px solid var(--border);
   padding-top: 12px;
 }
+.map-plate #summaryText{
+  font-size: 13.5px;
+  line-height: 1.7;
+  color: var(--text);
+}
+.map-plate .map-columns{
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+.map-plate .map-column{ flex: 1 1 340px; min-width: 0; }
+.map-plate .map-column-label{
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin-bottom: 8px;
+}
+.map-plate #subwayMapPlate img{
+  display: block;
+  max-width: 100%;
+  border: 1px solid var(--border);
+}
+.map-plate .map-actions{
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.map-plate .map-action-status{
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-faint);
+}
 .map-plate .neighborhood-key{
   display: flex;
   flex-wrap: wrap;
