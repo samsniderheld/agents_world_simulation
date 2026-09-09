@@ -9,7 +9,8 @@ look than a block-character grid can give. Era neighborhoods are labeled
 directly on the land, the way a hand-drawn map would, and in the web
 viewer each one's row-band is colored separately -- carving up every
 landmass into its actual neighborhoods rather than leaving it one flat
-color (see _char_neighborhood_grid / build_map).
+color -- along boundaries that are themselves noise-wobbled curves rather
+than straight cuts (see _wavy_boundaries / build_map).
 
 Deliberately split the labor: Python generates the shape and draws every
 dot and label, so it's always well-formed regardless of how many places
@@ -275,70 +276,62 @@ def _char_is_land(mask: list) -> list:
     return grid
 
 
-def _era_row_lookup() -> list:
-    """Character row -> the era whose band that row falls in -- the same
-    south-to-north bands _era_row_range already defines, just inverted
-    into a per-row lookup so a character cell's neighborhood is a single
-    array index instead of re-deriving the band on every cell."""
-    lookup = [None] * CHAR_HEIGHT
-    for era_index, era in enumerate(ERAS):
-        start, end = _era_row_range(era_index)
-        for r in range(start, min(end, CHAR_HEIGHT)):
-            lookup[r] = era.id
-    return lookup
+def _wavy_boundaries(noise, nominal: list, length: int, amplitude: float,
+                      frequency: float, salt: float, min_gap: int, limit: int) -> list:
+    """The organic replacement for straight band edges: one curve per
+    nominal boundary position, each `length` samples long (one per dot
+    column for the horizontal era boundaries, one per dot row for the
+    vertical column split), wobbled by fractal noise. Clamped
+    sample-by-sample so curves stay ordered and never cross each other or
+    the map edge -- a neighborhood can get pinched thin somewhere, but
+    never inverted away entirely."""
+    curves = []
+    for k, base in enumerate(nominal):
+        curve = []
+        for t in range(length):
+            n = _fractal_noise(noise, t * frequency + salt, k * 19.37 + salt * 3.1, 2, 0.5)
+            curve.append(base + n * amplitude)
+        curves.append(curve)
+    for t in range(length):
+        prev = 0
+        for k in range(len(curves)):
+            v = int(round(curves[k][t]))
+            v = max(v, prev + min_gap)
+            v = min(v, limit - min_gap * (len(curves) - k))
+            curves[k][t] = v
+            prev = v
+    return curves
 
 
-def _column_index_lookup() -> list:
-    """Character column -> which column-band it falls in (see
-    COLUMN_RANGES), the west-east counterpart to _era_row_lookup."""
-    lookup = [0] * CHAR_WIDTH
-    for col_index, (start, end) in enumerate(COLUMN_RANGES):
-        for c in range(start, min(end, CHAR_WIDTH)):
-            lookup[c] = col_index
-    return lookup
+def _dot_era_index(r: int, c: int, era_bounds: list) -> int:
+    """Which era band (0 = northernmost/newest) the dot at (r, c) falls
+    in, given the wavy per-column boundary curves."""
+    b = 0
+    while b < len(era_bounds) and r >= era_bounds[b][c]:
+        b += 1
+    return b
 
 
-def _char_neighborhood_grid(char_is_land: list, row_era: list, col_index: list) -> list:
-    """Character-cell neighborhood id ("{era_id}_{column}", None for
-    water). This is what actually divides each landmass into a real grid
-    of separately colored sections: a landmass spanning multiple eras'
-    row-bands and multiple columns shows one color per (era, column) cell
-    rather than one flat color or a single north-south strip."""
-    grid = [[None] * CHAR_WIDTH for _ in range(CHAR_HEIGHT)]
-    for cr in range(CHAR_HEIGHT):
-        era_id = row_era[cr]
-        for cc in range(CHAR_WIDTH):
-            grid[cr][cc] = f"{era_id}_{col_index[cc]}" if char_is_land[cr][cc] else None
-    return grid
+def _dot_col_index(r: int, c: int, col_bounds: list) -> int:
+    """Which west-east column the dot at (r, c) falls in, given the wavy
+    per-row boundary curves."""
+    j = 0
+    while j < len(col_bounds) and c >= col_bounds[j][r]:
+        j += 1
+    return j
 
 
-def _era_row_range(era_index: int) -> tuple:
-    """Character rows this era's band occupies -- era 0 (oldest) at the
-    south/bottom, the newest era at the north/top."""
-    band = CHAR_HEIGHT // len(ERAS)
-    from_top = len(ERAS) - 1 - era_index
-    start = from_top * band
-    end = CHAR_HEIGHT if era_index == 0 else start + band
-    return start, end
-
-
-def _find_spot(start_row: int, end_row: int, start_col: int, end_col: int, width: int,
-                char_is_land: list, claimed: set, rng: random.Random):
-    """A free, on-land horizontal run of `width` characters within this
-    neighborhood's row band AND column band. Falls back to the least-bad
-    candidate if nothing is perfectly free, so a crowded section never
-    just silently drops a place."""
-    candidates = []
-    max_c = min(end_col, CHAR_WIDTH) - width
-    for r in range(start_row, min(end_row, CHAR_HEIGHT)):
-        for c in range(start_col, max_c):
-            if char_is_land[r][c]:
-                candidates.append((r, c))
+def _find_spot(cells: list, width: int, claimed: set, rng: random.Random):
+    """A free horizontal run of `width` characters starting on one of this
+    neighborhood's own land cells. Falls back to the least-bad candidate
+    if nothing is perfectly free, so a crowded section never just silently
+    drops a place."""
+    candidates = [(r, c) for (r, c) in cells if c + width <= CHAR_WIDTH]
     rng.shuffle(candidates)
     for r, c in candidates:
-        cells = [(r, c + i) for i in range(width)]
-        if not any(cell in claimed for cell in cells):
-            claimed.update(cells)
+        run = [(r, c + i) for i in range(width)]
+        if not any(cell in claimed for cell in run):
+            claimed.update(run)
             return r, c
     if candidates:
         r, c = candidates[0]
@@ -440,9 +433,46 @@ def _build_procedural_map(places: list, figures: list, seed=None) -> dict:
     dots = _dot_grid(mask, rng)
     rows = _to_braille_rows(dots)
     char_is_land = _char_is_land(mask)
-    row_era = _era_row_lookup()
-    col_index = _column_index_lookup()
-    cell_neighborhoods = _char_neighborhood_grid(char_is_land, row_era, col_index)
+
+    # Organic neighborhood boundaries: the era bands and the west/east
+    # split are noise-wobbled curves (at dot resolution), not straight
+    # cuts. Same overall structure -- oldest era southernmost, newest
+    # northernmost, columns west to east -- just with borders that meander
+    # the way real neighborhood lines do.
+    boundary_noise = _make_perlin(rng)
+    band_h = CHAR_HEIGHT // len(ERAS)
+    era_bounds = _wavy_boundaries(
+        boundary_noise,
+        nominal=[(k + 1) * band_h * 4 for k in range(len(ERAS) - 1)],
+        length=DOT_W, amplitude=7.0, frequency=0.055, salt=0.0,
+        min_gap=4, limit=DOT_H,
+    )
+    col_bounds = _wavy_boundaries(
+        boundary_noise,
+        nominal=[end * 2 for (_start, end) in COLUMN_RANGES[:-1]],
+        length=DOT_H, amplitude=9.0, frequency=0.05, salt=53.7,
+        min_gap=4, limit=DOT_W,
+    )
+    band_eras = [era.id for era in reversed(ERAS)]  # top band = newest era
+
+    # Char-cell era/column membership, sampled at each cell's center dot,
+    # plus each (era x column) section's land cells -- what label
+    # placement, centroids, and the exported cell_neighborhoods all key
+    # off now that sections aren't rectangles anymore.
+    char_era = [[None] * CHAR_WIDTH for _ in range(CHAR_HEIGHT)]
+    char_col = [[0] * CHAR_WIDTH for _ in range(CHAR_HEIGHT)]
+    cell_neighborhoods = [[None] * CHAR_WIDTH for _ in range(CHAR_HEIGHT)]
+    section_land_cells = {}  # (era_id, column_index) -> [(row, col), ...]
+    for cr in range(CHAR_HEIGHT):
+        for cc in range(CHAR_WIDTH):
+            era_id = band_eras[_dot_era_index(cr * 4 + 2, cc * 2 + 1, era_bounds)]
+            ci = _dot_col_index(cr * 4 + 2, cc * 2 + 1, col_bounds)
+            char_era[cr][cc] = era_id
+            char_col[cr][cc] = ci
+            if char_is_land[cr][cc]:
+                cell_neighborhoods[cr][cc] = f"{era_id}_{ci}"
+                section_land_cells.setdefault((era_id, ci), []).append((cr, cc))
+
     claimed = set()
 
     neighborhood_ids = [f"{era.id}_{ci}" for era in ERAS for ci in range(NEIGHBORHOOD_COLUMNS)]
@@ -453,10 +483,10 @@ def _build_procedural_map(places: list, figures: list, seed=None) -> dict:
     used_names = set()       # lowercased, for case-insensitive dedup checks
     neighborhood_order = []  # properly-cased, oldest-to-newest, for the caption prompt
     neighborhoods_meta = []  # era_id/column/name/color, same order, for a map legend
+    markers = []             # numbered place-label positions, char coords, for the canvas view
     number = 1
 
     for era_index, era in enumerate(ERAS):
-        start_row, end_row = _era_row_range(era_index)
         places_here = places_by_era[era.id][:]
         rng.shuffle(places_here)
         # Split this era's places roughly evenly across its columns -- there's
@@ -465,29 +495,43 @@ def _build_procedural_map(places: list, figures: list, seed=None) -> dict:
         # be here, same spirit as the rest of this generator's randomness.
         column_groups = [places_here[ci::NEIGHBORHOOD_COLUMNS] for ci in range(NEIGHBORHOOD_COLUMNS)]
 
-        for col_index_, (start_col, end_col) in enumerate(COLUMN_RANGES):
+        for col_index_ in range(NEIGHBORHOOD_COLUMNS):
             neighborhood_id = f"{era.id}_{col_index_}"
             column_label = _COLUMN_LABELS[col_index_]
             places_section = column_groups[col_index_]
+            section_land = section_land_cells.get((era.id, col_index_), [])
 
             neighborhood = _neighborhood_name(era, column_label, places_section, used_names, rng)
             used_names.add(neighborhood.lower())
             neighborhood_order.append(neighborhood)
+            # Land-cell centroid of this section -- where the canvas view
+            # centers the neighborhood's name. None when the section is
+            # open water (the canvas just skips the label).
+            centroid = None
+            if section_land:
+                centroid = {
+                    "row": sum(r for r, _ in section_land) / len(section_land),
+                    "col": sum(c for _, c in section_land) / len(section_land),
+                }
             neighborhoods_meta.append({
-                "era_id": era.id, "column": column_label,
+                "id": neighborhood_id, "era_id": era.id, "column": column_label,
                 "name": neighborhood, "color": neighborhood_colors[neighborhood_id],
+                "place_ids": [p.id for p in places_section],
+                "centroid": centroid,
             })
-            spot = _find_spot(start_row, end_row, start_col, end_col, len(neighborhood) + 2,
-                               char_is_land, claimed, rng)
+            spot = _find_spot(section_land, len(neighborhood) + 2, claimed, rng)
             if spot:
                 _stamp(rows, spot[0], spot[1], neighborhood)
 
             for place in places_section:
                 label = f"[{number}]"
-                spot = _find_spot(start_row, end_row, start_col, end_col, len(label),
-                                   char_is_land, claimed, rng)
+                spot = _find_spot(section_land, len(label), claimed, rng)
                 if spot:
                     _stamp(rows, spot[0], spot[1], label)
+                    markers.append({
+                        "number": number, "place_id": place.id,
+                        "row": spot[0], "col": spot[1],
+                    })
                 legend.append((number, place))
                 number += 1
 
@@ -520,12 +564,27 @@ def _build_procedural_map(places: list, figures: list, seed=None) -> dict:
         "cell_neighborhoods": cell_neighborhoods,
         "palette": palette,
         "neighborhoods": neighborhoods_meta,
-        # "caption": caption,
-        # so a colored (web-only) rendering of the grid doesn't have to
-        # re-parse this framing back out of "text"
-        # "header_lines": [river_header, "  N", "  ^"],
         "row_prefix": "  |",
         "border_line": "  +" + "-" * CHAR_WIDTH + ">",
+        # Everything the web viewer's interactive canvas rendering needs,
+        # at full dot resolution -- the raw land/water mask (as "0"/"1"
+        # strings, one per dot row, to keep the JSON compact), the wavy
+        # era/column boundary curves that turn any land dot into its
+        # neighborhood id (band_eras is the era per horizontal band, top
+        # to bottom; era_boundaries[k][dot_col] is where band k ends;
+        # column_boundaries[j][dot_row] is where column j ends), plus
+        # where every [N] place label landed. The braille "rows" above are
+        # this same data already rasterized down to text; the canvas draws
+        # from the source instead.
+        "graphic": {
+            "dot_width": DOT_W, "dot_height": DOT_H,
+            "char_width": CHAR_WIDTH, "char_height": CHAR_HEIGHT,
+            "land": ["".join("1" if v else "0" for v in row) for row in mask],
+            "band_eras": band_eras,
+            "era_boundaries": era_bounds,
+            "column_boundaries": col_bounds,
+            "markers": markers,
+        },
     }
 
 
