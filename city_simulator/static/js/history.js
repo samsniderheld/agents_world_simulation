@@ -584,6 +584,155 @@ function populateTypeFilter(data){
   });
 }
 
+// --- per-entity media (attached images/video, see citystate/store.py) --
+
+function entityMediaList(entityId){
+  return (hState.data && hState.data.media && hState.data.media[entityId]) || [];
+}
+
+function latestImagePath(entityId){
+  const images = entityMediaList(entityId).filter(m => m.kind === 'image');
+  return images.length ? images[images.length - 1].local_path : null;
+}
+
+function entityThumbHtml(item){
+  const media = item.kind === 'video'
+    ? `<video src="${fileUrl(item.url)}" muted loop playsinline></video>`
+    : `<img src="${fileUrl(item.url)}" alt="${escapeHtml(item.prompt)}" />`;
+  return `<div class="entity-thumb">${media}<button class="entity-thumb-remove" data-remove-media="${escapeHtml(item.id)}" title="Remove">×</button></div>`;
+}
+
+// Rendered once as part of the card's own HTML, then refreshed in place
+// (see refreshEntityMediaDom) after a generation completes, so the rest
+// of the card -- and any other entity's expanded form -- isn't disturbed.
+function entityMediaHtml(entityId, entityType, promptHint){
+  const items = entityMediaList(entityId);
+  const hasImage = items.some(m => m.kind === 'image');
+  return `
+    <div class="entity-media" data-entity-id="${escapeHtml(entityId)}" data-entity-type="${entityType}">
+      <div class="entity-media-thumbs">
+        ${items.map(entityThumbHtml).join('')}
+        <button class="entity-media-toggle" data-action="toggle-media-form">+ Media</button>
+      </div>
+      <div class="entity-media-form" hidden>
+        <input type="text" class="media-prompt-input" placeholder="${escapeHtml(promptHint)}" />
+        <div class="media-form-actions">
+          <button data-action="gen-image">Generate Image</button>
+          <button data-action="gen-video" ${hasImage ? '' : 'disabled title="Add an image first"'}>Animate Latest Image</button>
+        </div>
+        <span class="media-status"></span>
+      </div>
+    </div>
+  `;
+}
+
+function refreshEntityMediaDom(entityId){
+  document.querySelectorAll(`.entity-media[data-entity-id="${CSS.escape(entityId)}"]`).forEach(wrap => {
+    const entityType = wrap.dataset.entityType;
+    const promptHint = wrap.querySelector('.media-prompt-input').placeholder;
+    const temp = document.createElement('div');
+    temp.innerHTML = entityMediaHtml(entityId, entityType, promptHint);
+    wrap.replaceWith(temp.firstElementChild);
+  });
+}
+
+document.addEventListener('click', (e) => {
+  const toggleBtn = e.target.closest('[data-action="toggle-media-form"]');
+  if (toggleBtn) {
+    const form = toggleBtn.closest('.entity-media').querySelector('.entity-media-form');
+    form.hidden = !form.hidden;
+    return;
+  }
+
+  const removeBtn = e.target.closest('[data-remove-media]');
+  if (removeBtn) {
+    const wrap = removeBtn.closest('.entity-media');
+    const entityId = wrap.dataset.entityId;
+    fetch(`/api/city/media/${encodeURIComponent(entityId)}/${encodeURIComponent(removeBtn.dataset.removeMedia)}`, {
+      method: 'DELETE',
+    }).then(r => r.json()).then(d => {
+      if (!d.ok) return;
+      const list = entityMediaList(entityId).filter(m => m.id !== removeBtn.dataset.removeMedia);
+      hState.data.media[entityId] = list;
+      refreshEntityMediaDom(entityId);
+    });
+    return;
+  }
+
+  const genBtn = e.target.closest('[data-action="gen-image"], [data-action="gen-video"]');
+  if (genBtn) {
+    const wrap = genBtn.closest('.entity-media');
+    const promptInput = wrap.querySelector('.media-prompt-input');
+    const prompt = promptInput.value.trim();
+    const statusEl = wrap.querySelector('.media-status');
+    if (!prompt) { statusEl.textContent = 'enter a description first'; return; }
+    startEntityMediaGeneration(wrap.dataset.entityId, genBtn.dataset.action === 'gen-video' ? 'video' : 'image', prompt, wrap);
+  }
+});
+
+function startEntityMediaGeneration(entityId, kind, prompt, wrap){
+  const statusEl = wrap.querySelector('.media-status');
+  const buttons = wrap.querySelectorAll('button');
+  buttons.forEach(b => b.disabled = true);
+  statusEl.textContent = 'starting…';
+
+  let endpoint, payload;
+  if (kind === 'video') {
+    const sourcePath = latestImagePath(entityId);
+    if (!sourcePath) {
+      statusEl.textContent = 'add an image first';
+      buttons.forEach(b => b.disabled = false);
+      return;
+    }
+    endpoint = '/api/visuals/generate-video';
+    payload = { prompt, image_path: sourcePath, options: {} };
+  } else {
+    endpoint = '/api/visuals/generate-image';
+    payload = { prompt, image_paths: null, options: {} };
+  }
+
+  fetch(endpoint, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+  }).then(r => r.json()).then(d => {
+    if (!d.ok) {
+      statusEl.textContent = d.error || 'could not start generation';
+      buttons.forEach(b => b.disabled = false);
+      return;
+    }
+    statusEl.textContent = 'generating (this can take a minute)…';
+    pollEntityMediaJob(entityId, kind, prompt, wrap);
+  });
+}
+
+function pollEntityMediaJob(entityId, kind, prompt, wrap){
+  const statusEl = wrap.querySelector('.media-status');
+  fetch('/api/visuals/status').then(r => r.json()).then(d => {
+    const phase = d.phase || 'idle';
+    if (phase === 'running') { setTimeout(() => pollEntityMediaJob(entityId, kind, prompt, wrap), 1500); return; }
+    wrap.querySelectorAll('button').forEach(b => b.disabled = false);
+    if (phase === 'error') { statusEl.textContent = d.error || 'generation failed'; return; }
+    if (phase !== 'done') { statusEl.textContent = ''; return; }
+    fetch('/api/visuals/result').then(r => r.json()).then(result => {
+      const media = result.kind === 'image' && result.images && result.images.length ? result.images[0]
+        : result.kind === 'video' && result.video ? result.video
+        : null;
+      if (!media) return;  // some other visuals job finished first -- not ours
+      fetch('/api/city/media', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entity_id: entityId, kind, url: media.url, local_path: media.local_path, prompt }),
+      }).then(r => r.json()).then(cityRes => {
+        if (!cityRes.ok) { statusEl.textContent = cityRes.error || 'could not attach media'; return; }
+        if (!hState.data.media) hState.data.media = {};
+        hState.data.media[entityId] = cityRes.media;
+        refreshEntityMediaDom(entityId);
+      });
+    });
+  }).catch(() => {
+    statusEl.textContent = 'lost contact with the server';
+    wrap.querySelectorAll('button').forEach(b => b.disabled = false);
+  });
+}
+
 function placeCardHtml(place){
   const statusClass = place.status !== 'active' ? 'status-destroyed' : '';
   const statusText = place.status === 'active'
@@ -603,6 +752,7 @@ function placeCardHtml(place){
         <summary>${place.history.length} recorded event${place.history.length === 1 ? '' : 's'}</summary>
         <div class="history">${historyHtml}</div>
       </details>
+      ${entityMediaHtml(place.id, 'place', `Describe a photo of ${place.name}…`)}
     </div>
   `;
 }
@@ -651,6 +801,7 @@ function residentCardHtml(person){
       ${person.quirk ? `<div class="quirk">${escapeHtml(person.quirk)}</div>` : ''}
       <div class="bio">${escapeHtml(person.bio)}</div>
       ${linkHtml}
+      ${person.id ? entityMediaHtml(person.id, 'character', `Describe a portrait of ${person.name}…`) : ''}
     </div>
   `;
 }
@@ -746,7 +897,7 @@ function pollHistoryStatus(){
 setInterval(pollHistoryStatus, 1200);
 pollHistoryStatus();
 
-generateBtn.addEventListener('click', () => {
+function startHistoryGeneration(confirmOverwrite){
   const payload = {
     seed: parseIntOrNull(document.getElementById('seedInput').value),
     figures_per_era: parseIntOrNull(document.getElementById('figuresInput').value),
@@ -754,15 +905,27 @@ generateBtn.addEventListener('click', () => {
     characters: parseIntOrNull(document.getElementById('charactersInput').value) || 10,
     no_llm: document.getElementById('noLlmInput').checked,
     llm_map: document.getElementById('llmMapInput').checked,
+    confirm_overwrite: !!confirmOverwrite,
   };
   fetch('/api/history/generate', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   }).then(r => r.json()).then(d => {
-    if (!d.ok) { historyErrorMsg.textContent = d.error || 'could not start generation'; return; }
+    if (!d.ok) {
+      if (d.needs_confirmation) {
+        if (confirm('A saved city already exists and will be permanently replaced. Continue?')) {
+          startHistoryGeneration(true);
+        }
+        return;
+      }
+      historyErrorMsg.textContent = d.error || 'could not start generation';
+      return;
+    }
     hState.logSince = 0;
     document.getElementById('historyLog').textContent = '';
     pollHistoryStatus();
   });
-});
+}
+
+generateBtn.addEventListener('click', () => startHistoryGeneration(false));

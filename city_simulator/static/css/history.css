@@ -391,3 +391,79 @@ details.figures-toggle[open] summary::before{ content: '▾ '; }
   color: var(--accent);
   text-decoration: none;
 }
+
+/* Per-entity attached media (place/character cards) -- see
+   citystate/store.py and history.js's entityMediaHtml(). */
+.entity-media{
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border);
+}
+.entity-media-thumbs{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.entity-thumb{
+  position: relative;
+  width: 52px;
+  height: 52px;
+  flex: none;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--bg);
+}
+.entity-thumb img, .entity-thumb video{
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.entity-thumb-remove{
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  width: 15px;
+  height: 15px;
+  line-height: 13px;
+  padding: 0;
+  font-size: 11px;
+  border: none;
+  border-radius: 2px;
+  background: rgba(0, 0, 0, 0.65);
+  color: var(--text);
+}
+.entity-thumb-remove:hover{ background: rgba(0, 0, 0, 0.85); }
+.entity-media-toggle{
+  flex: none;
+  font-size: 10px;
+  padding: 5px 9px;
+  color: var(--text-faint);
+}
+.entity-media-form{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin-top: 8px;
+}
+.entity-media-form[hidden]{ display: none; }
+.entity-media-form .media-prompt-input{
+  flex: 1 1 100%;
+  font-family: var(--sans);
+  font-size: 12.5px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 6px 9px;
+  border-radius: 3px;
+}
+.media-form-actions{ display: flex; gap: 6px; }
+.media-form-actions button{ font-size: 10px; padding: 5px 9px; }
+.entity-media .media-status{
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-faint);
+}
