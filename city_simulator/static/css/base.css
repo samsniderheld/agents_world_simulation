@@ -244,10 +244,12 @@ details[open] > summary::before{ content: '▾ '; }
 /* The interactive city map canvas -- shared by the History tab (place
    markers) and the Agents tab (place markers + a second agent-marker
    layer), see static/js/citymap.js. */
-.city-map-wrap{ position: relative; }
+.city-map-wrap{ position: relative; display: flex; justify-content: center; }
 .city-canvas{
   display: block;
-  width: 100%;
+  max-width: 100%;
+  max-height: 68vh;
+  width: auto;
   height: auto;
   border: 1px solid var(--border);
   background: #0c1014;

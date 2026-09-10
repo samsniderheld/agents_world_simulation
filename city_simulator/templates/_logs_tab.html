@@ -1,5 +1,38 @@
 <div class="tab-panel" data-tab-panel="logs" hidden>
   <main id="logsMain">
+    <div class="map-plate" id="summaryPlate" style="display:none">
+      <div class="label">A History of the City</div>
+      <div id="summaryText"></div>
+    </div>
+
+    <div class="treatment-plate" id="treatmentPlate" style="display:none">
+      <div class="label">Treatment</div>
+      <pre id="treatmentText"></pre>
+    </div>
+
+    <div class="hcontrols">
+      <input type="text" id="historySearchBox" placeholder="Search places, domains, events…" />
+      <select id="typeFilter"><option value="">All place types</option></select>
+      <select id="statusFilter">
+        <option value="">Any status</option>
+        <option value="active">Active</option>
+        <option value="destroyed">Destroyed</option>
+        <option value="closed">Closed</option>
+      </select>
+      <span class="count" id="visibleCount"></span>
+    </div>
+
+    <div id="eraSections"></div>
+    <div class="hempty-note" id="emptyNote" style="display:none">No places match the current filters.</div>
+
+    <section class="residents-section" id="residentsSection" style="display:none">
+      <div class="section-header">
+        <h2>Residents of the City, c. 1959</h2>
+        <div class="desc">Ten people living here today, each shaped by a piece of everything above.</div>
+      </div>
+      <div class="resident-grid" id="residentGrid"></div>
+    </section>
+
     <div class="log-plate">
       <div class="label">History Generation Log</div>
       <pre class="modal-log-lines" id="historyLogLines"></pre>
