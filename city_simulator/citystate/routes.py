@@ -33,6 +33,7 @@ def add_media():
         media = store.add_media(
             entity_id, kind, url,
             local_path=body.get("local_path", ""), prompt=body.get("prompt", ""),
+            tag=body.get("tag", ""),
         )
     except RuntimeError as e:
         return json_response({"ok": False, "error": str(e)}, status=409)

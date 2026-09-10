@@ -69,13 +69,18 @@ def replace(history_payload: dict):
         _write_to_disk(payload)
 
 
-def add_media(entity_id: str, kind: str, url: str, local_path: str = "", prompt: str = "") -> list:
+def add_media(entity_id: str, kind: str, url: str, local_path: str = "", prompt: str = "", tag: str = "") -> list:
     """Appends one media record to `entity_id`'s list and returns that
     updated list. Raises if there's no active city -- callers only reach
-    this from a card that's already rendering a real entity."""
+    this from a card that's already rendering a real entity.
+
+    `tag` is free-form ("exterior"/"interior" for a place, empty for
+    everything else) -- the place modal picks its Exterior/Interior boxes
+    by matching this, but any other tag (or none) still shows up in the
+    entity's regular media strip."""
     record = {
         "id": f"media_{uuid.uuid4().hex[:8]}", "kind": kind, "url": url,
-        "local_path": local_path, "prompt": prompt,
+        "local_path": local_path, "prompt": prompt, "tag": tag,
         "created_at": datetime.now().isoformat(),
     }
     with _lock:
