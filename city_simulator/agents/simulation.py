@@ -47,33 +47,17 @@ AGENT_ROSTER = {
 }
 
 
-_HUB_COUNT = 3  # a small, fixed number of shared "scenes" agents can occupy
-
-# Set by server.py once a history has finished generating (see
-# set_history_roster below); while it's None, the hardcoded noir cast above
-# is what roster_summary()/build_agents() draw from.
-_active_roster = None
-
-
-def _pick_hubs(history: dict) -> list:
-    """A history's own richest still-active places, standing in for "wherever
-    everyone in town still actually gathers" -- world.py has no movement, so
-    a handful of shared location strings is the only way two agents can ever
-    end up co-located (and therefore able to talk)."""
-    active = [p for p in history.get("places", []) if p.get("status") == "active"]
-    pool = active or history.get("places", [])
-    pool = sorted(pool, key=lambda p: len(p.get("history", [])), reverse=True)
-    return [p["name"] for p in pool[:_HUB_COUNT]] or ["the city"]
-
-
 def roster_from_history(history: dict) -> dict:
-    """A history's generated characters, restaged as an agent roster:
-    each keeps their real grounded bio, but is assigned round-robin across
-    a few shared hub locations (see _pick_hubs) instead of their own
-    individual, almost-certainly-unique grounding place."""
-    hubs = _pick_hubs(history)
+    """A history's generated characters, restaged as an agent roster: each
+    keeps their real grounded bio AND is placed at their own real
+    grounding place (character.place_name -- see history/characters.py),
+    not some shared stand-in location. That means two agents only ever
+    meet if their bios genuinely tied them to the same place (world.py has
+    no movement/pathfinding, so co-location is the only way agents can
+    talk) -- fewer conversations than a shared-hub scheme would force, but
+    nothing an agent does ever contradicts where their bio says they are."""
     roster = {}
-    for i, c in enumerate(history.get("characters", [])):
+    for c in history.get("characters", []):
         traits = (c.get("occupation") or "").strip()
         quirk = (c.get("quirk") or "").strip()
         if quirk:
@@ -82,7 +66,7 @@ def roster_from_history(history: dict) -> dict:
             age=c.get("age", 40),
             traits=traits or "a longtime local",
             currently=c.get("bio", ""),
-            location=hubs[i % len(hubs)],
+            location=c.get("place_name") or "the city",
         )
     return roster
 
