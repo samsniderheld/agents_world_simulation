@@ -1,11 +1,11 @@
 """An ASCII map of every generated Place, drawn over a procedurally
-generated island -- not real coastline data, since this whole project is
-about generating things, not tracing them. The island's silhouette comes
-from Perlin noise thresholded against a Manhattan-proportioned envelope
-(narrow at both the north and south tips, bulging through the middle), so
-the coastline gets real bays and points instead of just a wobbly edge,
-rasterized as Unicode braille dot-density for a much finer, more organic
-look than a block-character grid can give. Era neighborhoods are labeled
+generated archipelago -- not real coastline data, since this whole project
+is about generating things, not tracing them. The geography is grown from
+a domain-warped fractal noise field with only a soft center bias (see
+_generate_island_mask): one main landmass surrounded by a scatter of
+smaller organic islands, different every run, rasterized as Unicode
+braille dot-density for a much finer, more organic look than a
+block-character grid can give. Era neighborhoods are labeled
 directly on the land, the way a hand-drawn map would, and in the web
 viewer each one's row-band is colored separately -- carving up every
 landmass into its actual neighborhoods rather than leaving it one flat
@@ -41,11 +41,14 @@ WATER_DENSITY = config.WATER_DENSITY   # fraction of water sub-dots drawn, so th
 NOISE_SCALE = config.NOISE_SCALE             # smaller = broader, smoother terrain features
 NOISE_OCTAVES = config.NOISE_OCTAVES
 NOISE_PERSISTENCE = config.NOISE_PERSISTENCE
-FALLOFF_POWER = config.FALLOFF_POWER         # higher = sharper edge, lower = softer/larger island
-SEA_LEVEL = config.SEA_LEVEL                 # higher = smaller/patchier landmass, lower = bigger/more solid
-SATELLITE_SEA_LEVEL = config.SATELLITE_SEA_LEVEL  # more generous than SEA_LEVEL -- a small
-                                                   # island needs a lower bar to read as solid
-                                                   # rather than fragmenting away to nothing
+FALLOFF_POWER = config.FALLOFF_POWER         # exponent on the radial center bias
+SEA_LEVEL = config.SEA_LEVEL                 # higher = less land, lower = more
+CENTER_BIAS = config.CENTER_BIAS             # how strongly land clusters toward the map center
+WARP_STRENGTH = config.WARP_STRENGTH         # domain-warp amplitude, in dots -- bends coastlines
+MIN_ISLAND_DOTS = config.MIN_ISLAND_DOTS     # islets smaller than this get culled as specks
+MAIN_ISLAND_MIN_FRACTION = config.MAIN_ISLAND_MIN_FRACTION  # main landmass floor, as a map fraction
+EDGE_LANDMASS_CHANCE = config.EDGE_LANDMASS_CHANCE       # odds a run gets an off-frame side landmass
+EDGE_LANDMASS_STRENGTH = config.EDGE_LANDMASS_STRENGTH   # its elevation boost at full strength
 
 _BRAILLE_BASE = 0x2800
 _BRAILLE_BIT = {
@@ -150,89 +153,127 @@ def _fractal_noise(noise, x: float, y: float, octaves: int, persistence: float) 
     return total / max_value
 
 
-def _land_at(noise, col: float, row: float, cx: float, cy: float,
-             a: float, b: float, sea_level: float) -> bool:
-    """Shared land test: fractal noise minus an elliptical falloff from
-    (cx, cy) with semi-axes (a, b), thresholded at sea_level. The main
-    landmass and each satellite island (see _add_satellite_islands) are
-    both just this same test centered somewhere different."""
-    dx, dy = (col - cx) / a, (row - cy) / b
-    distance = math.sqrt(dx * dx + dy * dy)
-    n = _fractal_noise(noise, col * NOISE_SCALE, row * NOISE_SCALE, NOISE_OCTAVES, NOISE_PERSISTENCE)
-    elevation = (n + 1) / 2  # normalize from [-1, 1] to [0, 1]
-    return (elevation - distance ** FALLOFF_POWER) > sea_level
+def _connected_components(mask: list) -> list:
+    """4-connected land components of the mask, each a list of (row, col)
+    dots -- how the archipelago post-processing below tells the main
+    landmass from islets from single-dot noise specks."""
+    seen = [[False] * DOT_W for _ in range(DOT_H)]
+    components = []
+    for r in range(DOT_H):
+        for c in range(DOT_W):
+            if not mask[r][c] or seen[r][c]:
+                continue
+            stack = [(r, c)]
+            seen[r][c] = True
+            component = []
+            while stack:
+                rr, cc = stack.pop()
+                component.append((rr, cc))
+                for nr, nc in ((rr - 1, cc), (rr + 1, cc), (rr, cc - 1), (rr, cc + 1)):
+                    if 0 <= nr < DOT_H and 0 <= nc < DOT_W and mask[nr][nc] and not seen[nr][nc]:
+                        seen[nr][nc] = True
+                        stack.append((nr, nc))
+            components.append(component)
+    return components
 
 
-def _add_satellite_islands(mask: list, noise, rng: random.Random):
-    """1-3 more landmasses near the main one -- the boroughs/New-Jersey
-    character of the real NYC area, without tracing it: each is the same
-    noise field, just thresholded around its own center point elsewhere.
-    Sized anywhere from a small island up to comparable to the main
-    landmass itself, and deliberately allowed to center off-grid, so a
-    big one reads the way Brooklyn or New Jersey would on a map centered
-    on Manhattan -- a landmass that just runs off the edge, not a tidy
-    island fully contained in view."""
-    cx, cy = DOT_W / 2, DOT_H / 2
-    main_a, main_b = DOT_W * 0.30, DOT_H * 0.48
-    placed = []  # (cx, cy, a, b) of every satellite placed so far
+def _edge_landmass_boost(rng: random.Random):
+    """An elevation-boost function for the off-frame secondary landmass
+    (see _generate_island_mask's docstring), or None for runs that don't
+    get one. Elliptical falloff from a center placed beyond the west or
+    east map edge -- so the boosted ground always reads as continuing off
+    camera -- reaching zero well before mid-map, which keeps a channel of
+    open water between it and the main landmass most of the time (the
+    occasional noise-drawn isthmus connecting them is a feature, not a
+    bug)."""
+    if rng.random() >= EDGE_LANDMASS_CHANCE:
+        return None
+    # Deliberately narrow and hugging the frame edge -- widening this
+    # ellipse (or weakening the strength to compensate) makes the boost
+    # reach far enough inland that the mass fuses with the main island in
+    # a quarter of runs instead of reading as separate ground across the
+    # water (measured over 30 seeds when tuning these ranges).
+    a = DOT_W * rng.uniform(0.10, 0.16)
+    b = DOT_H * rng.uniform(0.35, 0.60)
+    ecx = -a * 0.25 if rng.random() < 0.5 else DOT_W + a * 0.25
+    ecy = rng.uniform(0.25, 0.75) * DOT_H
 
-    count = rng.randint(1, 3)
-    attempts = 0
-    while len(placed) < count and attempts < 300:
-        attempts += 1
-        a, b = DOT_W * rng.uniform(0.08, 0.32), DOT_H * rng.uniform(0.07, 0.28)
-        # Center can land up to half its own radius off-grid -- enough to
-        # spill off an edge while still guaranteeing some of it is visible.
-        col = rng.uniform(-0.5 * a, DOT_W + 0.5 * a)
-        row = rng.uniform(-0.5 * b, DOT_H + 0.5 * b)
+    def boost(r: int, c: int) -> float:
+        dx, dy = (c - ecx) / a, (r - ecy) / b
+        d = math.sqrt(dx * dx + dy * dy)
+        return EDGE_LANDMASS_STRENGTH * max(0.0, 1.0 - d)
 
-        dx, dy = (col - cx) / main_a, (row - cy) / main_b
-        d_main = math.sqrt(dx * dx + dy * dy)
-        # A bigger satellite needs proportionally more center-to-center
-        # clearance to actually stay offshore -- a flat distance range
-        # here let a big enough satellite overlap (and silently fuse
-        # into) the main landmass instead of reading as a separate one
-        # across the water, the way a real borough always is.
-        satellite_radius_norm = ((a / main_a) + (b / main_b)) / 2
-        min_d = 1.0 + satellite_radius_norm + 0.15
-        if not (min_d < d_main < min_d + 1.0):
-            continue
-        if any(math.hypot(col - ocx, row - ocy) < max(a, b) + max(oa, ob)
-               for ocx, ocy, oa, ob in placed):
-            continue  # keep clear of satellites already placed
-        placed.append((col, row, a, b))
-
-    for icx, icy, a, b in placed:
-        row_lo, row_hi = max(0, int(icy - b - 2)), min(DOT_H, int(icy + b + 2))
-        col_lo, col_hi = max(0, int(icx - a - 2)), min(DOT_W, int(icx + a + 2))
-        for row in range(row_lo, row_hi):
-            for col in range(col_lo, col_hi):
-                if _land_at(noise, col, row, icx, icy, a, b, SATELLITE_SEA_LEVEL):
-                    mask[row][col] = True
+    return boost
 
 
 def _generate_island_mask(rng: random.Random) -> list:
-    """True/False per (dot) row/col -- land or water. This is the standard
-    noise-terrain technique (see e.g. redblobgames' writeups on generating
-    maps with noise): a full 2D fractal-noise height field, biased by an
-    elongated elliptical falloff (tall north-south, narrow east-west, so
-    the overall silhouette still reads as a Manhattan-like island rather
-    than a circular blob), thresholded at a sea level. The landmass's
-    actual shape -- not just its coastline -- is whatever that combination
-    produces: real bays and points, plus 1-3 smaller satellite islands
-    offshore (see _add_satellite_islands) for an archipelago rather than
-    one lone landmass."""
+    """True/False per (dot) row/col -- land or water, as an organic
+    noise-grown archipelago rather than a templated shape.
+
+    The old version thresholded noise against a hard Manhattan-proportioned
+    elliptical envelope (so every map was the same almond silhouette) and
+    then stamped 1-3 more ellipses offshore as satellite islands. This one
+    lets the noise field itself decide the geography: a domain-warped
+    fractal elevation field (warping the sample coordinates through a
+    second noise field is what bends coastlines into real hooks, spits,
+    and lagoons instead of blobby contour lines) minus only a soft radial
+    center bias -- strong enough that land still clusters toward the
+    middle of the map and fades out toward the edges, weak enough that the
+    silhouette is different every run. Thresholding that at sea level
+    naturally yields one big mass plus a scatter of smaller offshore
+    islands of all sizes.
+
+    Two guarantees the raw threshold can't make on its own, handled by
+    connected-component post-processing: the largest landmass must be big
+    enough to carry the city (the sea level auto-adjusts down until it
+    is -- and back up if land swallows the whole map), and single-dot
+    noise specks too small to read as islands get culled.
+
+    On top of that, most runs (EDGE_LANDMASS_CHANCE) also get a secondary
+    landmass hugging the west or east edge and running off-frame -- the
+    way Brooklyn or New Jersey sits on a Manhattan-centered map: an
+    elliptical elevation boost whose center lies beyond the map edge, so
+    the mass visibly continues past the frame. The noise still draws its
+    actual coastline; the boost only guarantees there's ground there."""
     noise = _make_perlin(rng)
-    mask = [[False] * DOT_W for _ in range(DOT_H)]
+    warp_noise = _make_perlin(rng)
     cx, cy = DOT_W / 2, DOT_H / 2
-    a, b = DOT_W * 0.30, DOT_H * 0.48  # ellipse semi-axes
+    warp_scale = NOISE_SCALE * 0.5
+    edge_boost = _edge_landmass_boost(rng)
 
-    for row in range(DOT_H):
-        for col in range(DOT_W):
-            mask[row][col] = _land_at(noise, col, row, cx, cy, a, b, SEA_LEVEL)
+    elevation = [[0.0] * DOT_W for _ in range(DOT_H)]
+    for r in range(DOT_H):
+        for c in range(DOT_W):
+            wx = c + WARP_STRENGTH * _fractal_noise(warp_noise, c * warp_scale, r * warp_scale, 2, 0.5)
+            wy = r + WARP_STRENGTH * _fractal_noise(warp_noise, c * warp_scale + 91.7, r * warp_scale + 43.3, 2, 0.5)
+            e = (_fractal_noise(noise, wx * NOISE_SCALE, wy * NOISE_SCALE, NOISE_OCTAVES, NOISE_PERSISTENCE) + 1) / 2
+            dx, dy = (c - cx) / (DOT_W / 2), (r - cy) / (DOT_H / 2)
+            distance = math.sqrt(dx * dx + dy * dy)
+            elevation[r][c] = e - CENTER_BIAS * (distance ** FALLOFF_POWER)
+            if edge_boost:
+                elevation[r][c] += edge_boost(r, c)
 
-    _add_satellite_islands(mask, noise, rng)
-    return mask
+    total = DOT_W * DOT_H
+    sea = SEA_LEVEL
+    mask = None
+    for _ in range(12):
+        mask = [[elevation[r][c] > sea for c in range(DOT_W)] for r in range(DOT_H)]
+        components = _connected_components(mask)
+        land = sum(len(comp) for comp in components)
+        largest = max((len(comp) for comp in components), default=0)
+        if largest < MAIN_ISLAND_MIN_FRACTION * total:
+            sea -= 0.04   # too little (or too fragmented) land: drop the sea
+        elif land > 0.55 * total:
+            sea += 0.04   # wall-to-wall land: raise it back
+        else:
+            break
+
+    final = [[False] * DOT_W for _ in range(DOT_H)]
+    for component in _connected_components(mask):
+        if len(component) >= MIN_ISLAND_DOTS:
+            for r, c in component:
+                final[r][c] = True
+    return final
 
 
 def _dot_grid(mask: list, rng: random.Random) -> list:

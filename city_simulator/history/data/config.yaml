@@ -58,12 +58,25 @@ map:
   noise_scale: 0.05           # smaller = broader, smoother terrain features
   noise_octaves: 5
   noise_persistence: 0.5
-  falloff_power: 2.2          # higher = sharper edge, lower = softer/larger island
-  sea_level: -0.20            # higher = smaller/patchier landmass, lower = bigger/more solid
-  # More generous than sea_level -- a small satellite island needs a lower
-  # bar to read as solid rather than fragmenting away to nothing at its
-  # small size.
-  satellite_sea_level: -0.30
+  # The archipelago is grown from a domain-warped noise field minus a soft
+  # radial center bias (see citymap.py's _generate_island_mask): land
+  # clusters toward the middle of the map and thins out to scattered
+  # islands toward the edges, with the actual shapes decided by the noise.
+  falloff_power: 1.8          # exponent on the center bias (higher = land hugs the center harder)
+  sea_level: 0.16             # threshold on the biased [0..1] elevation -- higher = less land
+  center_bias: 0.75           # weight of the center bias (0 = pure noise everywhere)
+  warp_strength: 14           # domain-warp amplitude in dots -- bends coastlines into hooks/spits
+  min_island_dots: 6          # islets smaller than this many dots get culled as noise specks
+  # If the biggest landmass comes out smaller than this fraction of the
+  # map, the sea level auto-adjusts down until the city has somewhere to
+  # actually stand (and back up if land floods the whole map).
+  main_island_min_fraction: 0.16
+  # Secondary landmass hugging the west or east edge and running off-frame
+  # (the Brooklyn/New-Jersey effect): an elliptical elevation boost
+  # centered beyond the map edge, coastline still drawn by the noise.
+  # chance 0 disables it; strength is the boost at its core.
+  edge_landmass_chance: 0.8
+  edge_landmass_strength: 0.95
   neighborhood_columns: 2     # east-west slices per era row-band (see citymap.py)
 
 # Opt-in LLM-drawn map (citymap.py's _try_llm_map) -- the LLM draws the

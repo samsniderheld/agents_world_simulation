@@ -57,7 +57,12 @@ NOISE_OCTAVES = _RAW["map"]["noise_octaves"]
 NOISE_PERSISTENCE = _RAW["map"]["noise_persistence"]
 FALLOFF_POWER = _RAW["map"]["falloff_power"]
 SEA_LEVEL = _RAW["map"]["sea_level"]
-SATELLITE_SEA_LEVEL = _RAW["map"]["satellite_sea_level"]
+CENTER_BIAS = _RAW["map"]["center_bias"]
+WARP_STRENGTH = _RAW["map"]["warp_strength"]
+MIN_ISLAND_DOTS = _RAW["map"]["min_island_dots"]
+MAIN_ISLAND_MIN_FRACTION = _RAW["map"]["main_island_min_fraction"]
+EDGE_LANDMASS_CHANCE = _RAW["map"]["edge_landmass_chance"]
+EDGE_LANDMASS_STRENGTH = _RAW["map"]["edge_landmass_strength"]
 NEIGHBORHOOD_COLUMNS = _RAW["map"]["neighborhood_columns"]
 
 # --- LLM-drawn map, opt-in (citymap.py's _try_llm_map) ---------------------
