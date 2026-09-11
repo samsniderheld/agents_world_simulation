@@ -106,7 +106,7 @@ function agentSettingsModalHtml(){
       </div>
     </div>
     <div class="modal-section-label">Agents</div>
-    <div class="modal-body-pad" id="agentPicker">${picker}</div>
+    <div class="modal-body-pad">${picker}</div>
     <div class="modal-actions">
       <button class="primary" data-action="submit-start">▶ Start</button>
     </div>

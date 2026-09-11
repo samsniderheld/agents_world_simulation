@@ -1,12 +1,12 @@
 """Generates a procedural history (1624-1950) for a single NYC-inspired
 city -- a catalog of historical Places (with their full event-by-event
-backstory) and present-day characters, meant to be consumed by some other
-project later. `run_history()` is what server.py's History tab calls on a
-background thread; `main()` is a standalone CLI for offline use that writes
-the same data to history.json/map.txt/characters.json.
+backstory) and present-day characters. `run_history()` is what
+history/jobs.py calls on a background thread; `main()` is a standalone CLI
+for offline use that writes the same data to history.json/map.txt/
+characters.json.
 
 Usage:
-    python3 history_generate.py [--seed N] [--figures-per-era N] [--events-per-figure N] [--out PATH] [--no-llm]
+    python3 -m history.generate [--seed N] [--figures-per-era N] [--events-per-figure N] [--out PATH] [--no-llm]
 """
 
 import argparse
@@ -158,9 +158,9 @@ def to_json(figures, places, events_list, map_data=None, characters_list=None, s
 def run_history(seed=None, figures_per_era=None, events_per_figure=None,
                  characters_count=10, use_llm=True, llm_map=False) -> dict:
     """Everything a full run produces, as one JSON-shaped dict -- no file
-    I/O, no argparse. Called by server.py's /api/history/generate on a
-    background thread; main() below is the standalone-file-writing CLI
-    wrapper around the same steps."""
+    I/O, no argparse. Called by history/jobs.py's background thread (see
+    routes.py's POST /api/history/generate); main() below is the
+    standalone-file-writing CLI wrapper around the same steps."""
     history_log.reset()
     config.LLM_FILL_NAMES = bool(use_llm)
     if not use_llm:

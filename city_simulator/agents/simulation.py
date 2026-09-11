@@ -1,7 +1,7 @@
 """The runnable simulation, decoupled from any particular interface.
 
-server.py's /api/run calls run() on a background thread; everything it
-does is streamed live through recorder.py rather than returned, since the
+agents/jobs.py calls run() on a background thread; everything it does is
+streamed live through recorder.py rather than returned, since the
 frontend is watching the event log, not this function's return value.
 """
 
@@ -99,8 +99,8 @@ def run(ticks: int = 8, chat_model: str = None, embed_model: str = None,
         context_tokens: int = None, tick_sleep: float = 0,
         agent_names: list = None, verbose: bool = False, stop_flag=None):
     """Blocking -- meant to be called on a background thread (see
-    server.py). Configures config.py's overridable settings, builds the
-    chosen agents, and runs the tick loop."""
+    agents/jobs.py). Configures config.py's overridable settings, builds
+    the chosen agents, and runs the tick loop."""
     if chat_model:
         config.CHAT_MODEL = chat_model
     if embed_model:
@@ -132,5 +132,4 @@ def run(ticks: int = 8, chat_model: str = None, embed_model: str = None,
 
     treatment = generate_treatment(world.log, [a.name for a in agents])
     recorder.log("treatment", world.tick, text=treatment)
-    recorder.save("run_log.json")
     citystate.append_agent_run(recorder.to_dict())

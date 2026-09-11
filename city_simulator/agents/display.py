@@ -39,7 +39,8 @@ def agent_colors(names: list) -> dict:
 
 
 # Hex equivalents of _AGENT_PALETTE, same order, so an agent's color in the
-# terminal matches its color in viewer.html (see recorder.py).
+# terminal (--verbose tracing) matches its color in the web UI (agents.js's
+# agentColorFor(), and the map markers/log rows that use it).
 _AGENT_HEX_PALETTE = [
     "#22d3ee",  # cyan
     "#4ade80",  # green

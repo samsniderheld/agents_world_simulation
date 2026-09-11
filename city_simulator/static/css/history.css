@@ -1,6 +1,6 @@
-/* History tab -- generated-city map, generation log, era/place browser,
-   present-day residents. Builds on base.css's tokens/layout/aside/field/
-   details styling. */
+/* Map tab (the map itself) and Logs tab (history summary, era/place
+   browser, present-day residents, the generation log). Builds on
+   base.css's tokens/modal/details styling. */
 
 .masthead-inline{ padding: 20px 18px 0; }
 .masthead-inline h2{ font-size: 22px; font-weight: 700; margin: 0 0 4px; color: var(--text); letter-spacing: 0.02em; }
@@ -48,7 +48,6 @@
   line-height: 1.7;
   color: var(--text);
 }
-.map-plate .neighborhood-key .entry{ cursor: pointer; }
 
 /* Exterior/Interior boxes in the place modal -- the two tagged slots
    entityMediaHtml() picks out of a place's regular (open) media list. */
@@ -118,24 +117,6 @@
 }
 #agentLogColumn .agent-log:empty{ display: none; }
 #agentLogColumn .agent-log + .agent-log{ margin-top: 10px; }
-.map-plate #subwayMapPlate img{
-  display: block;
-  max-width: 100%;
-  border: 1px solid var(--border);
-}
-.map-plate .map-actions{
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-top: 14px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border);
-}
-.map-plate .map-action-status{
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--text-faint);
-}
 .map-plate .neighborhood-key{
   display: flex;
   flex-wrap: wrap;
@@ -151,6 +132,7 @@
   font-family: var(--mono);
   font-size: 11px;
   color: var(--text-dim);
+  cursor: pointer;
 }
 .map-plate .neighborhood-key .swatch{
   width: 10px;

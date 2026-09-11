@@ -182,74 +182,6 @@ function pollHistoryLog(){
   }).catch(() => {});
 }
 
-// --- 1950s subway-map image (via the Visuals tab's fal-backed job slot) ---
-
-function resetSubwayMap(){
-  document.getElementById('subwayMapStatus').textContent = '';
-  document.getElementById('subwayMapPlate').style.display = 'none';
-  document.getElementById('subwayMapHideBtn').style.display = 'none';
-  document.getElementById('subwayMapBtn').disabled = false;
-  document.getElementById('subwayMapBtn').textContent = '🚇 Generate 1950s Subway Map (via fal)';
-}
-
-function showSubwayMap(url){
-  document.getElementById('subwayMapImg').src = '/api/visuals/files/' + url;
-  document.getElementById('subwayMapPlate').style.display = '';
-  document.getElementById('subwayMapHideBtn').style.display = '';
-  document.getElementById('subwayMapBtn').textContent = '🚇 Regenerate Subway Map (via fal)';
-}
-
-function pollSubwayMap(){
-  const statusEl = document.getElementById('subwayMapStatus');
-  fetch('/api/visuals/status').then(r => r.json()).then(d => {
-    const phase = d.phase || 'idle';
-    if (phase === 'running') { setTimeout(pollSubwayMap, 1500); return; }
-    document.getElementById('subwayMapBtn').disabled = false;
-    if (phase === 'error') { statusEl.textContent = d.error || 'generation failed'; return; }
-    if (phase !== 'done') { statusEl.textContent = ''; return; }
-    fetch('/api/visuals/result').then(r => r.json()).then(result => {
-      if (result.kind !== 'subway_map') return;  // some other visuals job finished first
-      if (!result.images || !result.images.length) {
-        statusEl.textContent = 'no image came back';
-        return;
-      }
-      statusEl.textContent = '';
-      showSubwayMap(result.images[0].url);
-    });
-  }).catch(() => {
-    statusEl.textContent = 'lost contact with the server';
-  });
-}
-
-document.getElementById('subwayMapBtn').addEventListener('click', () => {
-  const mapText = hState.data && hState.data.map && hState.data.map.text;
-  if (!mapText) return;
-  const statusEl = document.getElementById('subwayMapStatus');
-  document.getElementById('subwayMapBtn').disabled = true;
-  statusEl.textContent = 'starting…';
-  fetch('/api/visuals/generate-subway-map', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ map_text: mapText }),
-  }).then(r => r.json()).then(d => {
-    if (!d.ok) {
-      document.getElementById('subwayMapBtn').disabled = false;
-      statusEl.textContent = d.error || 'could not start generation';
-      return;
-    }
-    statusEl.textContent = 'generating (this can take a minute)…';
-    pollSubwayMap();
-  });
-});
-
-document.getElementById('subwayMapHideBtn').addEventListener('click', () => {
-  const plate = document.getElementById('subwayMapPlate');
-  const hideBtn = document.getElementById('subwayMapHideBtn');
-  const hidden = plate.style.display === 'none';
-  plate.style.display = hidden ? '' : 'none';
-  hideBtn.textContent = hidden ? 'Hide Subway Map' : 'Show Subway Map';
-});
-
 // --- place / resident cards ---------------------------------------------
 
 function populateTypeFilter(data){
@@ -384,7 +316,6 @@ function renderHistory(data){
   renderHeader(data);
   renderSummary(data);
   renderMap(data);
-  resetSubwayMap();
   populateTypeFilter(data);
   renderEras(data, indexes);
   renderResidents(data);

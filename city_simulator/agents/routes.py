@@ -1,19 +1,14 @@
-"""Flask blueprint for the Agents tab's API -- thin view functions that
-parse the request and delegate to jobs.py/simulation.py/recorder.py.
+"""Flask blueprint for the agent-simulation API -- thin view functions
+that parse the request and delegate to jobs.py/simulation.py/recorder.py.
 """
 
-import json
-import time
-
-from flask import Blueprint, Response, request
+from flask import Blueprint, request
 
 from jsonutil import json_response
 
 from . import jobs, llm, recorder, simulation
 
 bp = Blueprint("agents", __name__, url_prefix="/api/agents")
-
-STREAM_POLL_SECONDS = 0.25
 
 
 @bp.get("/roster")
@@ -46,34 +41,6 @@ def events():
     since = int(request.args.get("since", "0"))
     events, total = recorder.snapshot(since)
     return json_response({"events": events, "next": total})
-
-
-@bp.get("/stream")
-def stream():
-    """Server-Sent Events: push new recorder events as they land."""
-    since = int(request.args.get("since", "0"))
-
-    def generate():
-        # An immediate SSE comment line (ignored by EventSource, unlike a
-        # "data:" line) so Werkzeug flushes the response headers right
-        # away instead of buffering until the first real event -- without
-        # this, a client connecting before anything has happened yet sees
-        # no response at all until something finally occurs. The same
-        # comment doubles as a keepalive on every empty poll after that.
-        yield ": connected\n\n"
-        cursor = since
-        while True:
-            events, total = recorder.snapshot(cursor)
-            if events:
-                for ev in events:
-                    yield f"data: {json.dumps(ev, default=str)}\n\n"
-            else:
-                yield ": keepalive\n\n"
-            cursor = total
-            time.sleep(STREAM_POLL_SECONDS)
-
-    return Response(generate(), mimetype="text/event-stream",
-                     headers={"Cache-Control": "no-cache", "Connection": "keep-alive"})
 
 
 @bp.post("/run")

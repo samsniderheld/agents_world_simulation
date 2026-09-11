@@ -1,9 +1,9 @@
-"""A simple append-only log of history-generation progress lines, so
-server.py's History tab can show them live (like a terminal) while a
-generation job runs on its background thread -- the plain-text analog of
-recorder.py's structured event log on the agent side. history_generate.py
-calls log() right alongside its existing print() calls; nothing about the
-standalone CLI's terminal output changes.
+"""A simple append-only log of history-generation progress lines, so the
+Logs tab can show them live (like a terminal) while a generation job runs
+on its background thread -- the plain-text analog of recorder.py's
+structured event log on the agent side. generate.py calls log() right
+alongside its existing print() calls; nothing about the standalone CLI's
+terminal output changes.
 """
 
 import threading

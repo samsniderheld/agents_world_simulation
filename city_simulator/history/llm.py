@@ -1,10 +1,10 @@
 """Thin wrapper around a local Ollama server.
 
-No embeddings here -- unlike agent_simulator, this project has no memory
-stream to score by relevance. Just chat completion, used sparingly by
-grammar.py/events.py to fill in proper nouns and prose flourishes (see
-config.py's LLM_FILL_NAMES / LLM_FLOURISH_RATE); everything else is pure
-grammar-driven generation that works with Ollama offline.
+No embeddings here -- unlike agents/memory.py's memory stream, this
+package has nothing to score by relevance. Just chat completion, used
+sparingly by grammar.py/events.py to fill in proper nouns and prose
+flourishes (see config.py's LLM_FILL_NAMES / LLM_FLOURISH_RATE); everything
+else is pure grammar-driven generation that works with Ollama offline.
 """
 
 import requests
