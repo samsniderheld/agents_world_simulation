@@ -160,6 +160,137 @@ vivid rewrite via `_maybe_flourish`), never removes the grammar fallback.
 Every LLM call in this package follows that same shape: try it, validate
 the reply loosely, fall back silently on any failure or timeout.
 
+## Worked example: one event line, start to finish
+
+Everything above, traced through one concrete Gospel line. Nothing here is
+invented for illustration — every value comes from a real code path or a
+real word list, just with the random rolls pinned so the trace is
+followable. Assume `LLM_FILL_NAMES` is off, so every step is pure grammar
+(a later note shows where an LLM flourish could still land on top).
+
+**Setup — two events already resolved earlier in this figure's schedule:**
+
+```
+entities.new_figure("english_colonial", rng)
+  role   = rng.choice(roles_for_era("english_colonial"))  → "Ship Captain"
+  domain = rng.choice(DOMAINS)                             → "the harbor"
+  name   = names.figure_name(...)  → grammar fallback: english given/surname
+                                       lists → "Thomas Beekman"
+  birth_year = 1698
+→ Figure(id=fig_1, name="Thomas Beekman", role="Ship Captain",
+         domain="the harbor", era_id="english_colonial", birth_year=1698,
+         properties={allies: [], rivals: [], reputation: [], founded_places: []})
+
+[1706] template = "found_place" (always eligible — no precondition)
+  _create_place: place_type = rng.choice(place_types_for_era(...)) → "Shipyard/Dock/Warehouse"
+                 naming_style["Shipyard/Dock/Warehouse"] = "firm"
+                 → "Beekman & Sons" (founder_surname + " & Sons")
+  → Place(id=place_1, name="Beekman & Sons", place_type="Shipyard/Dock/Warehouse",
+          domain="the harbor" (inherited from the figure), founded_year=1706,
+          founding_figure_id=fig_1, current_owner_figure_id=fig_1, status="active")
+  fig_1.properties["founded_places"] = [place_1]
+  Gospel: "Thomas Beekman opened the doors of Beekman & Sons in 1706, a
+           shipyard that would carry the mark of the harbor for years to come."
+
+[1715] template = "rivalry_formed" (requires_place: null — no place involved)
+  _fx_rivalry_formed: faction = rng.choice(FACTIONS not already a rival) → "the harbor pilots"
+  fig_1.properties["rivals"] = ["the harbor pilots"]
+  Gospel: "Thomas Beekman made an enemy of the harbor pilots in 1715."
+```
+
+Nothing about these two events refers to each other. `rivalry_formed` never
+mentions a place; `found_place` never mentions a rival. The only thing they
+share is that both mutated the *same* `fig_1.properties` bag — which is
+exactly what the next event reads.
+
+**The event being diagrammed — year 1727:**
+
+```
+┌─ pick_event_template(fig_1, all_places) ──────────────────────────────┐
+│ eligible = every template whose precondition passes and (if           │
+│            requires_place == "existing") whose place_filter matches   │
+│            at least one place                                         │
+│ "place_destroyed": requires_place="existing", place_filter=           │
+│   active_place → Beekman & Sons qualifies (status == "active")        │
+│ rng.choice(eligible) → "place_destroyed"                               │
+└─────────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─ resolve_event(template, fig_1, all_places, era, 1727, rng) ──────────┐
+│ requires_place == "existing" → place = rng.choice(places matching     │
+│                                  active_place)  →  Beekman & Sons      │
+│                                                                         │
+│ extra = _fx_place_destroyed(fig_1, place, era, 1727, rng):             │
+│    disaster = rng.choice(DISASTERS)         → "fire"                  │
+│    place.status = "destroyed"; place.closed_year = 1727    (mutation) │
+│    cause = _pick_cause(fig_1, rng):                                    │
+│        rivals = ["the harbor pilots"], allies = []                    │
+│        roll = 0.30  (< 0.45)                                          │
+│        → "the persecution of " + rng.choice(rivals)                   │
+│        → "the persecution of the harbor pilots"        ◄── the 1715   │
+│                                                              event,    │
+│                                                              read back │
+│    extra = {"disaster": "fire", "cause": "the persecution of the      │
+│             harbor pilots"}                                            │
+│                                                                         │
+│ context = _build_context(fig_1, place, era, 1727, extra):             │
+│    {figure: "Thomas Beekman", role: "Ship Captain", domain: "the      │
+│     harbor", year: 1727, era: "New York (English Colonial)",          │
+│     place: "Beekman & Sons", place_noun: "shipyard",                  │
+│     disaster: "fire", cause: "the persecution of the harbor pilots"}  │
+│                                                                         │
+│ grammar.expand(template.grammar, "TEXT", context, rng):                │
+│    rng.choice(12 weighted TEXT rules) →                                │
+│    "{figure} watched {place} go down to {disaster} in {year}, and     │
+│     blamed {cause}."                                                   │
+│    → substitute every {token} from context                            │
+└─────────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+       "Thomas Beekman watched Beekman & Sons go down to fire in 1727,
+        and blamed the persecution of the harbor pilots."
+                              │
+                              ▼
+┌─ _maybe_flourish(text, "place_destroyed", rng) ───────────────────────┐
+│ "place_destroyed" is in notable_template_ids (events.yaml) → eligible │
+│ if rng.random() <= LLM_FLOURISH_RATE and llm.available():             │
+│    ask Ollama to rewrite it more vividly, every name/date/fact pinned │
+│    in the prompt so none can be invented or dropped, e.g.:            │
+│    "Fire took Beekman & Sons in the winter of 1727, and more than a   │
+│     few said the harbor pilots had finally settled their score with   │
+│     Thomas Beekman."                                                  │
+│ else (or on any failure/timeout): keep the plain grammar sentence     │
+│    unchanged — this is the offline-safe default                       │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**What lands in the JSON, and what prints to the log** (`generate()`,
+back in the main loop):
+
+```python
+event_record = {
+    "id": "evt_84", "era_id": "english_colonial", "year": 1727,
+    "template_id": "place_destroyed", "figure_id": "fig_1",
+    "place_id": "place_1",
+    "gospel_text": "Thomas Beekman watched Beekman & Sons go down to "
+                   "fire in 1727, and blamed the persecution of the "
+                   "harbor pilots.",
+}
+```
+appended to both `all_events` and `place_1.history`, and printed/logged as:
+```
+[1727] (New York (English Colonial)) Thomas Beekman: Thomas Beekman watched
+Beekman & Sons go down to fire in 1727, and blamed the persecution of the
+harbor pilots.
+```
+
+From here, `place_1.status == "destroyed"` is exactly what a later
+`rebuilt_place` event's `place_filter` would key off of, and this event's
+own `figure_id`/`place_id` are what group it under the right figure/place
+in the final JSON and (via `citymap.py`) locate it on the map. The one
+thing this event did *not* need to know about — the 1715 rivalry — is the
+one thing that made its `{cause}` feel motivated instead of arbitrary.
+
 ## After the event loop: map, characters, summary
 
 `run_history()` runs three more steps after `generate()` returns, each
