@@ -185,6 +185,7 @@
 .place-card .name{ font-weight: 700; font-size: 15px; margin: 0 0 2px; color: var(--text); }
 .place-card .meta{ font-size: 12px; color: var(--text-dim); margin-bottom: 8px; }
 .place-card .meta .status-destroyed{ color: var(--bad); font-style: italic; }
+.place-card .architecture{ font-size: 13px; line-height: 1.6; color: var(--text); margin-bottom: 8px; }
 .place-card details summary{
   cursor: pointer;
   font-family: var(--mono);

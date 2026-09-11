@@ -146,6 +146,7 @@ def to_json(figures, places, events_list, map_data=None, characters_list=None, s
              "founded_year": p.founded_year, "closed_year": p.closed_year, "status": p.status,
              "founding_figure_id": p.founding_figure_id,
              "current_owner_figure_id": p.current_owner_figure_id,
+             "architecture": p.architecture,
              "properties": p.properties, "history": p.history}
             for p in places
         ],

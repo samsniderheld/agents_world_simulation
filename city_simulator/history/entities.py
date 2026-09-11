@@ -30,8 +30,8 @@ def new_id(prefix: str) -> str:
     return f"{prefix}{next(_id_counter)}"
 
 
-DOMAINS = _RAW["domains"]
-FACTIONS = _RAW["factions"]
+_DOMAINS_BY_ERA = _RAW["domains"]
+_FACTIONS_BY_ERA = _RAW["factions"]
 ROLES = _RAW["roles"]
 PLACE_TYPES = _RAW["place_types"]
 PLACE_TYPE_NOUN = _RAW["place_type_nouns"]
@@ -43,6 +43,14 @@ def roles_for_era(era_id: str) -> list:
 
 def place_types_for_era(era_id: str) -> list:
     return [pt for pt, eras in PLACE_TYPES.items() if eras is None or era_id in eras]
+
+
+def domains_for_era(era_id: str) -> list:
+    return _DOMAINS_BY_ERA[era_id]
+
+
+def factions_for_era(era_id: str) -> list:
+    return _FACTIONS_BY_ERA[era_id]
 
 
 @dataclass
@@ -80,6 +88,7 @@ class Place:
     current_owner_figure_id: str
     status: str = "active"          # active | destroyed | closed
     closed_year: int = None
+    architecture: str = ""          # one-sentence description; see architecture.py
     properties: dict = field(default_factory=dict)   # free-form tags, e.g. "notorious", "renowned"
     history: list = field(default_factory=list)       # list[HistoryEntry]
 
@@ -87,7 +96,7 @@ class Place:
 def new_figure(era_id: str, rng: random.Random) -> Figure:
     era = ERAS_BY_ID[era_id]
     role = rng.choice(roles_for_era(era_id))
-    domain = rng.choice(DOMAINS)
+    domain = rng.choice(domains_for_era(era_id))
     birth_year = rng.randint(era.start_year, era.end_year)
     name = names.figure_name(era_id, role, rng)
     return Figure(
@@ -96,10 +105,11 @@ def new_figure(era_id: str, rng: random.Random) -> Figure:
     )
 
 
-def new_place(figure: Figure, place_type: str, name: str, year: int) -> Place:
+def new_place(figure: Figure, place_type: str, name: str, year: int, architecture: str = "") -> Place:
     place = Place(
         id=new_id("place_"), name=name, place_type=place_type, domain=figure.domain,
         founded_year=year, founding_figure_id=figure.id, current_owner_figure_id=figure.id,
+        architecture=architecture,
     )
     figure.properties["founded_places"].append(place.id)
     return place

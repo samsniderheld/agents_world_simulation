@@ -1,0 +1,150 @@
+# Real architectural styles/materials/features per era, used to ground
+# both the offline grammar fallback and the LLM prompt in architecture.py's
+# describe() -- crossed with place_scale below (what kind of building this
+# place_type actually is) so a description is never just "an era-styled
+# building" but "a cramped tenement" vs. "an imposing counting house" built
+# in that era's real style.
+eras:
+  dutch_colonial:
+    style: "Dutch Colonial"
+    materials:
+      - "red brick laid in cross-bond"
+      - "rough-hewn fieldstone"
+      - "heavy timber framing"
+      - "hand-split cedar shingles"
+    features:
+      - "a stepped gable facing the street"
+      - "small leaded-glass windows"
+      - "a steep jerkinhead roof"
+      - "a low stone stoop worn smooth"
+      - "shutters banded in hand-forged iron"
+    adjectives: ["squat", "narrow-fronted", "steep-roofed", "sturdy"]
+
+  english_colonial:
+    style: "Georgian"
+    materials:
+      - "brick laid in Flemish bond"
+      - "white-painted clapboard"
+      - "dressed stone lintels"
+      - "hand-planed wood paneling"
+    features:
+      - "a symmetrical facade of tall sash windows"
+      - "a fanlight over the door"
+      - "a hipped roof with dormers"
+      - "paneled shutters"
+      - "a modillioned cornice"
+    adjectives: ["formal", "symmetrical", "boxy", "dignified"]
+
+  early_republic:
+    style: "Federal"
+    materials:
+      - "red brick with white marble trim"
+      - "polished marble stoops"
+      - "wrought iron railings"
+      - "Flemish-bond brick"
+    features:
+      - "a fanlight and sidelights framing the door"
+      - "tall narrow windows with six-over-six panes"
+      - "a low-pitched roof hidden behind a parapet"
+      - "delicate iron balconies"
+      - "a plain, restrained doorway"
+    adjectives: ["restrained", "elegant", "austere", "upright"]
+
+  antebellum:
+    style: "Greek Revival"
+    materials:
+      - "brownstone"
+      - "cast iron"
+      - "brick with stone quoins"
+      - "painted stucco"
+    features:
+      - "a pedimented doorway framed by columns"
+      - "tall parlor-floor windows"
+      - "a heavy projecting cornice"
+      - "an iron areaway fence"
+      - "a raised stone stoop"
+    adjectives: ["imposing", "temple-fronted", "heavy", "severe"]
+
+  gilded_age:
+    style: "Romanesque Revival / Beaux-Arts"
+    materials:
+      - "rusticated brownstone"
+      - "cast iron storefront columns"
+      - "carved limestone"
+      - "glazed terracotta ornament"
+    features:
+      - "an ornate cornice crowded with carved detail"
+      - "round-arched windows"
+      - "a steep mansard roof"
+      - "elaborate wrought-iron grillwork"
+      - "a heavy stone porte-cochere"
+    adjectives: ["ornate", "monumental", "opulent", "soot-blackened"]
+
+  progressive:
+    style: "early steel-frame / Beaux-Arts commercial"
+    materials:
+      - "glazed white terracotta"
+      - "exposed structural steel"
+      - "pressed brick"
+      - "plate glass"
+    features:
+      - "a fire escape zigzagging up the facade"
+      - "a narrow dumbbell air shaft"
+      - "large plate-glass storefront windows"
+      - "a cornice of stamped tin"
+      - "a wooden water tower on the roof"
+    adjectives: ["crowded", "utilitarian", "soot-stained", "teeming"]
+
+  prohibition:
+    style: "Art Deco"
+    materials:
+      - "polished black granite"
+      - "chrome and glass"
+      - "dark enameled panels"
+      - "glazed terracotta"
+    features:
+      - "a stepped, setback silhouette"
+      - "geometric zigzag ornament over the door"
+      - "a discreet, unmarked entrance"
+      - "neon lettering in the window"
+      - "a blacked-out basement doorway"
+    adjectives: ["sleek", "angular", "shadowy", "understated"]
+
+  depression_war:
+    style: "Streamline Moderne / postwar utilitarian"
+    materials:
+      - "poured concrete"
+      - "glass block"
+      - "painted cinderblock"
+      - "aluminum trim"
+    features:
+      - "rounded corners and horizontal banding"
+      - "a wall of glass-block windows"
+      - "a plain flat roof"
+      - "a hand-lettered sign over the door"
+      - "blackout curtains still hanging in the windows"
+    adjectives: ["spare", "functional", "weathered", "unassuming"]
+
+# place_type -> what scale/kind of structure it actually is, independent
+# of era -- this is the other half of the cross product, so a counting
+# house and a tenement built in the same year still read as different
+# buildings, not just the same box in different paint.
+place_scale:
+  Tavern/Bar: "a modest storefront tavern"
+  Restaurant: "a modest storefront restaurant"
+  General Store/Shop: "a narrow storefront shop"
+  Market: "an open-fronted market stall"
+  Church/House of Worship: "an imposing house of worship"
+  Theater/Hall: "a grand public hall"
+  Hotel/Boarding House: "a many-windowed lodging house"
+  Newspaper/Print Shop: "a working print shop"
+  Shipyard/Dock/Warehouse: "a sprawling waterfront warehouse"
+  Bank/Counting House: "an imposing counting house"
+  Tenement/Residence: "a cramped multi-family tenement"
+  Park/Public Square: "an open public square"
+  Government/Civic Building: "a monumental civic building"
+  Factory/Mill: "a sprawling industrial mill"
+  Speakeasy: "an unmarked storefront"
+  Department Store: "a many-storied emporium"
+  Social/Fraternal Club: "a private clubhouse"
+  School: "a plain schoolhouse"

@@ -33,6 +33,7 @@ from pathlib import Path
 
 import yaml
 
+from . import architecture
 from . import config
 from . import entities
 from . import grammar
@@ -69,7 +70,8 @@ def _create_place(figure: "entities.Figure", era, year: int, rng: random.Random)
     place_type = rng.choice(entities.place_types_for_era(era.id))
     surname = figure.name.split()[-1]
     name = names.place_name(place_type, figure.domain, surname, era.id, rng)
-    return entities.new_place(figure, place_type, name, year)
+    style = architecture.describe(place_type, era, rng)
+    return entities.new_place(figure, place_type, name, year, architecture=style)
 
 
 def _build_context(figure, place, era, year: int, extra: dict) -> dict:
@@ -127,6 +129,10 @@ def _fx_rebuilt_place(figure, place, era, year, rng):
     place.status = "active"
     place.closed_year = None
     place.current_owner_figure_id = figure.id
+    # A rebuild can land decades after the original founding, in a
+    # genuinely different architectural era -- so the description is
+    # regenerated, not carried over from whatever style it replaced.
+    place.architecture = architecture.describe(place.place_type, era, rng)
     return {}
 
 
@@ -150,15 +156,17 @@ def _fx_renamed(figure, place, era, year, rng):
 
 
 def _fx_alliance_formed(figure, place, era, year, rng):
-    available = [f for f in entities.FACTIONS if f not in figure.properties["allies"]]
-    faction = rng.choice(available or entities.FACTIONS)
+    era_factions = entities.factions_for_era(figure.era_id)
+    available = [f for f in era_factions if f not in figure.properties["allies"]]
+    faction = rng.choice(available or era_factions)
     figure.properties["allies"].append(faction)
     return {"faction": faction}
 
 
 def _fx_rivalry_formed(figure, place, era, year, rng):
-    available = [f for f in entities.FACTIONS if f not in figure.properties["rivals"]]
-    faction = rng.choice(available or entities.FACTIONS)
+    era_factions = entities.factions_for_era(figure.era_id)
+    available = [f for f in era_factions if f not in figure.properties["rivals"]]
+    faction = rng.choice(available or era_factions)
     figure.properties["rivals"].append(faction)
     return {"faction": faction}
 

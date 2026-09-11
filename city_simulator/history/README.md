@@ -24,8 +24,8 @@ already happened.
 | Concept | What it is | Where |
 |---|---|---|
 | **Era** | One of 8 fixed named periods spanning 1624–1959, each with its own year range and a `description` used as color text. | `eras.py` / `data/eras.yaml` |
-| **Figure** | A person: name, role (Merchant, Gang Boss, Reverend, ...), domain (a one/two-word thematic tag like "the harbor" or "iron"), birth/death year, and a mutable `properties` bag (`allies`, `rivals`, `reputation`, `founded_places`). | `entities.py` |
-| **Place** | A location: name, type (Tavern, Shipyard, Tenement, ...), founding year/figure, current owner, `status` (active/destroyed/closed), and its own append-only `history` list of every event that touched it. | `entities.py` |
+| **Figure** | A person: name, role (Merchant, Gang Boss, Reverend, ...), domain (a one/two-word thematic tag drawn from *that figure's own era* — "the fur trade" for a Dutch colonial figure, "bootlegging" for a Prohibition one; see `entities.py`'s `domains_for_era()`), birth/death year, and a mutable `properties` bag (`allies`, `rivals`, `reputation`, `founded_places`). | `entities.py` |
+| **Place** | A location: name, type (Tavern, Shipyard, Tenement, ...), founding year/figure, current owner, `status` (active/destroyed/closed), a one-sentence `architecture` description (generated once at founding — and regenerated if it's ever rebuilt, since a rebuild can land in a later, differently-styled era — by crossing that era's real architectural style with what kind of building this place_type actually is; see `architecture.py`), and its own append-only `history` list of every event that touched it. | `entities.py` / `architecture.py` |
 | **Event template** | A pool of ~15 kinds of thing that can happen (found a place, feud violence, scandal, rename, ...), each with a grammar for its Gospel text, an optional effect function that mutates a figure/place, and an optional precondition/place-filter gating when it's eligible. | `events.py` / `data/events.yaml` |
 | **Grammar** | A tiny replacement-grammar engine: named symbols, each a list of weighted string rules; `{symbol}` recurses, `{context_key}` fills from the event's context dict. | `grammar.py` |
 | **Gospel text** | The one sentence an event produces — the generator's only real "output" per event; everything else (JSON fields) is bookkeeping in service of producing more of these later. | — |
@@ -172,8 +172,8 @@ followable. Assume `LLM_FILL_NAMES` is off, so every step is pure grammar
 
 ```
 entities.new_figure("english_colonial", rng)
-  role   = rng.choice(roles_for_era("english_colonial"))  → "Ship Captain"
-  domain = rng.choice(DOMAINS)                             → "the harbor"
+  role   = rng.choice(roles_for_era("english_colonial"))    → "Ship Captain"
+  domain = rng.choice(domains_for_era("english_colonial"))  → "the harbor"
   name   = names.figure_name(...)  → grammar fallback: english given/surname
                                        lists → "Thomas Beekman"
   birth_year = 1698
@@ -185,15 +185,26 @@ entities.new_figure("english_colonial", rng)
   _create_place: place_type = rng.choice(place_types_for_era(...)) → "Shipyard/Dock/Warehouse"
                  naming_style["Shipyard/Dock/Warehouse"] = "firm"
                  → "Beekman & Sons" (founder_surname + " & Sons")
+                 architecture.describe("Shipyard/Dock/Warehouse", era, rng):
+                   place_scale["Shipyard/Dock/Warehouse"] = "a sprawling waterfront warehouse"
+                   english_colonial style = "Georgian"
+                   → "A sprawling waterfront warehouse, formal and built of
+                      brick laid in Flemish bond, notable for a hipped roof
+                      with dormers."
   → Place(id=place_1, name="Beekman & Sons", place_type="Shipyard/Dock/Warehouse",
           domain="the harbor" (inherited from the figure), founded_year=1706,
-          founding_figure_id=fig_1, current_owner_figure_id=fig_1, status="active")
+          founding_figure_id=fig_1, current_owner_figure_id=fig_1, status="active",
+          architecture="A sprawling waterfront warehouse, formal and built of
+                        brick laid in Flemish bond, notable for a hipped roof
+                        with dormers.")
   fig_1.properties["founded_places"] = [place_1]
   Gospel: "Thomas Beekman opened the doors of Beekman & Sons in 1706, a
            shipyard that would carry the mark of the harbor for years to come."
 
 [1715] template = "rivalry_formed" (requires_place: null — no place involved)
-  _fx_rivalry_formed: faction = rng.choice(FACTIONS not already a rival) → "the harbor pilots"
+  _fx_rivalry_formed: era_factions = factions_for_era(fig_1.era_id)  (fig_1 is
+                       "english_colonial") → faction = rng.choice(era_factions
+                       not already a rival) → "the harbor pilots"
   fig_1.properties["rivals"] = ["the harbor pilots"]
   Gospel: "Thomas Beekman made an enemy of the harbor pilots in 1715."
 ```
@@ -381,8 +392,12 @@ neighborhoods
 Every knob mentioned above — figures/events per era, the LLM flourish
 rate, every map-noise parameter, chat-model tiers by available RAM — lives
 in `data/config.yaml`, loaded once by `config.py`. All *content* — era
-definitions, domains/factions/roles/place-types-and-which-eras-they're
-valid-in, name word lists per era, event templates and their word pools,
+definitions, 10 domains and 10 factions per era (`entities.yaml`, looked
+up by `domains_for_era()`/`factions_for_era()` so a figure only ever gets
+a domain/rival/ally that actually fits its own era), roles/place-types and
+which eras each is valid in, name word lists per era, event templates and
+their word pools, each era's real architectural style/material/feature
+word pools plus each place_type's building scale (`architecture.yaml`),
 character bio templates — lives in the matching `data/*.yaml` file, not in
 the `.py` files, which hold only behavior (see each module's docstring for
 exactly which YAML backs it).

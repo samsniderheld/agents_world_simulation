@@ -289,13 +289,13 @@ function planHtml(plan){
 // an agent's marker still works when nothing has run yet this session.
 function agentBasicInfo(name){
   const live = aState.agents.find(a => a.name === name);
-  if (live) return { name: live.name, age: live.age, traits: live.traits, location: live.location };
   const character = hState.data && hState.data.characters
     ? hState.data.characters.find(c => c.name === name) : null;
+  if (live) return { name: live.name, age: live.age, traits: live.traits, location: live.location, bio: character ? character.bio : '' };
   if (!character) return null;
   let traits = (character.occupation || '').trim();
   if (character.quirk) traits = traits ? `${traits}; ${character.quirk}` : character.quirk;
-  return { name: character.name, age: character.age, traits: traits || 'a longtime local', location: character.place_name || '' };
+  return { name: character.name, age: character.age, traits: traits || 'a longtime local', location: character.place_name || '', bio: character.bio || '' };
 }
 
 // Reads the agent's *persistent* record (citystate/store.py's
@@ -318,7 +318,7 @@ function openAgentModal(name){
       <div class="modal-sub">age ${escapeHtml(String(agent.age))} · ${escapeHtml(agent.location || '')}</div>
     </div>
     ${agent.traits ? `<div class="modal-desc">${escapeHtml(agent.traits)}</div>` : ''}
-    <div class="modal-body-pad">${entityMediaHtml(entityId, 'agent', `Describe a portrait of ${agent.name}…`)}</div>
+    <div class="modal-body-pad">${entityMediaHtml(entityId, 'agent', agentMediaPrompt(agent))}</div>
     <div class="modal-section-label">Plans</div>
     <div class="agent-plans" id="agentModalPlans"></div>
     <div class="modal-section-label">Log</div>

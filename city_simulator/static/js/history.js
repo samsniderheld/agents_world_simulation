@@ -210,11 +210,12 @@ function placeCardHtml(place){
     <div class="place-card" id="place-${escapeHtml(place.id)}" data-type="${escapeHtml(place.place_type)}" data-status="${escapeHtml(place.status)}" data-hay="${escapeHtml(hay)}">
       <div class="name">${escapeHtml(place.name)}</div>
       <div class="meta">${escapeHtml(place.place_type)} · domain: ${escapeHtml(place.domain)} · <span class="${statusClass}">${statusText}</span></div>
+      ${place.architecture ? `<div class="architecture">${escapeHtml(place.architecture)}</div>` : ''}
       <details>
         <summary>${place.history.length} recorded event${place.history.length === 1 ? '' : 's'}</summary>
         <div class="history">${historyHtml}</div>
       </details>
-      ${entityMediaHtml(place.id, 'place', `Describe a photo of ${place.name}…`, PLACE_MEDIA_TAGS)}
+      ${entityMediaHtml(place.id, 'place', placeMediaPrompt(place), PLACE_MEDIA_TAGS)}
     </div>
   `;
 }
@@ -263,7 +264,7 @@ function residentCardHtml(person){
       ${person.quirk ? `<div class="quirk">${escapeHtml(person.quirk)}</div>` : ''}
       <div class="bio">${escapeHtml(person.bio)}</div>
       ${linkHtml}
-      ${person.id ? entityMediaHtml(person.id, 'character', `Describe a portrait of ${person.name}…`) : ''}
+      ${person.id ? entityMediaHtml(person.id, 'character', characterMediaPrompt(person)) : ''}
     </div>
   `;
 }

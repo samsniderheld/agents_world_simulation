@@ -68,13 +68,45 @@ function entityThumbHtml(item){
   return `<div class="entity-thumb">${media}<button class="entity-thumb-remove" data-remove-media="${escapeHtml(item.id)}" title="Remove">×</button></div>`;
 }
 
+// Default generation-prompt text for a place/character/agent's "+ Media"
+// box, built from what the generator already knows about them (a place's
+// architecture.py description, a character's bio) rather than leaving the
+// user to describe someone/something from scratch. Still just a starting
+// value in an editable input -- see entityMediaHtml -- not sent anywhere
+// until the user hits Generate.
+function placeMediaPrompt(place){
+  let text = place.name;
+  if (place.architecture) text += `: ${place.architecture}`;
+  text += ` Built ${place.founded_year}`;
+  text += place.status === 'active' ? '.' : `, ${place.status}${place.closed_year ? ` ${place.closed_year}` : ''}.`;
+  return text;
+}
+
+function characterMediaPrompt(person){
+  let text = `${person.name}, ${person.age}, ${person.occupation}.`;
+  if (person.quirk) text += ` ${person.quirk}.`;
+  if (person.bio) text += ` ${person.bio}`;
+  return text;
+}
+
+function agentMediaPrompt(agent){
+  let text = `${agent.name}, age ${agent.age}.`;
+  if (agent.traits) text += ` ${agent.traits}.`;
+  if (agent.bio) text += ` ${agent.bio}`;
+  return text;
+}
+
 // Rendered once as part of a card/modal's own HTML, then refreshed in
 // place (see refreshEntityMediaDom) after a generation completes.
-// `tags`, if given (e.g. ["exterior", "interior"] for a place), adds a
+// `defaultPrompt` (built by placeMediaPrompt/characterMediaPrompt/
+// agentMediaPrompt above) prefills the prompt input as an editable
+// starting value, not just a placeholder -- so Generate works right away
+// with what the generator already knows, but the user can still type over
+// it. `tags`, if given (e.g. ["exterior", "interior"] for a place), adds a
 // small tag picker to the generate form so a new image/video can be
 // filed under one of those slots -- see citymap.js's place modal for
 // where the tagged boxes above this strip read them back out.
-function entityMediaHtml(entityId, entityType, promptHint, tags){
+function entityMediaHtml(entityId, entityType, defaultPrompt, tags){
   const items = entityMediaList(entityId);
   const hasImage = items.some(m => m.kind === 'image');
   const tagPicker = tags && tags.length
@@ -90,7 +122,7 @@ function entityMediaHtml(entityId, entityType, promptHint, tags){
         <button class="entity-media-toggle" data-action="toggle-media-form">+ Media</button>
       </div>
       <div class="entity-media-form" hidden>
-        <input type="text" class="media-prompt-input" placeholder="${escapeHtml(promptHint)}" />
+        <input type="text" class="media-prompt-input" placeholder="Describe the image…" value="${escapeHtml(defaultPrompt || '')}" />
         ${tagPicker}
         <div class="media-form-actions">
           <button data-action="gen-image">Generate Image</button>
@@ -104,15 +136,17 @@ function entityMediaHtml(entityId, entityType, promptHint, tags){
 
 // Re-renders every on-page copy of one entity's media strip (a place can
 // appear both in its map modal and, in principle, elsewhere) by rebuilding
-// each from scratch with the same promptHint/tags it already had.
+// each from scratch, carrying forward whatever's currently in the prompt
+// input -- including any edit the user made -- rather than resetting it
+// back to the generated default.
 function refreshEntityMediaDom(entityId){
   document.querySelectorAll(`.entity-media[data-entity-id="${CSS.escape(entityId)}"]`).forEach(wrap => {
     const entityType = wrap.dataset.entityType;
-    const promptHint = wrap.querySelector('.media-prompt-input').placeholder;
+    const currentPrompt = wrap.querySelector('.media-prompt-input').value;
     const tagSelect = wrap.querySelector('.media-tag-input');
     const tags = tagSelect ? Array.from(tagSelect.options).map(o => o.value).filter(Boolean) : null;
     const temp = document.createElement('div');
-    temp.innerHTML = entityMediaHtml(entityId, entityType, promptHint, tags);
+    temp.innerHTML = entityMediaHtml(entityId, entityType, currentPrompt, tags);
     wrap.replaceWith(temp.firstElementChild);
     document.dispatchEvent(new CustomEvent('entity-media-refreshed', { detail: { entityId } }));
   });

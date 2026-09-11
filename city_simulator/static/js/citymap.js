@@ -498,10 +498,11 @@ function openPlaceModal(cm, placeId, fromNid){
       ${founder ? `<span>founded by ${escapeHtml(founder.name)}</span>` : ''}
       ${owner && owner !== founder ? `<span>last held by ${escapeHtml(owner.name)}</span>` : ''}
     </div>
+    ${place.architecture ? `<div class="modal-desc">${escapeHtml(place.architecture)}</div>` : ''}
     <div class="place-media-boxes" id="placeMediaBoxes" data-place-id="${escapeHtml(place.id)}">
       ${PLACE_MEDIA_TAGS.map(t => placeMediaBoxHtml(place.id, t)).join('')}
     </div>
-    <div class="modal-body-pad">${entityMediaHtml(place.id, 'place', `Describe a photo of ${place.name}…`, PLACE_MEDIA_TAGS)}</div>
+    <div class="modal-body-pad">${entityMediaHtml(place.id, 'place', placeMediaPrompt(place), PLACE_MEDIA_TAGS)}</div>
     <div class="modal-section-label">History</div>
     ${timeline}
   `, { wide: true });
