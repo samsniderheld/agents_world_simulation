@@ -23,14 +23,18 @@
       <div class="map-plate">
         <div class="label">A Map of the City, By Era of Settlement</div>
         <div class="map-columns">
-          <div class="map-column">
+          <div class="map-column map-primary">
             <div class="city-map-wrap">
               <canvas id="cityCanvas" class="city-canvas" style="display:none"></canvas>
-              <div class="city-map-hint" id="cityMapHint" style="display:none">Click a neighborhood, a numbered place, or an agent marker for details</div>
             </div>
             <pre id="mapText"></pre>
             <div class="caption" id="mapCaption"></div>
             <div class="neighborhood-key" id="neighborhoodKey"></div>
+          </div>
+          <div class="map-column" id="agentLogColumn">
+            <div class="map-column-label">Agent Activity Log</div>
+            <div class="agent-log" id="agentLogHistory"></div>
+            <div class="agent-log" id="agentLogLive"></div>
           </div>
           <div class="map-column" id="subwayMapPlate" style="display:none">
             <div class="map-column-label">1950s Subway Map</div>

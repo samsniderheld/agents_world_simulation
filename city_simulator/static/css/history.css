@@ -101,6 +101,7 @@
   flex-wrap: wrap;
 }
 .map-plate .map-column{ flex: 1 1 340px; min-width: 0; }
+.map-plate .map-column.map-primary{ flex: 2 1 480px; }
 .map-plate .map-column-label{
   font-family: var(--mono);
   font-size: 10px;
@@ -109,6 +110,14 @@
   color: var(--text-faint);
   margin-bottom: 8px;
 }
+#agentLogColumn .agent-log{
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+}
+#agentLogColumn .agent-log:empty{ display: none; }
+#agentLogColumn .agent-log + .agent-log{ margin-top: 10px; }
 .map-plate #subwayMapPlate img{
   display: block;
   max-width: 100%;

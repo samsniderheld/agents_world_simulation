@@ -68,12 +68,10 @@ function renderMap(data){
   const map = data.map;
   const canvas = document.getElementById('cityCanvas');
   const pre = document.getElementById('mapText');
-  const hint = document.getElementById('cityMapHint');
   document.getElementById('mapCaption').textContent = (map && map.caption) || '';
 
   if (!map || typeof map !== 'object' || !map.graphic) {
     canvas.style.display = 'none';
-    hint.style.display = 'none';
     pre.style.display = '';
     pre.textContent = map ? (map.body || map.text || '') : (map || '');
     document.getElementById('neighborhoodKey').innerHTML = '';
@@ -82,7 +80,6 @@ function renderMap(data){
 
   pre.style.display = 'none';
   canvas.style.display = '';
-  hint.style.display = '';
   redrawCityMap();
 
   const keyEl = document.getElementById('neighborhoodKey');

@@ -1,10 +1,12 @@
 """Flask blueprint for the persisted city record's own small API --
-attaching/removing media on a character or place. The city payload itself
-is still read through /api/history/data (history/routes.py); this
-blueprint only covers what history/routes.py doesn't own: media records.
+attaching/removing media on a character or place, serving that media
+(now that it lives under citystate/data/ instead of visuals/data/), and
+looking up one agent's full persistent record. The composed city payload
+itself is still read through /api/history/data (history/routes.py); this
+blueprint only covers what that route doesn't.
 """
 
-from flask import Blueprint, request
+from flask import Blueprint, request, send_from_directory
 
 from jsonutil import json_response
 
@@ -19,6 +21,19 @@ def state():
     if payload is None:
         return json_response({"error": "no active city"}, status=404)
     return json_response(payload)
+
+
+@bp.get("/agents/<agent_id>")
+def agent_detail(agent_id):
+    agent = store.get_agent(agent_id)
+    if agent is None:
+        return json_response({"error": "no such agent"}, status=404)
+    return json_response(agent)
+
+
+@bp.get("/files/<path:filename>")
+def files(filename):
+    return send_from_directory(store.DATA_DIR, filename)
 
 
 @bp.post("/media")

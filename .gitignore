@@ -14,5 +14,6 @@ city_simulator/visuals/data/outputs/*
 !city_simulator/visuals/data/uploads/.gitkeep
 !city_simulator/visuals/data/outputs/.gitkeep
 
-# The persisted active city -- generated state, not source
-city_simulator/citystate/data/*.json
+# The persisted active city -- generated state, not source (history.json/
+# locations.json/agents/*/agent.json plus each entity's own media/ dir)
+city_simulator/citystate/data/

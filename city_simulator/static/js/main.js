@@ -13,6 +13,14 @@ function fileUrl(relativeUrl){
   return '/api/visuals/files/' + relativeUrl;
 }
 
+// Entity-attached media (place/agent portraits, exterior/interior shots)
+// physically lives under citystate/data/ now, not visuals/data/ -- see
+// citystate/store.py's add_media(). fileUrl() above stays in use for
+// anything that's still in the shared visuals pool (the subway-map image).
+function cityFileUrl(relativeUrl){
+  return '/api/city/files/' + relativeUrl;
+}
+
 // --- shared modal shell ------------------------------------------------
 //
 // One overlay for the whole app (settings forms, place/agent detail,
@@ -65,8 +73,8 @@ function latestTaggedMedia(entityId, tag){
 
 function entityThumbHtml(item){
   const media = item.kind === 'video'
-    ? `<video src="${fileUrl(item.url)}" muted loop playsinline></video>`
-    : `<img src="${fileUrl(item.url)}" alt="${escapeHtml(item.prompt)}" />`;
+    ? `<video src="${cityFileUrl(item.url)}" muted loop playsinline></video>`
+    : `<img src="${cityFileUrl(item.url)}" alt="${escapeHtml(item.prompt)}" />`;
   return `<div class="entity-thumb">${media}<button class="entity-thumb-remove" data-remove-media="${escapeHtml(item.id)}" title="Remove">×</button></div>`;
 }
 

@@ -26,6 +26,41 @@
   color: var(--text);
 }
 
+/* An agent's persisted plans (agents/<id>/agent.json's "plans" -- see
+   citystate/store.py), shown in their modal above the log. */
+.agent-plans{ padding: 4px 18px 8px; }
+.agent-plan{
+  margin-bottom: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px dashed var(--border);
+}
+.agent-plan:last-child{ border-bottom: none; margin-bottom: 0; }
+.agent-plan-meta{
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin-bottom: 4px;
+}
+.agent-plan ol{ margin: 0; padding-left: 20px; }
+.agent-plan li{ font-size: 13px; line-height: 1.6; color: var(--text); }
+
+/* Divides an agent's flattened log into the separate runs it's drawn
+   from -- their log spans every run they've been part of, not just the
+   latest one (see agents.js's openAgentModal()). */
+.agent-run-header{
+  margin: 10px 18px 2px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.agent-run-header:first-child{ border-top: none; margin-top: 0; padding-top: 0; }
+
 /* Flattened per-agent event log, shown inside that agent's modal --
    reuses the same badge+content row shape the old live outline view had,
    just as one plain scrolling list instead of nested plan/step columns. */

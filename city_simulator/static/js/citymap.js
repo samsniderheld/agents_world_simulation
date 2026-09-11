@@ -443,8 +443,8 @@ function placeMediaBoxHtml(entityId, tag){
   const frame = item
     ? `<div class="box-frame has-media" data-lightbox="${escapeHtml(item.url)}">${
         item.kind === 'video'
-          ? `<video src="${fileUrl(item.url)}" muted loop playsinline></video>`
-          : `<img src="${fileUrl(item.url)}" alt="${escapeHtml(item.prompt)}" />`
+          ? `<video src="${cityFileUrl(item.url)}" muted loop playsinline></video>`
+          : `<img src="${cityFileUrl(item.url)}" alt="${escapeHtml(item.prompt)}" />`
       }</div>`
     : `<div class="box-frame"><span class="box-empty">No ${label.toLowerCase()} shot yet</span></div>`;
   return `<div class="place-media-box"><div class="box-label">${escapeHtml(label)}</div>${frame}</div>`;
@@ -464,8 +464,8 @@ document.addEventListener('click', (e) => {
   const url = frame.dataset.lightbox;
   const isVideo = !!frame.querySelector('video');
   openModal(isVideo
-    ? `<video src="${fileUrl(url)}" controls autoplay style="display:block;max-width:100%;"></video>`
-    : `<img src="${fileUrl(url)}" style="display:block;max-width:100%;" />`, { wide: true });
+    ? `<video src="${cityFileUrl(url)}" controls autoplay style="display:block;max-width:100%;"></video>`
+    : `<img src="${cityFileUrl(url)}" style="display:block;max-width:100%;" />`, { wide: true });
 });
 
 function openPlaceModal(cm, placeId, fromNid){
