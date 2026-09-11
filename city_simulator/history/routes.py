@@ -6,6 +6,7 @@ lives in generate.py.
 from flask import Blueprint, request
 
 from agents import jobs as agents_jobs
+from citystate import store as citystate
 from jsonutil import json_response
 
 from . import jobs
@@ -36,6 +37,11 @@ def log():
 @bp.post("/generate")
 def generate():
     body = request.get_json(silent=True) or {}
+    if citystate.get() is not None and not body.get("confirm_overwrite"):
+        return json_response({
+            "ok": False, "needs_confirmation": True,
+            "error": "A saved city already exists and will be permanently replaced.",
+        }, status=409)
     params = {
         "seed": body.get("seed"),
         "figures_per_era": body.get("figures_per_era") or None,

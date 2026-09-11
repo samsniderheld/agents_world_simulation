@@ -13,32 +13,6 @@
   color: var(--text-faint);
 }
 
-.log-panel{
-  margin: 20px 18px;
-  border: 1px solid var(--border);
-  background: var(--panel);
-  padding: 14px 16px;
-}
-.log-panel .label{
-  font-family: var(--mono);
-  font-size: 10px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--accent);
-  margin-bottom: 8px;
-}
-.log-panel pre{
-  margin: 0;
-  max-height: 280px;
-  overflow-y: auto;
-  font-family: var(--mono);
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--text-dim);
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
 .map-plate{
   margin: 20px 18px;
   border: 1px solid var(--border);
@@ -74,157 +48,51 @@
   line-height: 1.7;
   color: var(--text);
 }
-.city-map-wrap{ position: relative; }
-#cityCanvas{
-  display: block;
-  width: 100%;
-  height: auto;
-  border: 1px solid var(--border);
-  background: #0c1014;
-}
-.city-map-hint{
-  margin-top: 8px;
-  font-family: var(--mono);
-  font-size: 10.5px;
-  letter-spacing: 0.06em;
-  color: var(--text-faint);
-}
+.map-plate .neighborhood-key .entry{ cursor: pointer; }
 
-/* Detail modals for neighborhoods/places, opened by clicking the map. */
-.city-modal-overlay{
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.65);
+/* Exterior/Interior boxes in the place modal -- the two tagged slots
+   entityMediaHtml() picks out of a place's regular (open) media list. */
+.place-media-boxes{
+  display: flex;
+  gap: 12px;
+  padding: 12px 18px 0;
+  flex-wrap: wrap;
+}
+.place-media-box{
+  flex: 1 1 260px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--bg);
+}
+.place-media-box .box-label{
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.place-media-box .box-frame{
+  aspect-ratio: 16 / 10;
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 60;
+  cursor: default;
 }
-.city-modal{
-  width: min(560px, 92vw);
-  max-height: 82vh;
-  overflow-y: auto;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 3px;
-  padding: 0 0 16px;
-  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.6);
+.place-media-box .box-frame.has-media{ cursor: pointer; }
+.place-media-box .box-frame img, .place-media-box .box-frame video{
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
-.city-modal .modal-header{
-  position: relative;
-  padding: 16px 44px 12px 18px;
-  border-bottom: 1px solid var(--border);
-  border-left: 4px solid var(--border);
-  margin-bottom: 4px;
-}
-.city-modal .modal-header h3{
-  margin: 0;
-  font-size: 19px;
-  font-weight: 700;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-  color: var(--text);
-}
-.city-modal .modal-sub{
-  font-family: var(--mono);
-  font-size: 10.5px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-  margin-top: 4px;
-}
-.city-modal .modal-close{
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  border: none;
-  font-size: 18px;
-  padding: 2px 8px;
-  color: var(--text-dim);
-}
-.city-modal .modal-back{
-  margin-bottom: 8px;
-  padding: 2px 8px;
-  font-size: 10px;
-}
-.city-modal .modal-desc{
-  padding: 10px 18px 6px;
-  font-style: italic;
-  font-size: 13px;
-  color: var(--text-dim);
-  line-height: 1.6;
-}
-.city-modal .modal-stats{
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 18px;
-  padding: 8px 18px 10px;
-  font-family: var(--mono);
+.place-media-box .box-frame .box-empty{
   font-size: 11px;
   color: var(--text-faint);
-  border-bottom: 1px dashed var(--border);
-}
-.city-modal .modal-section-label{
-  padding: 12px 18px 6px;
-  font-family: var(--mono);
-  font-size: 10px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--accent);
-}
-.city-modal .modal-row{
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  padding: 7px 18px;
-  font-size: 13px;
-  color: var(--text);
-}
-.city-modal .modal-row.clickable{ cursor: pointer; }
-.city-modal .modal-row.clickable:hover{ background: rgba(255, 255, 255, 0.04); }
-.city-modal .modal-row .row-num{
-  font-family: var(--mono);
-  font-size: 10.5px;
-  color: var(--text-faint);
-  flex: none;
-  min-width: 30px;
-}
-.city-modal .modal-row .row-main{ font-weight: 600; }
-.city-modal .modal-row .row-sub{
-  font-size: 11.5px;
-  color: var(--text-dim);
-  margin-left: auto;
-  text-align: right;
-}
-.city-modal .modal-event{
-  padding: 6px 18px;
-  font-size: 13px;
-  line-height: 1.55;
-  color: var(--text);
-}
-.city-modal .modal-event .year{
-  font-family: var(--mono);
-  font-size: 10.5px;
-  color: var(--text-faint);
-  margin-right: 8px;
-}
-.city-modal .modal-empty{
-  padding: 10px 18px;
   font-style: italic;
-  font-size: 12.5px;
-  color: var(--text-faint);
 }
-.city-modal details.modal-figures{ padding: 10px 18px 0; }
-.city-modal details.modal-figures summary{
-  cursor: pointer;
-  font-family: var(--mono);
-  font-size: 10px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-}
-.city-modal details.modal-figures .modal-row{ padding-left: 0; padding-right: 0; }
-.map-plate .neighborhood-key .entry{ cursor: pointer; }
 
 .map-plate .map-columns{
   display: flex;
@@ -233,6 +101,7 @@
   flex-wrap: wrap;
 }
 .map-plate .map-column{ flex: 1 1 340px; min-width: 0; }
+.map-plate .map-column.map-primary{ flex: 2 1 480px; }
 .map-plate .map-column-label{
   font-family: var(--mono);
   font-size: 10px;
@@ -241,6 +110,14 @@
   color: var(--text-faint);
   margin-bottom: 8px;
 }
+#agentLogColumn .agent-log{
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+}
+#agentLogColumn .agent-log:empty{ display: none; }
+#agentLogColumn .agent-log + .agent-log{ margin-top: 10px; }
 .map-plate #subwayMapPlate img{
   display: block;
   max-width: 100%;
@@ -390,4 +267,80 @@ details.figures-toggle[open] summary::before{ content: '▾ '; }
   text-transform: uppercase;
   color: var(--accent);
   text-decoration: none;
+}
+
+/* Per-entity attached media (place/character cards) -- see
+   citystate/store.py and history.js's entityMediaHtml(). */
+.entity-media{
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border);
+}
+.entity-media-thumbs{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.entity-thumb{
+  position: relative;
+  width: 52px;
+  height: 52px;
+  flex: none;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--bg);
+}
+.entity-thumb img, .entity-thumb video{
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.entity-thumb-remove{
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  width: 15px;
+  height: 15px;
+  line-height: 13px;
+  padding: 0;
+  font-size: 11px;
+  border: none;
+  border-radius: 2px;
+  background: rgba(0, 0, 0, 0.65);
+  color: var(--text);
+}
+.entity-thumb-remove:hover{ background: rgba(0, 0, 0, 0.85); }
+.entity-media-toggle{
+  flex: none;
+  font-size: 10px;
+  padding: 5px 9px;
+  color: var(--text-faint);
+}
+.entity-media-form{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin-top: 8px;
+}
+.entity-media-form[hidden]{ display: none; }
+.entity-media-form .media-prompt-input{
+  flex: 1 1 100%;
+  font-family: var(--sans);
+  font-size: 12.5px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 6px 9px;
+  border-radius: 3px;
+}
+.media-form-actions{ display: flex; gap: 6px; }
+.media-form-actions button{ font-size: 10px; padding: 5px 9px; }
+.entity-media .media-status{
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-faint);
 }

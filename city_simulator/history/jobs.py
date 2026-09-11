@@ -1,25 +1,39 @@
 """Background-thread orchestration for a history-generation run --
 decoupled from the HTTP layer (see routes.py), the same split
 agents/jobs.py uses for the agent-simulation run.
+
+The completed payload itself isn't held here -- get_data() reads straight
+through to citystate.store, the one place the active city lives (in
+memory and on disk), so a media attachment or agent run appended there
+later is what /api/history/data also sees, with no second copy to fall
+out of sync.
 """
 
 import threading
+
+from citystate import store as citystate
 
 from . import generate as history_generate
 from . import log as history_log
 
 _lock = threading.Lock()
 _thread: threading.Thread = None
-_status = {"phase": "idle", "error": None}   # phase: idle | running | done | error
-_data = None   # last completed run's full payload, or None
+# A previously-persisted city (citystate.store lazily loads it from disk on
+# this very call) means there's already something to show -- start the
+# status as "done" rather than "idle" so the frontend's first status poll
+# fetches /api/history/data on its own, the same way it would right after
+# a fresh generation, instead of leaving the empty state up until someone
+# clicks Generate again.
+_status = {
+    "phase": "done" if citystate.get() is not None else "idle", "error": None,
+}   # phase: idle | running | done | error
 
 
 def _worker(params: dict, on_done):
-    global _data
     try:
         payload = history_generate.run_history(**params)
+        citystate.replace(payload)
         with _lock:
-            _data = payload
             _status["phase"] = "done"
         if on_done:
             on_done(payload)
@@ -50,8 +64,7 @@ def get_status() -> dict:
 
 
 def get_data():
-    with _lock:
-        return _data
+    return citystate.get()
 
 
 def get_log(since: int = 0):

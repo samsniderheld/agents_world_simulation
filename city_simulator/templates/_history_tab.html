@@ -1,116 +1,52 @@
-<div class="tab-panel" data-tab-panel="history">
+<div class="tab-panel" data-tab-panel="map">
   <div class="toolbar">
     <div class="status-pill" id="historyStatusPill"><span class="dot"></span><span id="historyStatusText">idle</span></div>
+    <div class="status-pill" id="agentsStatusPill"><span class="dot"></span><span id="agentsStatusText">idle</span></div>
     <div class="error-msg" id="historyErrorMsg"></div>
+    <div class="error-msg" id="agentsErrorMsg"></div>
     <div class="spacer"></div>
+    <button class="danger" id="stopBtn" style="display:none">■ Stop</button>
+    <button id="startBtn">▶ Start Agents</button>
     <button class="primary" id="generateBtn">▶ Generate</button>
   </div>
-  <div class="layout">
-    <aside>
-      <div class="section">
-        <h2>Generate</h2>
-        <div class="field-row">
-          <div class="field">
-            <label>Seed (blank = random)</label>
-            <input type="number" id="seedInput" placeholder="random" />
-          </div>
-          <div class="field">
-            <label>Characters</label>
-            <input type="number" id="charactersInput" value="10" min="1" />
-          </div>
-        </div>
-        <div class="field-row">
-          <div class="field">
-            <label>Figures per era</label>
-            <input type="number" id="figuresInput" placeholder="auto" min="1" />
-          </div>
-          <div class="field">
-            <label>Events per figure</label>
-            <input type="number" id="eventsInput" placeholder="auto" min="1" />
-          </div>
-        </div>
-        <label class="checkbox-row">
-          <input type="checkbox" id="noLlmInput" />
-          <span>Skip Ollama (pure grammar output)</span>
-        </label>
-        <label class="checkbox-row">
-          <input type="checkbox" id="llmMapInput" />
-          <span>Let the LLM draw the whole map (freeform ASCII art)</span>
-        </label>
-      </div>
-    </aside>
 
-    <main class="history-main" id="historyMain">
-      <div class="empty" id="historyEmpty">Configure parameters on the left and hit <b>Generate</b>.</div>
+  <main id="historyMain">
+    <div class="empty" id="historyEmpty">Hit <b>Generate</b> to build a city.</div>
 
-      <div class="log-panel" id="historyLogPanel" style="display:none">
-        <div class="label">Generation Log</div>
-        <pre id="historyLog"></pre>
-      </div>
+    <div id="historyContent" style="display:none">
+      <header class="masthead-inline">
+        <h2 id="cityTitle">Chronicle of the City</h2>
+        <div class="subtitle" id="citySubtitle"></div>
+        <div class="stats" id="cityStats"></div>
+      </header>
 
-      <div id="historyContent" style="display:none">
-        <header class="masthead-inline">
-          <h2 id="cityTitle">Chronicle of the City</h2>
-          <div class="subtitle" id="citySubtitle"></div>
-          <div class="stats" id="cityStats"></div>
-        </header>
-
-        <div class="map-plate">
-          <div class="label">A Map of the City, By Era of Settlement</div>
-          <div class="map-columns">
-            <div class="map-column">
-              <div class="city-map-wrap">
-                <canvas id="cityCanvas" style="display:none"></canvas>
-                <div class="city-map-hint" id="cityMapHint" style="display:none">Click a neighborhood or a numbered place for details</div>
-              </div>
-              <pre id="mapText"></pre>
-              <div class="caption" id="mapCaption"></div>
-              <div class="neighborhood-key" id="neighborhoodKey"></div>
+      <div class="map-plate">
+        <div class="label">A Map of the City, By Era of Settlement</div>
+        <div class="map-columns">
+          <div class="map-column map-primary">
+            <div class="city-map-wrap">
+              <canvas id="cityCanvas" class="city-canvas" style="display:none"></canvas>
             </div>
-            <div class="map-column" id="subwayMapPlate" style="display:none">
-              <div class="map-column-label">1950s Subway Map</div>
-              <img id="subwayMapImg" alt="A 1950s-style illustrated subway map of the city" />
-            </div>
+            <pre id="mapText"></pre>
+            <div class="caption" id="mapCaption"></div>
+            <div class="neighborhood-key" id="neighborhoodKey"></div>
           </div>
-          <div class="map-actions" id="mapActions">
-            <button id="subwayMapBtn">🚇 Generate 1950s Subway Map (via fal)</button>
-            <span class="map-action-status" id="subwayMapStatus"></span>
-            <button id="subwayMapHideBtn" style="display:none">Hide Subway Map</button>
+          <div class="map-column" id="agentLogColumn">
+            <div class="map-column-label">Agent Activity Log</div>
+            <div class="agent-log" id="agentLogHistory"></div>
+            <div class="agent-log" id="agentLogLive"></div>
+          </div>
+          <div class="map-column" id="subwayMapPlate" style="display:none">
+            <div class="map-column-label">1950s Subway Map</div>
+            <img id="subwayMapImg" alt="A 1950s-style illustrated subway map of the city" />
           </div>
         </div>
-
-        <div class="map-plate" id="summaryPlate" style="display:none">
-          <div class="label">A History of the City</div>
-          <div id="summaryText"></div>
+        <div class="map-actions" id="mapActions">
+          <button id="subwayMapBtn">🚇 Generate 1950s Subway Map (via fal)</button>
+          <span class="map-action-status" id="subwayMapStatus"></span>
+          <button id="subwayMapHideBtn" style="display:none">Hide Subway Map</button>
         </div>
-
-        <div class="hcontrols">
-          <input type="text" id="historySearchBox" placeholder="Search places, domains, events…" />
-          <select id="typeFilter"><option value="">All place types</option></select>
-          <select id="statusFilter">
-            <option value="">Any status</option>
-            <option value="active">Active</option>
-            <option value="destroyed">Destroyed</option>
-            <option value="closed">Closed</option>
-          </select>
-          <span class="count" id="visibleCount"></span>
-        </div>
-
-        <div id="eraSections"></div>
-        <div class="hempty-note" id="emptyNote" style="display:none">No places match the current filters.</div>
-
-        <section class="residents-section" id="residentsSection" style="display:none">
-          <div class="section-header">
-            <h2>Residents of the City, c. 1959</h2>
-            <div class="desc">Ten people living here today, each shaped by a piece of everything above.</div>
-          </div>
-          <div class="resident-grid" id="residentGrid"></div>
-        </section>
       </div>
-    </main>
-  </div>
-
-  <div class="city-modal-overlay" id="cityModalOverlay" style="display:none">
-    <div class="city-modal" id="cityModal"></div>
-  </div>
+    </div>
+  </main>
 </div>

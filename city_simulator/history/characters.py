@@ -87,6 +87,7 @@ def _llm_character(grounding: dict):
     age = max(18, min(90, int(digits))) if digits else 40
 
     return {
+        "id": entities.new_id("char_"),
         "name": fields["NAME"], "age": age, "occupation": fields["OCCUPATION"],
         "quirk": fields.get("QUIRK", ""), "bio": fields["BIO"],
         "place_id": place.id, "place_name": place.name,
@@ -118,6 +119,7 @@ def _fallback_character(grounding: dict, rng: random.Random) -> dict:
         f"steeped in {place.domain}. Ask {name.split()[0]} about it and they will talk your ear off."
     )
     return {
+        "id": entities.new_id("char_"),
         "name": name, "age": rng.randint(24, 72), "occupation": occupation,
         "quirk": f"can't stop talking about {place.domain}", "bio": bio,
         "place_id": place.id, "place_name": place.name,

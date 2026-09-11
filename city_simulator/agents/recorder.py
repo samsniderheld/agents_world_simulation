@@ -73,15 +73,21 @@ def get_started_at() -> str:
     return _started_at
 
 
-def save(path: str = "run_log.json") -> str:
-    """Write the whole run (agents, meta, events so far) to `path`."""
+def to_dict() -> dict:
+    """The whole run (agents, meta, events so far) as one dict -- what
+    save() writes to disk, and what citystate.store.append_agent_run()
+    folds into the persisted city record (see simulation.py's run())."""
     with _lock:
-        payload = {
+        return {
             "started_at": _started_at,
             "agents": _agents,
             "meta": _meta,
             "events": list(_events),
         }
+
+
+def save(path: str = "run_log.json") -> str:
+    """Write the whole run to `path`."""
     with open(path, "w") as f:
-        json.dump(payload, f, indent=2, default=str)
+        json.dump(to_dict(), f, indent=2, default=str)
     return path

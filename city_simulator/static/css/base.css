@@ -128,6 +128,11 @@ button.danger{ border-color: var(--bad); color: var(--bad); }
 .tab-panel{ flex: 1; display: flex; flex-direction: column; min-height: 0; }
 .tab-panel[hidden]{ display: none; }
 
+/* The History and Agents tabs are now a single full-width scrolling
+   column (map/canvas up top, cards or plates below) -- their old
+   aside+main split is gone in favor of everything settings-shaped living
+   in a modal (see below). The Visuals tab still uses a sidebar (it wasn't
+   part of that redesign), so aside/.layout stay defined here for it. */
 .layout{ flex: 1; display: flex; min-height: 0; }
 
 aside{
@@ -146,6 +151,13 @@ aside h2{
   margin: 0 0 8px;
 }
 .section{ margin-bottom: 20px; }
+.section h2{
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin: 0 0 8px;
+}
 
 .field{ margin-bottom: 10px; }
 .field label{
@@ -181,48 +193,11 @@ aside h2{
 .checkbox-row input{ accent-color: var(--accent); }
 .checkbox-row .sub{ color: var(--text-faint); font-size: 10px; }
 
-.agent-row{
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 5px 4px;
-  border-radius: 3px;
-  cursor: pointer;
-  font-size: 12.5px;
-}
-.agent-row:hover{ background: rgba(255,255,255,0.04); }
-.agent-row.off{ opacity: 0.35; }
 .swatch{ width: 9px; height: 9px; border-radius: 50%; flex: none; }
-.agent-row .name{ font-weight: 600; }
 
-.kind-row{
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px;
-  border-radius: 3px;
-  cursor: pointer;
-  font-family: var(--mono);
-  font-size: 11px;
-}
-.kind-row:hover{ background: rgba(255,255,255,0.04); }
-.kind-row.off{ opacity: 0.3; }
-.kind-row .swatch{ border-radius: 2px; }
-
-.search-box{
-  width: 100%;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  color: var(--text);
-  font-family: var(--mono);
-  font-size: 12px;
-  padding: 7px 8px;
-  border-radius: 3px;
-}
-.search-box:focus{ outline: 1px solid var(--accent); }
-
-main{ flex: 1; display: flex; overflow-x: auto; overflow-y: hidden; }
-main.history-main{ display: block; overflow-x: hidden; overflow-y: auto; padding-bottom: 60px; }
+/* Both tabs' <main> is one scrolling column now (map/canvas, then plates
+   or card grids below it). */
+main{ flex: 1; display: block; overflow-x: hidden; overflow-y: auto; padding-bottom: 60px; }
 
 .empty{
   max-width: 480px;
@@ -231,6 +206,26 @@ main.history-main{ display: block; overflow-x: hidden; overflow-y: auto; padding
   color: var(--text-dim);
   font-size: 13px;
   line-height: 1.7;
+}
+
+/* Logs tab -- the History Generation Log and Agent Activity Log plates. */
+.log-plate{
+  margin: 20px 18px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  padding: 18px 20px;
+}
+.log-plate .label{
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 10px;
+}
+.log-plate .agent-log{
+  max-height: 60vh;
+  overflow-y: auto;
 }
 
 /* Generic collapsible marker -- both tabs' <details> elements (place-card
@@ -245,3 +240,182 @@ details > summary{
 details > summary::-webkit-details-marker{ display: none; }
 details > summary::before{ content: '▸ '; color: var(--text-faint); }
 details[open] > summary::before{ content: '▾ '; }
+
+/* The interactive city map canvas -- shared by the History tab (place
+   markers) and the Agents tab (place markers + a second agent-marker
+   layer), see static/js/citymap.js. */
+.city-map-wrap{ position: relative; display: flex; justify-content: center; }
+.city-canvas{
+  display: block;
+  max-width: 100%;
+  max-height: 68vh;
+  width: auto;
+  height: auto;
+  border: 1px solid var(--border);
+  background: #0c1014;
+}
+.city-map-hint{
+  margin-top: 8px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+}
+
+/* Shared modal shell -- settings forms, place/agent/neighborhood detail,
+   the history log, image lightboxes. See main.js's openModal()/closeModal(). */
+.modal-overlay{
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 60;
+}
+.modal{
+  width: min(480px, 92vw);
+  max-height: 86vh;
+  overflow-y: auto;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0 0 16px;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.6);
+}
+.modal.wide{ width: min(920px, 94vw); }
+.modal.narrow{ width: min(380px, 92vw); }
+.modal .modal-header{
+  position: relative;
+  padding: 16px 44px 12px 18px;
+  border-bottom: 1px solid var(--border);
+  border-left: 4px solid var(--border);
+  margin-bottom: 4px;
+}
+.modal .modal-header h3{
+  margin: 0;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+.modal .modal-sub{
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-top: 4px;
+}
+.modal .modal-close{
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  border: none;
+  font-size: 18px;
+  padding: 2px 8px;
+  color: var(--text-dim);
+}
+.modal .modal-back{
+  margin-bottom: 8px;
+  padding: 2px 8px;
+  font-size: 10px;
+}
+.modal .modal-desc{
+  padding: 10px 18px 6px;
+  font-style: italic;
+  font-size: 13px;
+  color: var(--text-dim);
+  line-height: 1.6;
+}
+.modal .modal-stats{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  padding: 8px 18px 10px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-faint);
+  border-bottom: 1px dashed var(--border);
+}
+.modal .modal-section-label{
+  padding: 12px 18px 6px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.modal .modal-row{
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 7px 18px;
+  font-size: 13px;
+  color: var(--text);
+}
+.modal .modal-row.clickable{ cursor: pointer; }
+.modal .modal-row.clickable:hover{ background: rgba(255, 255, 255, 0.04); }
+.modal .modal-row .row-num{
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-faint);
+  flex: none;
+  min-width: 30px;
+}
+.modal .modal-row .row-main{ font-weight: 600; }
+.modal .modal-row .row-sub{
+  font-size: 11.5px;
+  color: var(--text-dim);
+  margin-left: auto;
+  text-align: right;
+}
+.modal .modal-event{
+  padding: 6px 18px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text);
+}
+.modal .modal-event .year, .modal .modal-event .tick-tag{
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-faint);
+  margin-right: 8px;
+}
+.modal .modal-empty{
+  padding: 10px 18px;
+  font-style: italic;
+  font-size: 12.5px;
+  color: var(--text-faint);
+}
+.modal details.modal-figures{ padding: 10px 18px 0; }
+.modal details.modal-figures summary{
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.modal details.modal-figures .modal-row{ padding-left: 0; padding-right: 0; }
+.modal .modal-body-pad{ padding: 10px 18px 2px; }
+.modal .modal-field{ padding: 0 18px; margin-bottom: 10px; }
+.modal .modal-actions{
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 14px 18px 2px;
+}
+.modal .modal-log-lines{
+  margin: 0;
+  padding: 14px 18px;
+  max-height: 60vh;
+  overflow-y: auto;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-dim);
+  white-space: pre-wrap;
+  word-break: break-word;
+}

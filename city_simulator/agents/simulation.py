@@ -5,6 +5,8 @@ does is streamed live through recorder.py rather than returned, since the
 frontend is watching the event log, not this function's return value.
 """
 
+from citystate import store as citystate
+
 from . import config
 from . import display
 from . import llm
@@ -131,3 +133,4 @@ def run(ticks: int = 8, chat_model: str = None, embed_model: str = None,
     treatment = generate_treatment(world.log, [a.name for a in agents])
     recorder.log("treatment", world.tick, text=treatment)
     recorder.save("run_log.json")
+    citystate.append_agent_run(recorder.to_dict())

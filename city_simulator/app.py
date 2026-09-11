@@ -16,7 +16,10 @@ import webbrowser
 from flask import Flask, render_template
 from werkzeug.serving import make_server
 
+from agents import jobs as agents_jobs
 from agents.routes import bp as agents_bp
+from citystate import store as citystate
+from citystate.routes import bp as city_bp
 from history.routes import bp as history_bp
 from visuals.routes import bp as visuals_bp
 
@@ -30,6 +33,14 @@ def create_app() -> Flask:
     app.register_blueprint(history_bp)
     app.register_blueprint(agents_bp)
     app.register_blueprint(visuals_bp)
+    app.register_blueprint(city_bp)
+
+    # citystate.store.get() lazily reads a previously-saved city off disk
+    # on its own -- the one thing it can't derive by itself is the agent
+    # roster (agents-package-specific), so that's hydrated explicitly here.
+    saved_city = citystate.get()
+    if saved_city is not None:
+        agents_jobs.set_history_roster(saved_city)
 
     @app.get("/")
     def index():

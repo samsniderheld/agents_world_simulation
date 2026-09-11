@@ -7,26 +7,34 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/history.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/agents.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/visuals.css') }}">
+<!-- Visuals tab disabled for now -- see index.html/agents.js/history.js for
+     the other half of this comment-out; static/js/visuals.js and its
+     styles are left untouched so re-enabling is just uncommenting. -->
+<!-- <link rel="stylesheet" href="{{ url_for('static', filename='css/visuals.css') }}"> -->
 </head>
 <body>
 
 <header>
   <h1>City Simulator</h1>
   <nav class="tabs">
-    <button class="tab-btn active" data-tab="history">History</button>
-    <button class="tab-btn" data-tab="agents">Agents</button>
-    <button class="tab-btn" data-tab="visuals">Visuals</button>
+    <button class="tab-btn active" data-tab="map">Map</button>
+    <button class="tab-btn" data-tab="logs">Logs</button>
+    <!-- <button class="tab-btn" data-tab="visuals">Visuals</button> -->
   </nav>
 </header>
 
 {% include "_history_tab.html" %}
-{% include "_agents_tab.html" %}
-{% include "_visuals_tab.html" %}
+{% include "_logs_tab.html" %}
+{# {% include "_visuals_tab.html" %} #}
+
+<div class="modal-overlay" id="modalOverlay" style="display:none">
+  <div class="modal" id="modalBody"></div>
+</div>
 
 <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+<script src="{{ url_for('static', filename='js/citymap.js') }}"></script>
 <script src="{{ url_for('static', filename='js/history.js') }}"></script>
 <script src="{{ url_for('static', filename='js/agents.js') }}"></script>
-<script src="{{ url_for('static', filename='js/visuals.js') }}"></script>
+<!-- <script src="{{ url_for('static', filename='js/visuals.js') }}"></script> -->
 </body>
 </html>
