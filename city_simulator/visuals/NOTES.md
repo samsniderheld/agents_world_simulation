@@ -182,13 +182,14 @@ tooling, not the model, that's blocked.
 
 ## Decisions this leads to
 
-1. Ship `local.py` supporting **Z-Image Turbo** (default) and
-   **Qwen-Image 20B** (explicit opt-in, SDNQ-quantized, with a loud
-   warning about memory margin) behind the existing `Provider` interface.
+1. Ship `local.py` supporting **only Z-Image Turbo**, SDNQ-quantized,
+   behind the existing `Provider` interface. Neither of the other two
+   requested models made the cut -- see #2 and #3.
 2. **Do not** implement FLUX.2 [klein] yet -- documented above as blocked
    on two independent fronts, not stubbed out silently. Revisit if/when
    Python 3.10+ is available and diffusers ships `Flux2KleinPipeline` in
    a release.
 3. **Do not** invent a "Qwen-Image-2.0 7B" repo ID -- it isn't real as far
-   as I can verify. If it's released later, add it then, from its actual
-   model card.
+   as I can verify, and the real alternative (`Qwen/Qwen-Image`, 20B) was
+   never wired up either. If a real small variant is released later, add
+   it then, from its actual model card.

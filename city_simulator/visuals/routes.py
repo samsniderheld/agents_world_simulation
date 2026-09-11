@@ -106,13 +106,3 @@ def generate_video_from_reference():
     }
     ok, error = jobs.start("video_reference", params)
     return json_response({"ok": ok, "error": error}, status=200 if ok else 409)
-
-
-@bp.post("/generate-subway-map")
-def generate_subway_map():
-    body = request.get_json(silent=True) or {}
-    map_text = body.get("map_text", "")
-    if not map_text.strip():
-        return json_response({"ok": False, "error": "no map_text given"}, status=400)
-    ok, error = jobs.start("subway_map", {"map_text": map_text})
-    return json_response({"ok": ok, "error": error}, status=200 if ok else 409)

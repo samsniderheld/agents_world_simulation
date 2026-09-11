@@ -6,17 +6,8 @@ function escapeHtml(s){
   }[c]));
 }
 
-// Also defined in visuals.js -- harmless duplication while that tab is
-// commented out (see index.html); kept here since main.js/citymap.js
-// need it regardless of whether the Visuals tab is enabled.
-function fileUrl(relativeUrl){
-  return '/api/visuals/files/' + relativeUrl;
-}
-
 // Entity-attached media (place/agent portraits, exterior/interior shots)
-// physically lives under citystate/data/ now, not visuals/data/ -- see
-// citystate/store.py's add_media(). fileUrl() above stays in use for
-// anything that's still in the shared visuals pool (the subway-map image).
+// lives under citystate/data/ -- see citystate/store.py's add_media().
 function cityFileUrl(relativeUrl){
   return '/api/city/files/' + relativeUrl;
 }
@@ -54,8 +45,7 @@ document.addEventListener('keydown', (e) => {
 // and character/place cards (history.js) need it, and this file loads
 // before either. Reads/writes hState.data.media -- hState itself is
 // declared later, in history.js, but only ever touched here at call time
-// (after the whole page has loaded), the same forward-reference pattern
-// visuals.js's fileUrl() already relies on from history.js.
+// (after the whole page has loaded).
 
 function entityMediaList(entityId){
   return (hState.data && hState.data.media && hState.data.media[entityId]) || [];
@@ -231,7 +221,6 @@ function pollEntityMediaJob(entityId, kind, prompt, tag, wrap){
 
 document.querySelectorAll('.tab-btn').forEach(btn => {
   btn.addEventListener('click', () => {
-    if (btn.disabled) return;
     const tab = btn.dataset.tab;
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b === btn));
     document.querySelectorAll('.tab-panel').forEach(p => { p.hidden = p.dataset.tabPanel !== tab; });

@@ -62,9 +62,8 @@ header h1{
   padding: 6px 12px;
   cursor: pointer;
 }
-.tab-btn:hover:not(:disabled):not(.active){ color: var(--text); border-color: var(--border); }
+.tab-btn:hover:not(.active){ color: var(--text); border-color: var(--border); }
 .tab-btn.active{ color: var(--accent); border-color: var(--accent); background: rgba(245,196,81,0.08); }
-.tab-btn:disabled{ opacity: 0.35; cursor: default; }
 
 .status-pill{
   display: flex;
@@ -128,36 +127,10 @@ button.danger{ border-color: var(--bad); color: var(--bad); }
 .tab-panel{ flex: 1; display: flex; flex-direction: column; min-height: 0; }
 .tab-panel[hidden]{ display: none; }
 
-/* The History and Agents tabs are now a single full-width scrolling
-   column (map/canvas up top, cards or plates below) -- their old
-   aside+main split is gone in favor of everything settings-shaped living
-   in a modal (see below). The Visuals tab still uses a sidebar (it wasn't
-   part of that redesign), so aside/.layout stay defined here for it. */
-.layout{ flex: 1; display: flex; min-height: 0; }
-
-aside{
-  width: 270px;
-  flex: none;
-  border-right: 1px solid var(--border);
-  background: var(--panel);
-  overflow-y: auto;
-  padding: 16px;
-}
-aside h2{
-  font-size: 10px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--text-faint);
-  margin: 0 0 8px;
-}
-.section{ margin-bottom: 20px; }
-.section h2{
-  font-size: 10px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--text-faint);
-  margin: 0 0 8px;
-}
+/* Both tabs are a single full-width scrolling column (map/canvas or log
+   plates up top, cards below) -- everything settings-shaped lives in a
+   modal instead of a sidebar (see .field/.checkbox-row below, and the
+   shared modal shell further down). */
 
 .field{ margin-bottom: 10px; }
 .field label{
@@ -223,11 +196,6 @@ main{ flex: 1; display: block; overflow-x: hidden; overflow-y: auto; padding-bot
   color: var(--accent);
   margin-bottom: 10px;
 }
-.log-plate .agent-log{
-  max-height: 60vh;
-  overflow-y: auto;
-}
-
 /* Generic collapsible marker -- both tabs' <details> elements (place-card
    history, era figures-toggle, agent plan/step blocks) rely on this base
    look; history.css adds more specific overrides on top where needed. */
@@ -254,13 +222,6 @@ details[open] > summary::before{ content: '▾ '; }
   border: 1px solid var(--border);
   background: #0c1014;
 }
-.city-map-hint{
-  margin-top: 8px;
-  font-family: var(--mono);
-  font-size: 10.5px;
-  letter-spacing: 0.06em;
-  color: var(--text-faint);
-}
 
 /* Shared modal shell -- settings forms, place/agent/neighborhood detail,
    the history log, image lightboxes. See main.js's openModal()/closeModal(). */
@@ -284,7 +245,6 @@ details[open] > summary::before{ content: '▾ '; }
   box-shadow: 0 18px 60px rgba(0, 0, 0, 0.6);
 }
 .modal.wide{ width: min(920px, 94vw); }
-.modal.narrow{ width: min(380px, 92vw); }
 .modal .modal-header{
   position: relative;
   padding: 16px 44px 12px 18px;
@@ -377,7 +337,7 @@ details[open] > summary::before{ content: '▾ '; }
   line-height: 1.55;
   color: var(--text);
 }
-.modal .modal-event .year, .modal .modal-event .tick-tag{
+.modal .modal-event .year{
   font-family: var(--mono);
   font-size: 10.5px;
   color: var(--text-faint);

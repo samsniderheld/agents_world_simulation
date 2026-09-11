@@ -1,11 +1,11 @@
 """Structured event log for a single simulation run.
 
 Every plan, decompose, observe/react, memory, reflection, action, and
-dialogue event is appended here as it happens -- regardless of --verbose.
-server.py serves this live (polling it from an SSE endpoint) while agents
-run concurrently on background threads, so every access is guarded by a
-lock; a run's final state is also dumped to run_log.json for offline
-inspection.
+dialogue event is appended here as it happens -- regardless of verbose
+tracing. The frontend polls it live through routes.py's /api/agents/events
+while agents run concurrently on background threads, so every access is
+guarded by a lock; a finished run's state is folded into the persisted
+city record via to_dict() + citystate.store.append_agent_run().
 
 Event shape: {"kind": str, "tick": int, "agent": str | None, ...fields}
   plan          items: [str]
@@ -23,7 +23,6 @@ Event shape: {"kind": str, "tick": int, "agent": str | None, ...fields}
 """
 
 import datetime
-import json
 import threading
 
 _lock = threading.Lock()
@@ -75,8 +74,8 @@ def get_started_at() -> str:
 
 def to_dict() -> dict:
     """The whole run (agents, meta, events so far) as one dict -- what
-    save() writes to disk, and what citystate.store.append_agent_run()
-    folds into the persisted city record (see simulation.py's run())."""
+    citystate.store.append_agent_run() folds into the persisted city
+    record (see simulation.py's run())."""
     with _lock:
         return {
             "started_at": _started_at,
@@ -84,10 +83,3 @@ def to_dict() -> dict:
             "meta": _meta,
             "events": list(_events),
         }
-
-
-def save(path: str = "run_log.json") -> str:
-    """Write the whole run to `path`."""
-    with open(path, "w") as f:
-        json.dump(to_dict(), f, indent=2, default=str)
-    return path

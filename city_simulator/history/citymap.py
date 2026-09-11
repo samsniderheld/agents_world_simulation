@@ -56,17 +56,12 @@ _BRAILLE_BIT = {
     (1, 0): 0x08, (1, 1): 0x10, (1, 2): 0x20, (1, 3): 0x80,
 }
 
-# Every era's row-band gets its own color, and each band is itself sliced
-# into this many east-west columns -- these (era x column) cells ARE the
-# neighborhoods (see _neighborhood_name / build_map), so coloring by them
-# is what actually divides each landmass up into a real 2D grid of
-# visually distinct sections, rather than one flat color or a single
-# north-south strip. Generated rather than hand-picked so the palette
-# always matches however many eras/columns exist; this only ever reaches
-# the web viewer, since plain text can't carry color.
-DEFAULT_NEIGHBORHOOD_COLOR = "#d4d4d4"  # land with no era/column mapped (shouldn't happen)
-WATER_COLOR = "#3b5f7a"
-
+# Every era's row-band is sliced into this many east-west columns --
+# these (era x column) cells ARE the neighborhoods (see
+# _neighborhood_name / build_map). Each gets its own generated color (see
+# _neighborhood_palette) so the palette always matches however many
+# eras/columns exist; the colors only ever reach the web viewer, since
+# plain text can't carry color.
 NEIGHBORHOOD_COLUMNS = config.NEIGHBORHOOD_COLUMNS
 _COLUMN_LABELS = ["West", "East"]  # sized to NEIGHBORHOOD_COLUMNS -- update together
 
@@ -407,24 +402,6 @@ def _neighborhood_name(era, column_label: str, places_here: list, used_names: se
     return fallback
 
 
-def _caption(neighborhood_names: list) -> str:
-    fallback = "A city grown north from the harbor, one generation built atop the last."
-    if not (config.LLM_FILL_NAMES and llm.available()):
-        return fallback
-    try:
-        prompt = (
-            "Write one atmospheric sentence (max 20 words) captioning an old "
-            "hand-drawn map of New York City spanning these neighborhoods, oldest "
-            f"to newest: {', '.join(neighborhood_names)}. Reply with ONLY the sentence."
-        )
-        caption = llm.complete(prompt, temperature=0.9).strip().strip('"')
-        if caption and "\n" not in caption and len(caption) <= 220:
-            return caption
-    except Exception:
-        pass
-    return fallback
-
-
 def _stamp(rows: list, row: int, col: int, text: str):
     for i, ch in enumerate(text):
         if 0 <= col + i < CHAR_WIDTH:
@@ -440,19 +417,17 @@ def build_map(places: list, figures: list, seed=None, llm_map: bool = False) -> 
     island -- validated (every place's numbered label must actually appear)
     and retried a couple of times before silently falling back to the
     procedural map, the same graceful-degradation shape as every other
-    LLM-fill path in this project. An LLM-drawn map has no per-cell era
-    coloring (that needs the exact structural grid alignment only the
-    procedural path produces) -- see "mode" in the return value below.
+    LLM-fill path in this project.
 
-    Returns {"text": <the plain multi-line map + legend + caption, for
-    map.txt/console>, "body": <just the map art, no legend/caption -- what
-    the web viewer displays>, "mode": "procedural" | "llm", "rows"/
-    "cell_neighborhoods"/"palette"/"header_lines"/"row_prefix"/
-    "border_line": <procedural-only, all empty in "llm" mode -- the exact
-    per-cell grid data the web viewer uses to render era coloring>,
-    "neighborhoods": <era id/column/name/color per grid cell, in map
-    order, oldest to newest then west to east -- empty in "llm" mode>,
-    "caption": <the caption line>}."""
+    Procedural maps return {"text": <the plain multi-line map, for the
+    CLI's map.txt/console output>, "neighborhoods": <id/era/column/name/
+    color/place_ids/centroid per neighborhood, oldest to newest then west
+    to east>, "graphic": <the structured land-mask/boundary/marker data
+    the web viewer's canvas draws from>}. LLM-drawn maps have no
+    structural grid, so they return {"text", "body": <the raw map art
+    the web viewer shows as plain text>, "caption", "neighborhoods": []}
+    with no "graphic" key -- that absence is what the frontend branches
+    on."""
     if llm_map:
         result = _try_llm_map(places, figures, seed)
         if result is not None:
@@ -496,23 +471,17 @@ def _build_procedural_map(places: list, figures: list, seed=None) -> dict:
     )
     band_eras = [era.id for era in reversed(ERAS)]  # top band = newest era
 
-    # Char-cell era/column membership, sampled at each cell's center dot,
-    # plus each (era x column) section's land cells -- what label
-    # placement, centroids, and the exported cell_neighborhoods all key
-    # off now that sections aren't rectangles anymore.
-    char_era = [[None] * CHAR_WIDTH for _ in range(CHAR_HEIGHT)]
-    char_col = [[0] * CHAR_WIDTH for _ in range(CHAR_HEIGHT)]
-    cell_neighborhoods = [[None] * CHAR_WIDTH for _ in range(CHAR_HEIGHT)]
+    # Each (era x column) section's land cells, sampled at each char
+    # cell's center dot -- what label placement and centroids key off now
+    # that sections aren't rectangles anymore.
     section_land_cells = {}  # (era_id, column_index) -> [(row, col), ...]
     for cr in range(CHAR_HEIGHT):
         for cc in range(CHAR_WIDTH):
+            if not char_is_land[cr][cc]:
+                continue
             era_id = band_eras[_dot_era_index(cr * 4 + 2, cc * 2 + 1, era_bounds)]
             ci = _dot_col_index(cr * 4 + 2, cc * 2 + 1, col_bounds)
-            char_era[cr][cc] = era_id
-            char_col[cr][cc] = ci
-            if char_is_land[cr][cc]:
-                cell_neighborhoods[cr][cc] = f"{era_id}_{ci}"
-                section_land_cells.setdefault((era_id, ci), []).append((cr, cc))
+            section_land_cells.setdefault((era_id, ci), []).append((cr, cc))
 
     claimed = set()
 
@@ -520,9 +489,7 @@ def _build_procedural_map(places: list, figures: list, seed=None) -> dict:
     palette_colors = _neighborhood_palette(len(neighborhood_ids), start_hue=rng.random())
     neighborhood_colors = dict(zip(neighborhood_ids, palette_colors))
 
-    legend = []              # (number, place) in display order
     used_names = set()       # lowercased, for case-insensitive dedup checks
-    neighborhood_order = []  # properly-cased, oldest-to-newest, for the caption prompt
     neighborhoods_meta = []  # era_id/column/name/color, same order, for a map legend
     markers = []             # numbered place-label positions, char coords, for the canvas view
     number = 1
@@ -544,7 +511,6 @@ def _build_procedural_map(places: list, figures: list, seed=None) -> dict:
 
             neighborhood = _neighborhood_name(era, column_label, places_section, used_names, rng)
             used_names.add(neighborhood.lower())
-            neighborhood_order.append(neighborhood)
             # Land-cell centroid of this section -- where the canvas view
             # centers the neighborhood's name. None when the section is
             # open water (the canvas just skips the label).
@@ -573,40 +539,14 @@ def _build_procedural_map(places: list, figures: list, seed=None) -> dict:
                         "number": number, "place_id": place.id,
                         "row": spot[0], "col": spot[1],
                     })
-                legend.append((number, place))
                 number += 1
 
-    # river_header = " " * 8 + "HUDSON RIVER".ljust(CHAR_WIDTH // 2) + "EAST RIVER"
-    grid_lines = ["".join(r) for r in rows]
-    # out = [river_header, "  N", "  ^"]
-    out = []
-    for line in grid_lines:
-        out.append("  |" + line)
+    out = ["  |" + "".join(r) for r in rows]
     out.append("  +" + "-" * CHAR_WIDTH + ">")
-    out.append("")
-    # out.append("Legend:")
-    # for number, place in legend:
-    #     status_note = "" if place.status == "active" else f", {place.status} {place.closed_year}"
-    #     out.append(f"  {number:>2}. {place.name} ({place.place_type}, founded {place.founded_year}{status_note})")
-
-    # out.append("")
-    # caption = _caption(neighborhood_order)
-    # out.append(caption)
-
-    palette = dict(neighborhood_colors)
-    palette["water"] = WATER_COLOR
-    palette["default"] = DEFAULT_NEIGHBORHOOD_COLOR
 
     return {
         "text": "\n".join(out),
-        "body": "\n".join(out[:out.index("")]),
-        "mode": "procedural",
-        "rows": grid_lines,
-        "cell_neighborhoods": cell_neighborhoods,
-        "palette": palette,
         "neighborhoods": neighborhoods_meta,
-        "row_prefix": "  |",
-        "border_line": "  +" + "-" * CHAR_WIDTH + ">",
         # Everything the web viewer's interactive canvas rendering needs,
         # at full dot resolution -- the raw land/water mask (as "0"/"1"
         # strings, one per dot row, to keep the JSON compact), the wavy
@@ -614,9 +554,9 @@ def _build_procedural_map(places: list, figures: list, seed=None) -> dict:
         # neighborhood id (band_eras is the era per horizontal band, top
         # to bottom; era_boundaries[k][dot_col] is where band k ends;
         # column_boundaries[j][dot_row] is where column j ends), plus
-        # where every [N] place label landed. The braille "rows" above are
-        # this same data already rasterized down to text; the canvas draws
-        # from the source instead.
+        # where every [N] place label landed. The braille "text" above is
+        # this same data already rasterized down for the CLI; the canvas
+        # draws from the source instead.
         "graphic": {
             "dot_width": DOT_W, "dot_height": DOT_H,
             "char_width": CHAR_WIDTH, "char_height": CHAR_HEIGHT,
@@ -633,8 +573,8 @@ def _try_llm_map(places: list, figures: list, seed=None) -> dict:
     """The whole-map alternative to _build_procedural_map: instead of a
     noise-generated island with Python-placed labels, the LLM draws the
     entire ASCII map itself -- freeform, including where it puts every
-    place's [N] label. That freedom costs the per-cell era coloring the
-    procedural path gives (see "mode" in the returned dict), so this is
+    place's [N] label. That freedom costs the structured "graphic" data
+    the procedural path gives the web viewer's canvas, so this is
     strictly opt-in (build_map's llm_map=True).
 
     Legend numbers are assigned up front, same era-then-shuffle order as
@@ -717,15 +657,8 @@ def _try_llm_map(places: list, figures: list, seed=None) -> dict:
     return {
         "text": "\n".join(out),
         "body": body,
-        "mode": "llm",
-        "rows": [],
-        "cell_neighborhoods": [],
-        "palette": {},
-        "neighborhoods": [],
         "caption": caption,
-        "header_lines": [],
-        "row_prefix": "",
-        "border_line": "",
+        "neighborhoods": [],
     }
 
 

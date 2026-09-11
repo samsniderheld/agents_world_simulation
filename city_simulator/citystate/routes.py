@@ -15,14 +15,6 @@ from . import store
 bp = Blueprint("city", __name__, url_prefix="/api/city")
 
 
-@bp.get("/state")
-def state():
-    payload = store.get()
-    if payload is None:
-        return json_response({"error": "no active city"}, status=404)
-    return json_response(payload)
-
-
 @bp.get("/agents/<agent_id>")
 def agent_detail(agent_id):
     agent = store.get_agent(agent_id)

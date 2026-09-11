@@ -7,7 +7,6 @@ job slot at a time, same shape as history/jobs.py and agents/jobs.py.
 import threading
 
 from . import providers
-from . import subway_map
 
 _lock = threading.Lock()
 _thread: threading.Thread = None
@@ -18,14 +17,7 @@ _result = None   # last completed job's result dict, or None
 def _worker(kind: str, params: dict):
     global _result
     try:
-        if kind == "subway_map":
-            # Always fal (see subway_map.py), regardless of whatever
-            # provider the Visuals tab is currently switched to -- so this
-            # branch deliberately never calls get_provider() below, which
-            # would otherwise construct (and for "local", load) whichever
-            # provider is merely the tab's current default.
-            result = subway_map.generate_subway_map(params["map_text"])
-        elif kind == "image":
+        if kind == "image":
             provider = providers.get_provider()
             result = provider.generate_image(
                 params["prompt"], image_paths=params.get("image_paths"), **params.get("options", {}),
