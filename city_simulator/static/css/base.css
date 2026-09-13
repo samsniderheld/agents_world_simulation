@@ -139,7 +139,7 @@ button.danger{ border-color: var(--bad); color: var(--bad); }
   color: var(--text-dim);
   margin-bottom: 4px;
 }
-.field input[type="text"], .field input[type="number"]{
+.field input[type="text"], .field input[type="number"], .field select{
   width: 100%;
   background: var(--bg);
   border: 1px solid var(--border);
@@ -149,7 +149,8 @@ button.danger{ border-color: var(--bad); color: var(--bad); }
   padding: 6px 8px;
   border-radius: 3px;
 }
-.field input:focus{ outline: 1px solid var(--accent); }
+.field input:focus, .field select:focus{ outline: 1px solid var(--accent); }
+.field-hint{ display: block; font-size: 10.5px; color: var(--text-faint); margin-top: 4px; }
 .field-row{ display: flex; gap: 8px; }
 .field-row .field{ flex: 1; }
 

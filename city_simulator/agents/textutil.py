@@ -48,6 +48,22 @@ def cast_constraint(agent_name: str, known_names: list) -> str:
     )
 
 
+def extract_tagged_line(text: str, tag: str) -> tuple:
+    """Pull one '<TAG>: value' line out of a multi-line LLM reply (e.g. a
+    destination tacked onto a list of substeps -- see planning.decompose)
+    so it doesn't contaminate a subsequent parse_list_lines() call on the
+    rest of the reply. Case-insensitive, removes at most one match.
+    Returns (remaining_text, value_or_None) -- None means the tag never
+    appeared, which callers must treat as "nothing given", not "".
+    """
+    pattern = re.compile(rf"^\s*{re.escape(tag)}\s*:\s*(.*)$", re.IGNORECASE | re.MULTILINE)
+    match = pattern.search(text)
+    if not match:
+        return text, None
+    value = match.group(1).strip()
+    return pattern.sub("", text, count=1), (value or None)
+
+
 def parse_list_lines(text: str) -> list[str]:
     """Strip bullet/numbering markers from each line and drop obvious
     preamble lines like 'Here are the 3 actions:' that models sometimes

@@ -21,6 +21,7 @@ const KIND_META = {
   insight:       { label: 'INSIGHT',   color: '#f59e0b' },
   action:        { label: 'ACTION',    color: '#e5e7eb' },
   dialogue:      { label: 'DIALOGUE',  color: '#4ade80' },
+  move:          { label: 'MOVE',      color: '#2dd4bf' },
   reflect_pause: { label: 'REFLECT',   color: '#a78bfa' },
 };
 
@@ -96,6 +97,14 @@ function agentSettingsModalHtml(){
         <div class="field"><label>Tick pause (s)</label><input type="number" id="tickSleepInput" value="0" min="0" step="0.5" /></div>
       </div>
       <div class="field">
+        <label>Provider</label>
+        <select id="providerInput">
+          <option value="ollama">Ollama (local)</option>
+          <option value="claude">Claude (API)</option>
+        </select>
+        <span class="field-hint">Claude still uses your local Ollama for memory embeddings.</span>
+      </div>
+      <div class="field">
         <label>Chat model (blank = server default)</label>
         <input type="text" id="modelInput" list="modelOptions" placeholder="auto" />
         <datalist id="modelOptions"></datalist>
@@ -113,6 +122,22 @@ function agentSettingsModalHtml(){
   `;
 }
 
+// Refreshes the Chat model <datalist> for whichever provider is currently
+// selected -- called on modal open and again whenever the Provider select
+// changes, since Ollama/Claude have entirely different model lists.
+function refreshModelOptions(provider){
+  fetch(`/api/agents/models?provider=${encodeURIComponent(provider)}`).then(r => r.json()).then(d => {
+    const list = modalBodyEl.querySelector('#modelOptions');
+    if (!list) return;
+    list.innerHTML = '';
+    (d.models || []).forEach(m => {
+      const opt = document.createElement('option');
+      opt.value = m;
+      list.appendChild(opt);
+    });
+  });
+}
+
 function openAgentSettingsModal(){
   loadRoster().then(() => {
     openModal(agentSettingsModalHtml());
@@ -123,14 +148,11 @@ function openAgentSettingsModal(){
         else aState.selectedAgents.delete(el.dataset.agentName);
       });
     });
-    fetch('/api/agents/models').then(r => r.json()).then(d => {
-      const list = modalBodyEl.querySelector('#modelOptions');
-      if (!list) return;
-      (d.models || []).forEach(m => {
-        const opt = document.createElement('option');
-        opt.value = m;
-        list.appendChild(opt);
-      });
+    const providerSelect = modalBodyEl.querySelector('#providerInput');
+    refreshModelOptions(providerSelect.value);
+    providerSelect.addEventListener('change', () => {
+      document.getElementById('modelInput').value = '';
+      refreshModelOptions(providerSelect.value);
     });
     modalBodyEl.querySelector('[data-action="submit-start"]').addEventListener('click', startAgentRun);
   });
@@ -141,6 +163,7 @@ startBtn.addEventListener('click', openAgentSettingsModal);
 function startAgentRun(){
   const payload = {
     ticks: parseInt(document.getElementById('ticksInput').value, 10) || 8,
+    provider: document.getElementById('providerInput').value,
     tick_sleep: parseFloat(document.getElementById('tickSleepInput').value) || 0,
     chat_model: document.getElementById('modelInput').value.trim() || null,
     context_tokens: parseInt(document.getElementById('contextInput').value, 10) || null,
@@ -250,6 +273,7 @@ function eventText(ev){
     case 'insight': return `realizes: ${ev.text}`;
     case 'action': return `[T${ev.tick}] (${ev.location}) ${ev.text}`;
     case 'dialogue': return `→ ${ev.listener}: "${ev.text}"`;
+    case 'move': return `moved to ${ev.to_location} (from ${ev.from_location})`;
     case 'reflect_pause': return `pauses to reflect.`;
     default: return ev.text || JSON.stringify(ev);
   }

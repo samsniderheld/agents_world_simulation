@@ -1,11 +1,14 @@
 """A minimal tick-based simulation loop.
 
-Deliberately skips spatial pathfinding/maze -- agents here have a fixed
-location for the whole run. Put agents that should be able to meet and talk
-in the same location string when you construct them; that's the one
-simplification that matters for whether dialogue ever triggers. Each tick:
-agents advance their plan, perceive each other, may react (including
-breaking into conversation), and are checked for reflection.
+Deliberately skips real pathfinding/travel-time simulation -- an agent can
+relocate at most once per broad plan step (see planning.decompose's WHERE
+line), teleporting there instantly rather than spending ticks in transit.
+Co-location is still just a location-string equality check
+(_co_located_pairs below), it's just no longer static: a plan can carry an
+agent into another agent's location and trigger a meeting that was never
+scripted into the starting roster. Each tick: agents advance their plan
+(and may relocate as part of that), perceive each other, may react
+(including breaking into conversation), and are checked for reflection.
 
 Planning and reflection are each independent per agent (no shared state is
 touched), so both phases run one agent per thread -- real concurrent
@@ -34,13 +37,14 @@ _DIALOGUE_HINTS = ("talk", "chat", "greet", "ask", "convers", "say hi", "wave")
 class World:
     def __init__(self, agents: list[Agent], start_time: datetime.datetime = None,
                  tick_sleep: int = 0, verbose: bool = False,
-                 stop_flag: threading.Event = None):
+                 stop_flag: threading.Event = None, known_places: list = None):
         self.agents = agents
         self.start_time = start_time or datetime.datetime(2026, 8, 24, 6, 0)
         self.tick = 0
         self.tick_sleep = tick_sleep
         self.verbose = verbose
         self.stop_flag = stop_flag or threading.Event()
+        self.known_places = known_places or []
         self.agent_colors = display.agent_colors([a.name for a in agents])
         self.log: list[str] = []
         self._log_lock = threading.Lock()
@@ -99,7 +103,7 @@ class World:
         thread alongside every other acting agent's, see class docstring."""
         other_names = [a.name for a in self.agents if a is not agent]
         color = self.agent_colors[agent.name]
-        planning.next_action(agent, self.tick, known_names=other_names,
+        planning.next_action(agent, self.tick, known_names=other_names, known_places=self.known_places,
                               verbose=self.verbose, color=color)
         self._say(f"{agent.name} ({agent.location}): {agent.current_action}")
         recorder.log("action", self.tick, agent=agent.name,

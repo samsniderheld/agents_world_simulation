@@ -6,7 +6,7 @@ from flask import Blueprint, request
 
 from jsonutil import json_response
 
-from . import jobs, llm, recorder, simulation
+from . import jobs, providers, recorder, simulation
 
 bp = Blueprint("agents", __name__, url_prefix="/api/agents")
 
@@ -16,10 +16,16 @@ def roster():
     return json_response({"roster": simulation.roster_summary()})
 
 
+@bp.get("/providers")
+def provider_list():
+    return json_response({"providers": providers.AVAILABLE_PROVIDERS})
+
+
 @bp.get("/models")
 def models():
+    provider = request.args.get("provider") or None
     try:
-        return json_response({"models": llm.list_models()})
+        return json_response({"models": providers.get_provider(provider).list_models()})
     except Exception as e:
         return json_response({"models": [], "error": str(e)})
 
@@ -48,6 +54,7 @@ def run():
     body = request.get_json(silent=True) or {}
     params = {
         "ticks": int(body.get("ticks", 8)),
+        "provider": body.get("provider") or None,
         "tick_sleep": float(body.get("tick_sleep", 0)),
         "chat_model": body.get("chat_model") or None,
         "embed_model": body.get("embed_model") or None,

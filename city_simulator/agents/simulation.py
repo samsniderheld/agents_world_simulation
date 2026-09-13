@@ -48,16 +48,21 @@ AGENT_ROSTER = {
     ),
 }
 
+# None until a history is generated (or one is hydrated from a saved city
+# at startup -- see app.py) -- _current_roster() below falls back to
+# AGENT_ROSTER until then.
+_active_roster = None
+
 
 def roster_from_history(history: dict) -> dict:
     """A history's generated characters, restaged as an agent roster: each
-    keeps their real grounded bio AND is placed at their own real
+    keeps their real grounded bio AND starts out placed at their own real
     grounding place (character.place_name -- see history/characters.py),
-    not some shared stand-in location. That means two agents only ever
-    meet if their bios genuinely tied them to the same place (world.py has
-    no movement/pathfinding, so co-location is the only way agents can
-    talk) -- fewer conversations than a shared-hub scheme would force, but
-    nothing an agent does ever contradicts where their bio says they are."""
+    not some shared stand-in location. An agent can later relocate as
+    their plan unfolds (see planning.decompose's WHERE line, and run()
+    below for how the active city's places become their known
+    destinations) -- but nothing an agent does ever contradicts where
+    their bio says they started."""
     roster = {}
     for c in history.get("characters", []):
         traits = (c.get("occupation") or "").strip()
@@ -95,18 +100,31 @@ def build_agents(names: list) -> list:
     return [Agent(name=name, **roster[name]) for name in chosen]
 
 
-def run(ticks: int = 8, chat_model: str = None, embed_model: str = None,
+def run(ticks: int = 8, provider: str = None, chat_model: str = None, embed_model: str = None,
         context_tokens: int = None, tick_sleep: float = 0,
         agent_names: list = None, verbose: bool = False, stop_flag=None):
     """Blocking -- meant to be called on a background thread (see
     agents/jobs.py). Configures config.py's overridable settings, builds
-    the chosen agents, and runs the tick loop."""
+    the chosen agents, and runs the tick loop.
+
+    `provider` picks which agent LLM backend generates chat completions
+    ("ollama" or "claude" -- see agents/providers/); embeddings always use
+    Ollama regardless (see llm.py's docstring). `chat_model` overrides
+    whichever provider is active (CLAUDE_MODEL for "claude", CHAT_MODEL
+    otherwise); `context_tokens` likewise overrides Ollama's input-context
+    window or Claude's output max_tokens, whichever applies."""
+    if provider:
+        config.PROVIDER = provider
     if chat_model:
-        config.CHAT_MODEL = chat_model
+        if config.PROVIDER == "claude":
+            config.CLAUDE_MODEL = chat_model
+        else:
+            config.CHAT_MODEL = chat_model
     if embed_model:
         config.EMBED_MODEL = embed_model
     if context_tokens:
         config.CHAT_CONTEXT_TOKENS = context_tokens
+        config.CLAUDE_MAX_TOKENS = context_tokens
 
     llm.check_connection()
 
@@ -122,12 +140,24 @@ def run(ticks: int = 8, chat_model: str = None, embed_model: str = None,
             for a in agents
         ],
         meta={
-            "chat_model": config.CHAT_MODEL, "embed_model": config.EMBED_MODEL,
+            "provider": config.PROVIDER,
+            "chat_model": config.CLAUDE_MODEL if config.PROVIDER == "claude" else config.CHAT_MODEL,
+            "embed_model": config.EMBED_MODEL,
             "context_tokens": config.CHAT_CONTEXT_TOKENS, "ticks": ticks,
         },
     )
 
-    world = World(agents, tick_sleep=tick_sleep, verbose=verbose, stop_flag=stop_flag)
+    city_data = citystate.get()
+    if city_data and city_data.get("places"):
+        known_places = sorted({
+            p["name"] for p in city_data["places"]
+            if p.get("status") == "active" and p.get("name")
+        })
+    else:
+        known_places = sorted({a.location for a in agents})
+
+    world = World(agents, tick_sleep=tick_sleep, verbose=verbose, stop_flag=stop_flag,
+                  known_places=known_places)
     world.run(ticks)
 
     treatment = generate_treatment(world.log, [a.name for a in agents])

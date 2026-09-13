@@ -18,6 +18,7 @@ Event shape: {"kind": str, "tick": int, "agent": str | None, ...fields}
   insight       text: str, evidence: [int]
   action        text: str, location: str, time: str
   dialogue      text: str, listener: str
+  move          from_location: str, to_location: str
   reflect_pause (no extra fields)
   treatment     text: str
 """
@@ -61,6 +62,19 @@ def snapshot(since: int = 0):
 def get_agents() -> list:
     with _lock:
         return list(_agents)
+
+
+def update_agent_location(name: str, location: str):
+    """Mutate the matching agent dict's location in place -- _agents is
+    otherwise only ever set once, at start(), so without this a mid-run
+    move (see planning._move_agent) would be invisible to anyone polling
+    /api/agents/state. Safe to call from multiple agent threads at once
+    (same lock as everything else here); a no-op if `name` isn't found."""
+    with _lock:
+        for a in _agents:
+            if a.get("name") == name:
+                a["location"] = location
+                break
 
 
 def get_meta() -> dict:

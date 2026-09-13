@@ -8,7 +8,27 @@ matches the paper's "Generative Agents: Interactive Simulacra of Human
 Behavior" (Park et al., 2023) as closely as a barebones rewrite reasonably can.
 """
 
+import os
+from pathlib import Path
+
+from dotenv import load_dotenv
+
 import hardware
+
+_PROJECT_ROOT = Path(__file__).parent.parent
+load_dotenv(_PROJECT_ROOT / ".env")
+
+# --- Provider selection (agents/providers/) -----------------------------
+# "ollama" (default, local/free) or "claude" (hosted, needs
+# ANTHROPIC_API_KEY) -- set per-run by simulation.run(), see
+# agents/routes.py's POST /api/agents/run. ANTHROPIC_API_KEY is read from
+# the environment (never committed) or a .env file at the project root
+# (city_simulator/.env, see .env.example) -- same pattern as visuals/'s
+# FAL_KEY.
+PROVIDER = "ollama"
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
+CLAUDE_MODEL = "claude-sonnet-5"
+CLAUDE_MAX_TOKENS = 1024  # caps *output* length -- see providers/claude.py's docstring
 
 # --- Ollama connection -------------------------------------------------
 OLLAMA_HOST = "http://localhost:11434"
