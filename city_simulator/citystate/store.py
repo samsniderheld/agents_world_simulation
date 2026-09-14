@@ -95,7 +95,7 @@ def _read_from_disk() -> None:
             with open(path) as f:
                 agent = json.load(f)
             media[agent["id"]] = agent.get("media", [])
-            characters.append({k: v for k, v in agent.items() if k not in ("media", "plans", "runs")})
+            characters.append({k: v for k, v in agent.items() if k not in ("media", "plans", "runs", "treatments")})
 
     for place in places:
         media[place["id"]] = place.get("media", [])
@@ -118,9 +118,9 @@ def _write_locations() -> None:
 
 
 def _write_agent(agent_id: str, character: dict = None) -> None:
-    """Read-modify-write of just this one agent's file -- plans/runs live
-    only on disk (not in the in-memory _cache), so a media-only update
-    has to preserve whatever's already there."""
+    """Read-modify-write of just this one agent's file -- plans/runs/
+    treatments live only on disk (not in the in-memory _cache), so a
+    media-only update has to preserve whatever's already there."""
     if character is None:
         character = next((c for c in _cache["characters"] if c["id"] == agent_id), None)
     if character is None:
@@ -137,6 +137,7 @@ def _write_agent(agent_id: str, character: dict = None) -> None:
         "media": _cache["media"].get(agent_id, []),
         "plans": existing.get("plans", []),
         "runs": existing.get("runs", []),
+        "treatments": existing.get("treatments", []),
     }
     _atomic_write(path, payload)
 
@@ -187,6 +188,23 @@ def replace(history_payload: dict) -> None:
         _write_locations()
         for character in characters:
             _write_agent(character["id"], character=character)
+
+
+def delete() -> None:
+    """Wipes the active city entirely -- history/locations/every agent's
+    files -- leaving no active city at all, unlike replace() which
+    immediately writes a new one in its place. The next get() call
+    returns None. Safe to call with no active city (all no-ops)."""
+    global _cache, _loaded
+    with _lock:
+        if _AGENTS_DIR.exists():
+            shutil.rmtree(_AGENTS_DIR)
+        if _LOCATIONS_DIR.exists():
+            shutil.rmtree(_LOCATIONS_DIR)
+        _HISTORY_PATH.unlink(missing_ok=True)
+        _LOCATIONS_PATH.unlink(missing_ok=True)
+        _cache = None
+        _loaded = True
 
 
 def add_media(entity_id: str, kind: str, url: str, local_path: str = "", prompt: str = "", tag: str = "") -> list:
@@ -265,6 +283,23 @@ def remove_media(entity_id: str, media_id: str) -> bool:
         return True
 
 
+def add_character(character: dict) -> dict:
+    """Adds one new character (and its matching agents/<id>/agent.json) to
+    the active city -- for on-demand generation after history already
+    exists (history/routes.py's POST /api/history/characters), as opposed
+    to replace()'s initial batch at history-generation time. Raises if
+    there's no active city yet -- a character needs a city to belong to."""
+    with _lock:
+        if not _loaded:
+            _read_from_disk()
+        if _cache is None:
+            raise RuntimeError("no active city to add a character to")
+        _cache["characters"].append(character)
+        _cache["media"].setdefault(character["id"], [])
+        _write_agent(character["id"], character=character)
+        return character
+
+
 def append_agent_run(run_record: dict) -> None:
     """Splits `run_record`'s events per agent and patches each
     participating agent's own agent.json (their "runs" list gains this
@@ -300,3 +335,30 @@ def append_agent_run(run_record: dict) -> None:
                 for e in agent_events if e.get("kind") == "plan"
             )
             _atomic_write(path, data)
+
+
+def add_treatment(agent_id: str, text: str, run_started_at: str = None) -> dict:
+    """Appends one generated treatment to an agent's own persisted record
+    (see agents/treatment.py -- generated manually, per agent, from that
+    agent's modal, not automatically per run). Direct read-modify-write of
+    just this one file, same shape as append_agent_run() above, since
+    treatments -- like plans/runs -- live only on disk, never in the
+    in-memory _cache. Raises if the agent file doesn't exist."""
+    with _lock:
+        if not _loaded:
+            _read_from_disk()
+        path = _agent_path(agent_id)
+        if not path.exists():
+            raise RuntimeError(f"unknown agent entity: {agent_id!r}")
+
+        with open(path) as f:
+            data = json.load(f)
+
+        entry = {
+            "created_at": datetime.now().isoformat(),
+            "run_started_at": run_started_at,
+            "text": text,
+        }
+        data.setdefault("treatments", []).append(entry)
+        _atomic_write(path, data)
+        return entry

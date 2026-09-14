@@ -6,8 +6,8 @@
 // citymap.js's buildCityMap()), and their combined activity log lives on
 // the Logs tab. This file owns: the roster/settings modal, feeding agent
 // markers into the shared map, the agent detail modal (with the same
-// image/video generation controls a place gets), the treatment plate,
-// and the Logs tab's Agent Activity panel.
+// image/video generation controls a place gets, plus a manual "Generate
+// Treatment" section), and the Logs tab's Agent Activity panel.
 // ======================================================================
 
 const KIND_META = {
@@ -33,7 +33,6 @@ const aState = {
   lastPhase: null,
   lastAgentsSignature: null, // name@location per agent -- redraw the map only when this changes
   agentRecords: {},          // character id -> their persisted agents/<id>/agent.json, once fetched
-  treatment: null,
 };
 
 // Deterministic per-name color, used everywhere an agent needs one (map
@@ -347,13 +346,18 @@ function openAgentModal(name){
     <div class="agent-plans" id="agentModalPlans"></div>
     <div class="modal-section-label">Log</div>
     <div class="agent-log" id="agentModalLog"></div>
+    <div class="modal-section-label">Treatment</div>
+    <div class="agent-treatments" id="agentModalTreatments"></div>
+    <div class="modal-actions" id="agentModalTreatmentActions"></div>
   `, { wide: true });
   modalBodyEl.querySelector('[data-close]').addEventListener('click', closeModal);
 
   fetch(`/api/city/agents/${encodeURIComponent(entityId)}`).then(r => r.ok ? r.json() : null).then(data => {
     const plansEl = document.getElementById('agentModalPlans');
     const logEl = document.getElementById('agentModalLog');
-    if (!plansEl || !logEl) return; // modal closed before this resolved
+    const treatmentsEl = document.getElementById('agentModalTreatments');
+    const treatmentActionsEl = document.getElementById('agentModalTreatmentActions');
+    if (!plansEl || !logEl || !treatmentsEl || !treatmentActionsEl) return; // modal closed before this resolved
 
     const plans = (data && data.plans) || [];
     plansEl.innerHTML = plans.length
@@ -361,11 +365,7 @@ function openAgentModal(name){
       : '<div class="modal-empty">No plans yet.</div>';
 
     const runs = (data && data.runs) || [];
-    if (!runs.length) {
-      logEl.innerHTML = '<div class="modal-empty">Nothing logged yet.</div>';
-      return;
-    }
-    logEl.innerHTML = '';
+    logEl.innerHTML = runs.length ? '' : '<div class="modal-empty">Nothing logged yet.</div>';
     runs.forEach(run => {
       const header = document.createElement('div');
       header.className = 'agent-run-header';
@@ -373,18 +373,52 @@ function openAgentModal(name){
       logEl.appendChild(header);
       (run.events || []).forEach(ev => logEl.appendChild(makeEventRow(ev)));
     });
+
+    renderAgentTreatments((data && data.treatments) || []);
+    treatmentActionsEl.innerHTML = runs.length
+      ? '<button class="primary" data-action="generate-treatment">🎬 Generate Treatment</button><span class="media-status" id="agentTreatmentStatus"></span>'
+      : '<div class="modal-empty">No runs yet -- start agents first.</div>';
+    const genBtn = treatmentActionsEl.querySelector('[data-action="generate-treatment"]');
+    if (genBtn) genBtn.addEventListener('click', () => generateAgentTreatment(entityId));
   });
 }
 
-// --- treatment plate (Map tab, below the map) -------------------------------
+function renderAgentTreatments(treatments){
+  const el = document.getElementById('agentModalTreatments');
+  if (!el) return;
+  el.innerHTML = treatments.length
+    ? treatments.map(treatmentEntryHtml).join('')
+    : '<div class="modal-empty">No treatments generated yet.</div>';
+}
 
-function renderTreatment(text){
-  aState.treatment = text;
-  const plate = document.getElementById('treatmentPlate');
-  if (!plate) return;
-  if (!text) { plate.style.display = 'none'; return; }
-  plate.style.display = '';
-  document.getElementById('treatmentText').textContent = text;
+function treatmentEntryHtml(entry){
+  const when = entry.created_at ? new Date(entry.created_at).toLocaleString() : '';
+  return `<div class="agent-treatment"><div class="agent-treatment-meta">${escapeHtml(when)}</div><pre>${escapeHtml(entry.text)}</pre></div>`;
+}
+
+function generateAgentTreatment(entityId){
+  const statusEl = document.getElementById('agentTreatmentStatus');
+  const btn = modalBodyEl.querySelector('[data-action="generate-treatment"]');
+  if (btn) btn.disabled = true;
+  if (statusEl) statusEl.textContent = 'generating…';
+  fetch('/api/agents/treatment', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ agent_id: entityId }),
+  }).then(r => r.json()).then(d => {
+    if (btn) btn.disabled = false;
+    if (!d.treatment) {
+      if (statusEl) statusEl.textContent = d.error || 'could not generate a treatment';
+      return;
+    }
+    if (statusEl) statusEl.textContent = '';
+    const el = document.getElementById('agentModalTreatments');
+    if (!el) return; // modal closed before this resolved
+    if (el.querySelector('.modal-empty')) el.innerHTML = '';
+    el.insertAdjacentHTML('beforeend', treatmentEntryHtml(d.treatment));
+  }).catch(() => {
+    if (btn) btn.disabled = false;
+    if (statusEl) statusEl.textContent = 'network error';
+  });
 }
 
 // --- Agent Activity Log (Map tab, next to the map) --------------------------
@@ -479,10 +513,7 @@ function pollAgentLog(){
     const el = document.getElementById('agentLogLive');
     if (el && d.events && d.events.length) {
       const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 20;
-      d.events.forEach(ev => {
-        if (ev.kind === 'treatment') return; // shown in its own plate, not the log
-        el.appendChild(agentLogRowHtml(ev, ev.agent));
-      });
+      d.events.forEach(ev => el.appendChild(agentLogRowHtml(ev, ev.agent)));
       if (atBottom) el.scrollTop = el.scrollHeight;
     }
     agentLogSince = d.next;
@@ -507,7 +538,6 @@ function pollAgentsState(){
     const isNewRun = d.started_at && d.started_at !== aState.lastStartedAt;
     if (isNewRun) {
       aState.lastStartedAt = d.started_at;
-      renderTreatment(null);
       resetAgentLog(d.started_at);
     }
 
@@ -525,10 +555,6 @@ function pollAgentsState(){
     if (phase === 'done' && aState.lastPhase !== 'done') {
       refreshAgentLogHistory();  // fold the just-finished run into the persisted side
       resetAgentLog();           // ...and clear the now-redundant live side
-      fetch('/api/agents/events?since=0').then(r => r.json()).then(ed => {
-        const treatmentEv = (ed.events || []).find(ev => ev.kind === 'treatment');
-        if (treatmentEv) renderTreatment(treatmentEv.text);
-      });
     }
     aState.lastPhase = phase;
   }).catch(() => {});

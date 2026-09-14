@@ -13,7 +13,7 @@ Event shape: {"kind": str, "tick": int, "agent": str | None, ...fields}
   observe       text: str
   react         text: str
   continue      (no extra fields)
-  memory        memory_kind: str, importance: float, text: str
+  memory        memory_kind: str, importance: float, text: str, embedding: [float], evidence: [int]
   focal         text: str
   insight       text: str, evidence: [int]
   action        text: str, location: str, time: str

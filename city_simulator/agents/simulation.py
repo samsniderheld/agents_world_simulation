@@ -11,7 +11,7 @@ from . import config
 from . import display
 from . import llm
 from .agent import Agent
-from .treatment import generate_treatment
+from .memory import MemoryStream
 from .world import World
 from . import recorder
 
@@ -86,7 +86,13 @@ def set_history_roster(history: dict = None):
 
 
 def _current_roster() -> dict:
-    return _active_roster or AGENT_ROSTER
+    # Deliberately not `_active_roster or AGENT_ROSTER` -- a real history
+    # with zero characters yet (e.g. just generated, before anyone's used
+    # the manual "Generate Character" flow) sets _active_roster to {},
+    # which is falsy and would otherwise silently fall back to the
+    # hardcoded noir cast. Only "no history at all" (_active_roster is
+    # None) should fall back to it.
+    return AGENT_ROSTER if _active_roster is None else _active_roster
 
 
 def roster_summary() -> list:
@@ -96,8 +102,35 @@ def roster_summary() -> list:
 
 def build_agents(names: list) -> list:
     roster = _current_roster()
+    if not roster:
+        return []
     chosen = [n for n in names if n in roster] or [next(iter(roster))]
-    return [Agent(name=name, **roster[name]) for name in chosen]
+    agents = [Agent(name=name, **roster[name]) for name in chosen]
+    if _active_roster is not None:  # only a history-backed roster has citystate characters
+        _hydrate_agents(agents)
+    return agents
+
+
+def _hydrate_agents(agents: list) -> None:
+    """Reconstruct each agent's memory from every past run recorded
+    against their citystate character, so a second (or Nth) run against
+    the same generated cast remembers what happened before instead of
+    starting blank. Only ever reached for the history roster -- the
+    hardcoded AGENT_ROSTER has no matching citystate characters, and
+    build_agents() never calls this for it, so that cast behaves exactly
+    as it always has."""
+    city = citystate.get()
+    if not city:
+        return
+    name_to_id = {c["name"]: c["id"] for c in city.get("characters", [])}
+    for agent in agents:
+        agent_id = name_to_id.get(agent.name)
+        if not agent_id:
+            continue
+        record = citystate.get_agent(agent_id)
+        if record and record.get("runs"):
+            agent.memory = MemoryStream.from_persisted(record)
+            print(f"{agent.name} remembers {len(agent.memory.nodes)} things from earlier runs.")
 
 
 def run(ticks: int = 8, provider: str = None, chat_model: str = None, embed_model: str = None,
@@ -160,6 +193,4 @@ def run(ticks: int = 8, provider: str = None, chat_model: str = None, embed_mode
                   known_places=known_places)
     world.run(ticks)
 
-    treatment = generate_treatment(world.log, [a.name for a in agents])
-    recorder.log("treatment", world.tick, text=treatment)
     citystate.append_agent_run(recorder.to_dict())

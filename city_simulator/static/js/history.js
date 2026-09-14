@@ -10,6 +10,8 @@ const historyStatusPill = document.getElementById('historyStatusPill');
 const historyStatusText = document.getElementById('historyStatusText');
 const historyErrorMsg = document.getElementById('historyErrorMsg');
 const generateBtn = document.getElementById('generateBtn');
+const generateCharacterBtn = document.getElementById('generateCharacterBtn');
+const deleteCityBtn = document.getElementById('deleteCityBtn');
 
 function parseIntOrNull(v){
   const n = parseInt(v, 10);
@@ -102,10 +104,9 @@ function historySettingsModalHtml(){
     <div class="modal-field">
       <div class="field-row">
         <div class="field"><label>Seed (blank = random)</label><input type="number" id="seedInput" placeholder="random" /></div>
-        <div class="field"><label>Characters</label><input type="number" id="charactersInput" value="10" min="1" /></div>
+        <div class="field"><label>Figures per era</label><input type="number" id="figuresInput" placeholder="auto" min="1" /></div>
       </div>
       <div class="field-row">
-        <div class="field"><label>Figures per era</label><input type="number" id="figuresInput" placeholder="auto" min="1" /></div>
         <div class="field"><label>Events per figure</label><input type="number" id="eventsInput" placeholder="auto" min="1" /></div>
       </div>
       <label class="checkbox-row">
@@ -136,7 +137,6 @@ function startHistoryGeneration(confirmOverwrite){
     seed: parseIntOrNull(document.getElementById('seedInput').value),
     figures_per_era: parseIntOrNull(document.getElementById('figuresInput').value),
     events_per_figure: parseIntOrNull(document.getElementById('eventsInput').value),
-    characters: parseIntOrNull(document.getElementById('charactersInput').value) || 10,
     no_llm: document.getElementById('noLlmInput').checked,
     llm_map: document.getElementById('llmMapInput').checked,
     confirm_overwrite: !!confirmOverwrite,
@@ -164,6 +164,32 @@ function startHistoryGeneration(confirmOverwrite){
     pollHistoryStatus();
   });
 }
+
+function deleteCity(){
+  if (!confirm('Delete the current city? This permanently removes every place, resident, and recorded event. This cannot be undone.')) return;
+  deleteCityBtn.disabled = true;
+  fetch('/api/history/data', { method: 'DELETE' }).then(r => r.json()).then(d => {
+    deleteCityBtn.disabled = false;
+    if (!d.ok) {
+      historyErrorMsg.textContent = d.error || 'could not delete the city';
+      return;
+    }
+    historyErrorMsg.textContent = '';
+    hState.data = null;
+    hState.logSince = 0;
+    hState.logText = '';
+    const pre = document.getElementById('historyLogLines');
+    if (pre) pre.textContent = '';
+    document.getElementById('historyContent').style.display = 'none';
+    document.getElementById('historyEmpty').style.display = '';
+    pollHistoryStatus();
+  }).catch(() => {
+    deleteCityBtn.disabled = false;
+    historyErrorMsg.textContent = 'network error';
+  });
+}
+
+deleteCityBtn.addEventListener('click', deleteCity);
 
 // --- generation log -- lives on the Logs tab now, not a modal ----------
 
@@ -271,9 +297,158 @@ function residentCardHtml(person){
 
 function renderResidents(data){
   const people = data.characters || [];
-  document.getElementById('residentsSection').style.display = people.length ? '' : 'none';
-  document.getElementById('residentGrid').innerHTML = people.map(residentCardHtml).join('');
+  // Always shown once a history exists (renderHistory() only calls this
+  // then) -- not gated on people.length, otherwise the entry point to
+  // generate the very first resident would be unreachable.
+  document.getElementById('residentsSection').style.display = '';
+  document.getElementById('residentGrid').innerHTML = people.length
+    ? people.map(residentCardHtml).join('')
+    : '<p class="resident-empty">No residents yet -- generate one above.</p>';
 }
+
+// --- manual "Generate Character" flow (generate -> edit -> save) ---------
+//
+// Two-step modal: pick a grounding place (or Random), generate a draft via
+// POST /api/history/characters/preview (nothing persisted yet), then edit
+// any field before Save actually persists it via POST /api/history/
+// characters. Regenerate re-runs the preview call with the same place
+// choice; Discard just closes the modal, since nothing was ever saved.
+
+let charDraftConstraints = { place_id: '', occupation: '', sex: '' };
+
+function characterPlacePickerModalHtml(){
+  const places = (hState.data && hState.data.places) || [];
+  const options = places
+    .map(p => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)} (${escapeHtml(p.place_type)})</option>`)
+    .join('');
+  return `
+    <div class="modal-header">
+      <button class="modal-close" data-close>×</button>
+      <h3>Generate Character</h3>
+    </div>
+    <div class="modal-field">
+      <div class="field">
+        <label>Ground this resident at</label>
+        <select id="charPlaceInput">
+          <option value="">Random</option>
+          ${options}
+        </select>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Occupation (optional)</label><input type="text" id="charOccupationConstraintInput" placeholder="any" /></div>
+        <div class="field">
+          <label>Sex (optional)</label>
+          <select id="charSexConstraintInput">
+            <option value="">Any</option>
+            <option value="male">Male</option>
+            <option value="female">Female</option>
+          </select>
+        </div>
+      </div>
+      <span class="field-hint">These only shape the LLM-written draft -- the no-LLM fallback can honor occupation but has no way to act on sex.</span>
+    </div>
+    <div class="modal-actions">
+      <button class="primary" data-action="char-generate">▶ Generate</button>
+    </div>
+    <span class="media-status" id="charGenStatus"></span>
+  `;
+}
+
+function characterDraftFormHtml(character){
+  return `
+    <div class="modal-header">
+      <button class="modal-close" data-close>×</button>
+      <h3>Generate Character</h3>
+      <div class="modal-sub">grounded at ${escapeHtml(character.place_name || 'the city')}</div>
+    </div>
+    <div class="modal-field">
+      <div class="field-row">
+        <div class="field"><label>Name</label><input type="text" id="charNameInput" value="${escapeHtml(character.name || '')}" /></div>
+        <div class="field"><label>Age</label><input type="number" id="charAgeInput" value="${escapeHtml(String(character.age || ''))}" min="1" /></div>
+      </div>
+      <div class="field"><label>Occupation</label><input type="text" id="charOccupationInput" value="${escapeHtml(character.occupation || '')}" /></div>
+      <div class="field"><label>Quirk</label><input type="text" id="charQuirkInput" value="${escapeHtml(character.quirk || '')}" /></div>
+      <div class="field"><label>Bio</label><textarea id="charBioInput" rows="4">${escapeHtml(character.bio || '')}</textarea></div>
+    </div>
+    <div class="modal-actions">
+      <button data-action="char-discard">Discard</button>
+      <button data-action="char-regenerate">↻ Regenerate</button>
+      <button class="primary" data-action="char-save">Save</button>
+    </div>
+    <span class="media-status" id="charGenStatus"></span>
+  `;
+}
+
+function wireCharacterModalClose(){
+  modalBodyEl.querySelector('[data-close]').addEventListener('click', closeModal);
+}
+
+function openCharacterGeneratorModal(){
+  charDraftConstraints = { place_id: '', occupation: '', sex: '' };
+  openModal(characterPlacePickerModalHtml());
+  wireCharacterModalClose();
+  modalBodyEl.querySelector('[data-action="char-generate"]').addEventListener('click', () => {
+    charDraftConstraints = {
+      place_id: document.getElementById('charPlaceInput').value,
+      occupation: document.getElementById('charOccupationConstraintInput').value.trim(),
+      sex: document.getElementById('charSexConstraintInput').value,
+    };
+    generateCharacterDraft(charDraftConstraints);
+  });
+}
+
+function generateCharacterDraft(constraints){
+  const statusEl = modalBodyEl.querySelector('#charGenStatus');
+  if (statusEl) statusEl.textContent = 'generating…';
+  fetch('/api/history/characters/preview', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      place_id: constraints.place_id || null,
+      occupation: constraints.occupation || null,
+      sex: constraints.sex || null,
+    }),
+  }).then(r => r.json()).then(d => {
+    if (!d.character) {
+      if (statusEl) statusEl.textContent = d.error || 'could not generate a character';
+      return;
+    }
+    openModal(characterDraftFormHtml(d.character));
+    wireCharacterModalClose();
+    modalBodyEl.querySelector('[data-action="char-discard"]').addEventListener('click', closeModal);
+    modalBodyEl.querySelector('[data-action="char-regenerate"]').addEventListener('click', () => generateCharacterDraft(charDraftConstraints));
+    modalBodyEl.querySelector('[data-action="char-save"]').dataset.draft = JSON.stringify(d.character);
+    modalBodyEl.querySelector('[data-action="char-save"]').addEventListener('click', saveCharacterDraft);
+  }).catch(() => { if (statusEl) statusEl.textContent = 'network error'; });
+}
+
+function saveCharacterDraft(e){
+  const draft = JSON.parse(e.currentTarget.dataset.draft);
+  const statusEl = modalBodyEl.querySelector('#charGenStatus');
+  const edited = {
+    ...draft,
+    name: document.getElementById('charNameInput').value.trim() || draft.name,
+    age: parseIntOrNull(document.getElementById('charAgeInput').value) || draft.age,
+    occupation: document.getElementById('charOccupationInput').value.trim(),
+    quirk: document.getElementById('charQuirkInput').value.trim(),
+    bio: document.getElementById('charBioInput').value.trim(),
+  };
+  if (statusEl) statusEl.textContent = 'saving…';
+  fetch('/api/history/characters', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ character: edited }),
+  }).then(r => r.json()).then(d => {
+    if (!d.character) {
+      if (statusEl) statusEl.textContent = d.error || 'could not save';
+      return;
+    }
+    hState.data.characters = hState.data.characters || [];
+    hState.data.characters.push(d.character);
+    renderResidents(hState.data);
+    closeModal();
+  }).catch(() => { if (statusEl) statusEl.textContent = 'network error'; });
+}
+
+if (generateCharacterBtn) generateCharacterBtn.addEventListener('click', openCharacterGeneratorModal);
 
 function applyHistoryFilters(){
   let visible = 0;
@@ -330,6 +505,7 @@ function pollHistoryStatus(){
     historyStatusText.textContent = phase;
     historyErrorMsg.textContent = d.error || '';
     generateBtn.disabled = phase === 'running';
+    deleteCityBtn.style.display = phase === 'done' ? '' : 'none';
 
     if (phase !== 'idle') {
       document.getElementById('historyEmpty').style.display = 'none';

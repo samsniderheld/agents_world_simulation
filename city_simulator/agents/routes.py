@@ -4,9 +4,10 @@ that parse the request and delegate to jobs.py/simulation.py/recorder.py.
 
 from flask import Blueprint, request
 
+from citystate import store as citystate
 from jsonutil import json_response
 
-from . import jobs, providers, recorder, simulation
+from . import jobs, providers, recorder, simulation, treatment
 
 bp = Blueprint("agents", __name__, url_prefix="/api/agents")
 
@@ -70,3 +71,31 @@ def run():
 def stop():
     jobs.stop()
     return json_response({"ok": True})
+
+
+@bp.post("/treatment")
+def generate_treatment_for_agent():
+    """Generates (and persists) a treatment for one agent's most recent
+    run -- triggered manually from that agent's modal, see
+    treatment.build_transcript()'s docstring for why this needs every
+    co-participant's own record, not just this agent's."""
+    body = request.get_json(silent=True) or {}
+    agent_id = body.get("agent_id")
+    record = citystate.get_agent(agent_id) if agent_id else None
+    if record is None:
+        return json_response({"error": "no such agent"}, status=404)
+    runs = record.get("runs") or []
+    if not runs:
+        return json_response({"error": "this agent has no runs yet"}, status=400)
+
+    city = citystate.get()
+    if city is None:
+        return json_response({"error": "no active city"}, status=404)
+
+    latest = runs[-1]
+    agent_records = {c["name"]: citystate.get_agent(c["id"]) for c in city.get("characters", [])}
+    log, agent_names = treatment.build_transcript(agent_records, latest.get("started_at"))
+
+    text = treatment.generate_treatment(log, agent_names)
+    entry = citystate.add_treatment(agent_id, text, run_started_at=latest.get("started_at"))
+    return json_response({"treatment": entry})

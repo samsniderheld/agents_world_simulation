@@ -14,14 +14,30 @@ from .textutil import cast_constraint, extract_tagged_line, parse_list_lines
 def generate_daily_plan(agent: Agent, tick: int, known_names: list = None,
                          verbose: bool = False, color: str = "") -> list[str]:
     """Ask the LLM for a 5-8 item broad-strokes schedule for today, store it
-    as a 'plan' memory, and set it as the agent's active plan."""
+    as a 'plan' memory, and set it as the agent's active plan.
+
+    Retrieves from memory before asking -- for an agent hydrated from past
+    runs (see simulation.py's _hydrate_agents), this is what actually lets
+    "today" build on what already happened instead of replaying the same
+    day every run; for a brand-new agent it's just "(no memories yet)"."""
+    memories = agent.memory.retrieve(
+        f"{agent.name}'s past days, plans, and what actually happened", tick, k=8,
+    )
+    memory_text = "\n".join(f"- {m.description}" for m in memories) or "(no memories yet)"
+
     prompt = (
         f"{agent.identity_summary()}\n\n"
         f"{cast_constraint(agent.name, known_names)}\n\n"
-        f"In broad strokes, write {agent.name}'s schedule for today, starting with "
-        f"{agent.currently}. Give 5 to 8 items, each a short "
-        "phrase like 'eat breakfast' or 'work on the mural at the studio', "
-        "in the order they'll happen. One item per line, no numbering, no times."
+        f"What {agent.name} remembers from before (may span several earlier days) -- for "
+        f"context only, NOT a template to repeat:\n{memory_text}\n\n"
+        f"It is a new day for {agent.name}, who typically starts around: {agent.currently}. "
+        "This is NOT the same day as any of the memories above -- do not reuse the same "
+        "schedule or the same specific activities. Instead, move the story forward: pick up "
+        "an unfinished thread, follow up on someone mentioned above, or react to a "
+        "consequence of what already happened, but make today's actual tasks genuinely "
+        "different from before. Give 5 to 8 items, each a short phrase like 'eat breakfast' "
+        "or 'work on the mural at the studio', in the order they'll happen. One item per "
+        "line, no numbering, no times."
     )
     reply = llm.complete(prompt, temperature=0.7)
     plan = parse_list_lines(reply)

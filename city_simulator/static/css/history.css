@@ -233,9 +233,11 @@ details.figures-toggle[open] summary::before{ content: '▾ '; }
 .hempty-note{ text-align: center; color: var(--text-faint); font-style: italic; padding: 60px 20px; }
 
 .residents-section{ margin: 40px 18px 24px; padding-top: 20px; border-top: 1px solid var(--border); }
+.residents-section .section-header{ display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
 .residents-section .section-header h2{ font-size: 20px; font-weight: 700; color: var(--accent); margin: 0; }
 .residents-section .section-header .desc{ font-style: italic; color: var(--text-dim); font-size: 13px; margin: 4px 0 16px; }
 .resident-grid{ display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+.resident-empty{ color: var(--text-faint); font-style: italic; padding: 20px 0; }
 .resident-card{ border: 1px solid var(--border); background: var(--panel); padding: 14px 16px; border-radius: 3px; }
 .resident-card .name{ font-weight: 700; font-size: 16px; margin: 0; color: var(--text); }
 .resident-card .role{ font-size: 12px; color: var(--text-dim); margin-bottom: 6px; }
