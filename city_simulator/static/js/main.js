@@ -61,6 +61,26 @@ function latestTaggedMedia(entityId, tag){
   return items.length ? items[items.length - 1] : null;
 }
 
+// A resident's own life history (history/characters.py's
+// _generate_life_history() -- {year, gospel_text} entries spanning their
+// lifetime, same shape as a place's own history). Shared across the
+// resident card, the character draft form, and the agent modal, so it's
+// one collapsible block styled once (.life-history, base css) rather
+// than three copies of the same markup.
+function lifeHistoryHtml(history){
+  const entries = history || [];
+  if (!entries.length) return '';
+  const entriesHtml = entries.map(h =>
+    `<div class="entry"><span class="year">${h.year}</span>${escapeHtml(h.gospel_text)}</div>`
+  ).join('');
+  return `
+    <details class="life-history">
+      <summary>${entries.length} life event${entries.length === 1 ? '' : 's'}</summary>
+      <div class="history">${entriesHtml}</div>
+    </details>
+  `;
+}
+
 function entityThumbHtml(item){
   const media = item.kind === 'video'
     ? `<video src="${cityFileUrl(item.url)}" muted loop playsinline></video>`

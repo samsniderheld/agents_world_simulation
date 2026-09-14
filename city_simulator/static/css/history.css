@@ -254,6 +254,33 @@ details.figures-toggle[open] summary::before{ content: '▾ '; }
   text-decoration: none;
 }
 
+/* A resident's own life history (history/characters.py's
+   _generate_life_history()) -- generic, not scoped to .resident-card
+   like .place-card's own details/.history rules, since this same block
+   is reused in the character draft form and the agent modal too. */
+.life-history summary{
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  list-style: none;
+  margin-top: 10px;
+}
+.life-history summary::-webkit-details-marker{ display: none; }
+.life-history summary::before{ content: '▸ '; color: var(--text-faint); }
+.life-history[open] summary::before{ content: '▾ '; }
+.life-history .history{
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border);
+  display: grid;
+  gap: 6px;
+}
+.life-history .history .entry{ font-size: 13px; line-height: 1.5; color: var(--text); }
+.life-history .history .entry .year{ font-family: var(--mono); font-size: 10.5px; color: var(--text-faint); margin-right: 4px; }
+
 /* Per-entity attached media (place/character cards) -- see
    citystate/store.py and history.js's entityMediaHtml(). */
 .entity-media{

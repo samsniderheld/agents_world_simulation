@@ -280,8 +280,13 @@ function renderEras(data, indexes){
 }
 
 function residentCardHtml(person){
+  // The place card this jumps to lives on the Logs tab, while this
+  // resident card lives on the Map tab -- data-jump-to-place (handled by
+  // the delegated listener below) switches tabs first, since a plain
+  // #anchor href can't scroll to an element inside a currently-hidden
+  // tab-panel.
   const linkHtml = person.place_id
-    ? `<a class="link" href="#place-${escapeHtml(person.place_id)}">→ ${escapeHtml(person.place_name)}</a>`
+    ? `<a class="link" href="#place-${escapeHtml(person.place_id)}" data-jump-to-place="${escapeHtml(person.place_id)}">→ ${escapeHtml(person.place_name)}</a>`
     : '';
   return `
     <div class="resident-card">
@@ -290,6 +295,7 @@ function residentCardHtml(person){
       ${person.quirk ? `<div class="quirk">${escapeHtml(person.quirk)}</div>` : ''}
       <div class="bio">${escapeHtml(person.bio)}</div>
       ${linkHtml}
+      ${lifeHistoryHtml(person.history)}
       ${person.id ? entityMediaHtml(person.id, 'character', characterMediaPrompt(person)) : ''}
     </div>
   `;
@@ -305,6 +311,23 @@ function renderResidents(data){
     ? people.map(residentCardHtml).join('')
     : '<p class="resident-empty">No residents yet -- generate one above.</p>';
 }
+
+// Residents live on the Map tab, but the place card they're grounded in
+// lives on the Logs tab -- a plain #anchor href can't scroll to something
+// inside a currently-hidden tab-panel, so this switches tabs first
+// (reusing the real tab button's own click handler, see main.js) and
+// scrolls to the place card on the next frame, once it's actually visible.
+document.addEventListener('click', (e) => {
+  const link = e.target.closest('[data-jump-to-place]');
+  if (!link) return;
+  e.preventDefault();
+  const logsTabBtn = document.querySelector('.tab-btn[data-tab="logs"]');
+  if (logsTabBtn) logsTabBtn.click();
+  requestAnimationFrame(() => {
+    const target = document.getElementById(`place-${link.dataset.jumpToPlace}`);
+    if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+});
 
 // --- manual "Generate Character" flow (generate -> edit -> save) ---------
 //
@@ -369,6 +392,8 @@ function characterDraftFormHtml(character){
       <div class="field"><label>Occupation</label><input type="text" id="charOccupationInput" value="${escapeHtml(character.occupation || '')}" /></div>
       <div class="field"><label>Quirk</label><input type="text" id="charQuirkInput" value="${escapeHtml(character.quirk || '')}" /></div>
       <div class="field"><label>Bio</label><textarea id="charBioInput" rows="4">${escapeHtml(character.bio || '')}</textarea></div>
+      <div class="field-hint">Life history (not editable here -- Regenerate to get a new one):</div>
+      ${lifeHistoryHtml(character.history)}
     </div>
     <div class="modal-actions">
       <button data-action="char-discard">Discard</button>

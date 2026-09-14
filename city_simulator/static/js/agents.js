@@ -342,6 +342,7 @@ function openAgentModal(name){
     </div>
     ${agent.traits ? `<div class="modal-desc">${escapeHtml(agent.traits)}</div>` : ''}
     <div class="modal-body-pad">${entityMediaHtml(entityId, 'agent', agentMediaPrompt(agent))}</div>
+    <div class="modal-body-pad" id="agentModalHistory"></div>
     <div class="modal-section-label">Plans</div>
     <div class="agent-plans" id="agentModalPlans"></div>
     <div class="modal-section-label">Log</div>
@@ -354,12 +355,15 @@ function openAgentModal(name){
   modalBodyEl.querySelector('[data-close]').addEventListener('click', closeModal);
 
   fetch(`/api/city/agents/${encodeURIComponent(entityId)}`).then(r => r.ok ? r.json() : null).then(data => {
+    const historyEl = document.getElementById('agentModalHistory');
     const plansEl = document.getElementById('agentModalPlans');
     const logEl = document.getElementById('agentModalLog');
     const treatmentsEl = document.getElementById('agentModalTreatments');
     const treatmentControlsEl = document.getElementById('agentModalTreatmentControls');
     const treatmentActionsEl = document.getElementById('agentModalTreatmentActions');
-    if (!plansEl || !logEl || !treatmentsEl || !treatmentControlsEl || !treatmentActionsEl) return; // modal closed before this resolved
+    if (!historyEl || !plansEl || !logEl || !treatmentsEl || !treatmentControlsEl || !treatmentActionsEl) return; // modal closed before this resolved
+
+    historyEl.innerHTML = lifeHistoryHtml(data && data.history);
 
     const plans = (data && data.plans) || [];
     plansEl.innerHTML = plans.length

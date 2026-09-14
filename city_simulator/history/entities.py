@@ -8,8 +8,8 @@ The content lists/maps below (domains, factions, roles, place types) live
 in entities.yaml; this module just loads them.
 """
 
-import itertools
 import random
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -23,11 +23,17 @@ _YAML_PATH = Path(__file__).parent / "data" / "entities.yaml"
 with open(_YAML_PATH) as _f:
     _RAW = yaml.safe_load(_f)
 
-_id_counter = itertools.count(1)
-
 
 def new_id(prefix: str) -> str:
-    return f"{prefix}{next(_id_counter)}"
+    """A per-process sequential counter here would collide across a
+    server restart: citystate persists figures/places/characters to disk
+    (outliving the process), but a fresh counter always starts back at 1
+    -- so the first character added after any restart could silently
+    reuse an id already on disk, inheriting that old entity's media/runs/
+    plans/treatments (a real bug this caused, not hypothetical). uuid4
+    matches citystate/store.py's own media-id scheme for the same reason
+    and can't collide with anything already persisted."""
+    return f"{prefix}{uuid.uuid4().hex[:8]}"
 
 
 _DOMAINS_BY_ERA = _RAW["domains"]
