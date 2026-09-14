@@ -96,6 +96,8 @@ def generate_treatment_for_agent():
     agent_records = {c["name"]: citystate.get_agent(c["id"]) for c in city.get("characters", [])}
     log, agent_names = treatment.build_transcript(agent_records, latest.get("started_at"))
 
-    text = treatment.generate_treatment(log, agent_names)
+    provider = body.get("provider") or None
+    model = body.get("model") or None
+    text = treatment.generate_treatment(log, agent_names, model=model, provider=provider)
     entry = citystate.add_treatment(agent_id, text, run_started_at=latest.get("started_at"))
     return json_response({"treatment": entry})

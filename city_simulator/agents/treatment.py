@@ -65,15 +65,19 @@ def build_transcript(agent_records: dict, started_at: str) -> tuple:
 NOIR_LOOK = (
     "moody film noir aesthetic: high-contrast black-and-white lighting, hard "
     "venetian-blind shadows, wet city streets, dramatic low-key lighting, "
-    "deep chiaroscuro shadow, 1940s wardrobe and production design"
+    "deep chiaroscuro shadow, 1940s wardrobe and production design."
+    "the background should look like a painting, in the style of edward hopper."
 )
 
 
-def generate_treatment(log: list[str], agent_names: list[str], model: str = None) -> str:
+def generate_treatment(log: list[str], agent_names: list[str], model: str = None,
+                        provider: str = None) -> str:
     """Ask the LLM to read a finished simulation's transcript and write a
     short video-vignette treatment: the characters involved, a description
     of what happens, and 6 storyboard image prompts, each with art
-    direction, lighting direction, and DOP/camera direction."""
+    direction, lighting direction, and DOP/camera direction. `provider`
+    lets this one call use a different agent LLM provider than whatever
+    the simulation itself ran on (see llm.py's chat()/complete())."""
     transcript = "\n".join(log) or "(nothing happened)"
 
     prompt = (
@@ -97,8 +101,11 @@ def generate_treatment(log: list[str], agent_names: list[str], model: str = None
         "and movement>\n"
         "(exactly 6 numbered shots in this format, each a different beat of "
         f"the story, all consistent with a {NOIR_LOOK}.)"
+        "the direction should take into account the japanese concept of MA, focusing on"
+        "individual moments, the characters within them, and how those characters experience"
+        "their environment"
     )
     return llm.complete(
         prompt, model=model, temperature=0.8,
-        context_tokens=config.TREATMENT_CONTEXT_TOKENS,
+        context_tokens=config.TREATMENT_CONTEXT_TOKENS, provider=provider,
     )

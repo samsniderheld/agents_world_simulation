@@ -15,16 +15,21 @@ from . import config
 from . import providers
 
 
-def chat(messages, model=None, temperature=0.7, context_tokens=None) -> str:
-    return providers.get_provider().chat(
+def chat(messages, model=None, temperature=0.7, context_tokens=None, provider=None) -> str:
+    """`provider`, if given, overrides config.PROVIDER for just this one
+    call (e.g. treatment.py letting a request pick a different provider
+    than whatever the simulation itself is using) -- deliberately not a
+    global config.PROVIDER mutation, since agent tick loops can be
+    running concurrently in other threads against the same dispatcher."""
+    return providers.get_provider(provider).chat(
         messages, model=model, temperature=temperature, context_tokens=context_tokens,
     )
 
 
-def complete(prompt: str, model=None, temperature=0.7, context_tokens=None) -> str:
+def complete(prompt: str, model=None, temperature=0.7, context_tokens=None, provider=None) -> str:
     """Convenience wrapper for a single user-turn prompt."""
     return chat([{"role": "user", "content": prompt}], model=model,
-                temperature=temperature, context_tokens=context_tokens)
+                temperature=temperature, context_tokens=context_tokens, provider=provider)
 
 
 def embed(text: str, model=None) -> list:

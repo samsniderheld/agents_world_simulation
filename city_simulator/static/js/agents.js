@@ -348,6 +348,7 @@ function openAgentModal(name){
     <div class="agent-log" id="agentModalLog"></div>
     <div class="modal-section-label">Treatment</div>
     <div class="agent-treatments" id="agentModalTreatments"></div>
+    <div class="modal-field" id="agentModalTreatmentControls"></div>
     <div class="modal-actions" id="agentModalTreatmentActions"></div>
   `, { wide: true });
   modalBodyEl.querySelector('[data-close]').addEventListener('click', closeModal);
@@ -356,8 +357,9 @@ function openAgentModal(name){
     const plansEl = document.getElementById('agentModalPlans');
     const logEl = document.getElementById('agentModalLog');
     const treatmentsEl = document.getElementById('agentModalTreatments');
+    const treatmentControlsEl = document.getElementById('agentModalTreatmentControls');
     const treatmentActionsEl = document.getElementById('agentModalTreatmentActions');
-    if (!plansEl || !logEl || !treatmentsEl || !treatmentActionsEl) return; // modal closed before this resolved
+    if (!plansEl || !logEl || !treatmentsEl || !treatmentControlsEl || !treatmentActionsEl) return; // modal closed before this resolved
 
     const plans = (data && data.plans) || [];
     plansEl.innerHTML = plans.length
@@ -375,11 +377,50 @@ function openAgentModal(name){
     });
 
     renderAgentTreatments((data && data.treatments) || []);
-    treatmentActionsEl.innerHTML = runs.length
-      ? '<button class="primary" data-action="generate-treatment">🎬 Generate Treatment</button><span class="media-status" id="agentTreatmentStatus"></span>'
-      : '<div class="modal-empty">No runs yet -- start agents first.</div>';
-    const genBtn = treatmentActionsEl.querySelector('[data-action="generate-treatment"]');
-    if (genBtn) genBtn.addEventListener('click', () => generateAgentTreatment(entityId));
+    if (runs.length) {
+      treatmentControlsEl.innerHTML = `
+        <div class="field-row">
+          <div class="field">
+            <label>Provider</label>
+            <select id="treatmentProviderInput">
+              <option value="">Default</option>
+              <option value="ollama">Ollama (local)</option>
+              <option value="claude">Claude (API)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Model (blank = provider default)</label>
+            <input type="text" id="treatmentModelInput" list="treatmentModelOptions" placeholder="auto" />
+            <datalist id="treatmentModelOptions"></datalist>
+          </div>
+        </div>
+      `;
+      treatmentActionsEl.innerHTML = '<button class="primary" data-action="generate-treatment">🎬 Generate Treatment</button><span class="media-status" id="agentTreatmentStatus"></span>';
+      const providerSelect = document.getElementById('treatmentProviderInput');
+      refreshTreatmentModelOptions(providerSelect.value);
+      providerSelect.addEventListener('change', () => {
+        document.getElementById('treatmentModelInput').value = '';
+        refreshTreatmentModelOptions(providerSelect.value);
+      });
+      const genBtn = treatmentActionsEl.querySelector('[data-action="generate-treatment"]');
+      if (genBtn) genBtn.addEventListener('click', () => generateAgentTreatment(entityId));
+    } else {
+      treatmentControlsEl.innerHTML = '';
+      treatmentActionsEl.innerHTML = '<div class="modal-empty">No runs yet -- start agents first.</div>';
+    }
+  });
+}
+
+function refreshTreatmentModelOptions(provider){
+  fetch(`/api/agents/models?provider=${encodeURIComponent(provider)}`).then(r => r.json()).then(d => {
+    const list = document.getElementById('treatmentModelOptions');
+    if (!list) return;
+    list.innerHTML = '';
+    (d.models || []).forEach(m => {
+      const opt = document.createElement('option');
+      opt.value = m;
+      list.appendChild(opt);
+    });
   });
 }
 
@@ -399,11 +440,17 @@ function treatmentEntryHtml(entry){
 function generateAgentTreatment(entityId){
   const statusEl = document.getElementById('agentTreatmentStatus');
   const btn = modalBodyEl.querySelector('[data-action="generate-treatment"]');
+  const provider = document.getElementById('treatmentProviderInput');
+  const model = document.getElementById('treatmentModelInput');
   if (btn) btn.disabled = true;
   if (statusEl) statusEl.textContent = 'generating…';
   fetch('/api/agents/treatment', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ agent_id: entityId }),
+    body: JSON.stringify({
+      agent_id: entityId,
+      provider: provider ? (provider.value || null) : null,
+      model: model ? (model.value.trim() || null) : null,
+    }),
   }).then(r => r.json()).then(d => {
     if (btn) btn.disabled = false;
     if (!d.treatment) {

@@ -65,7 +65,7 @@ function entityThumbHtml(item){
   const media = item.kind === 'video'
     ? `<video src="${cityFileUrl(item.url)}" muted loop playsinline></video>`
     : `<img src="${cityFileUrl(item.url)}" alt="${escapeHtml(item.prompt)}" />`;
-  return `<div class="entity-thumb">${media}<button class="entity-thumb-remove" data-remove-media="${escapeHtml(item.id)}" title="Remove">×</button></div>`;
+  return `<div class="entity-thumb" data-lightbox="${escapeHtml(item.url)}">${media}<button class="entity-thumb-remove" data-remove-media="${escapeHtml(item.id)}" title="Remove">×</button></div>`;
 }
 
 // Default generation-prompt text for a place/character/agent's "+ Media"
@@ -89,12 +89,43 @@ function characterMediaPrompt(person){
   return text;
 }
 
+// Deliberately just who they are, not how to render them -- age/traits
+// dropped (unlike characterMediaPrompt) since agent portraits are always
+// generated as a character sheet (see CHARACTER_SHEET_STYLE below), whose
+// composition/style instructions are appended at generation time, not
+// shown here as editable pregenerated text.
 function agentMediaPrompt(agent){
-  let text = `${agent.name}, age ${agent.age}.`;
-  if (agent.traits) text += ` ${agent.traits}.`;
-  if (agent.bio) text += ` ${agent.bio}`;
+  let text = agent.name;
+  if (agent.bio) text += `. ${agent.bio}`;
   return text;
 }
+
+// Always appended to an agent's (entityType "agent" -- not the plain
+// resident-card "character" type, which stays a single portrait) prompt
+// when generating an image, never shown in the editable box itself: the
+// box should only ever describe *who* the character is, while this fixed
+// block controls *how* they're rendered, consistently, every time.
+const CHARACTER_SHEET_STYLE = (
+  "Create a character sheet with close-up front and 3/4 head views, plus " +
+  "full-body front, side, 3/4, and back views. The style is rotoscoping, " +
+  "with a maximum of 5 tones, in black and white."
+);
+
+const PLACE_STYLE = (
+  "Create a the following image with a black & painting style, remenicsent of edward hopper "
+
+);
+
+// Appended on top of PLACE_STYLE specifically when the "Interior" tag is
+// selected (see the tag picker entityMediaHtml renders for PLACE_MEDIA_TAGS)
+// -- placeMediaPrompt()'s base description is architecture.py's exterior
+// appearance, so without this an "interior" shot would just be that same
+// exterior description with nothing telling the model to go inside.
+const INTERIOR_STYLE = (
+  "Show the interior of this place, viewed from inside looking around the "
+  + "room -- furnishings, fixtures, and lighting appropriate to the era and "
+  + "domain described above -- not an exterior view of the building."
+);
 
 // Rendered once as part of a card/modal's own HTML, then refreshed in
 // place (see refreshEntityMediaDom) after a generation completes.
@@ -175,16 +206,44 @@ document.addEventListener('click', (e) => {
     return;
   }
 
+  // Click-to-expand: any element carrying data-lightbox (an entity's own
+  // media thumbnail, or a place's tagged Exterior/Interior box) opens a
+  // full-size view in the shared modal. Checked after the remove-button
+  // block above so clicking × on a thumbnail doesn't also expand it (the
+  // button is a descendant of the same data-lightbox element).
+  const lightboxEl = e.target.closest('[data-lightbox]');
+  if (lightboxEl) {
+    const url = lightboxEl.dataset.lightbox;
+    const isVideo = !!lightboxEl.querySelector('video');
+    openModal(isVideo
+      ? `<video src="${cityFileUrl(url)}" controls autoplay style="display:block;max-width:100%;"></video>`
+      : `<img src="${cityFileUrl(url)}" style="display:block;max-width:100%;" />`, { wide: true });
+    return;
+  }
+
   const genBtn = e.target.closest('[data-action="gen-image"], [data-action="gen-video"]');
   if (genBtn) {
     const wrap = genBtn.closest('.entity-media');
     const promptInput = wrap.querySelector('.media-prompt-input');
-    const prompt = promptInput.value.trim();
+    const basePrompt = promptInput.value.trim();
     const statusEl = wrap.querySelector('.media-status');
-    if (!prompt) { statusEl.textContent = 'enter a description first'; return; }
+    if (!basePrompt) { statusEl.textContent = 'enter a description first'; return; }
     const tagSelect = wrap.querySelector('.media-tag-input');
     const tag = tagSelect ? tagSelect.value : '';
-    startEntityMediaGeneration(wrap.dataset.entityId, genBtn.dataset.action === 'gen-video' ? 'video' : 'image', prompt, tag, wrap);
+    const kind = genBtn.dataset.action === 'gen-video' ? 'video' : 'image';
+    // Agent portraits always render as a character sheet, and places
+    // always render in the house style -- the box only ever holds what
+    // the entity is/who they are (see agentMediaPrompt/placeMediaPrompt),
+    // so these fixed composition/style blocks are appended here, at
+    // generation time, not shown as part of the editable prompt.
+    let prompt = basePrompt;
+    if (kind === 'image' && wrap.dataset.entityType === 'agent') {
+      prompt = `${basePrompt}\n\n${CHARACTER_SHEET_STYLE}`;
+    } else if (kind === 'image' && wrap.dataset.entityType === 'place') {
+      prompt = `${basePrompt}\n\n${PLACE_STYLE}`;
+      if (tag === 'interior') prompt += `\n\n${INTERIOR_STYLE}`;
+    }
+    startEntityMediaGeneration(wrap.dataset.entityId, kind, prompt, tag, wrap);
   }
 });
 

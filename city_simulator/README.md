@@ -91,8 +91,11 @@ backend those buttons call. Everything generated is persisted to disk by
    ```bash
    python3 app.py
    ```
-   Opens a browser to the Map tab. Hit Generate to build a city, then
-   Start Agents to run its residents through a tick loop -- their roster
+   Serves at `http://127.0.0.1:8420` -- a fixed port (`app.py`'s `PORT`),
+   not an ephemeral one, so the URL survives a restart and you can just
+   refresh an existing tab instead of a new one opening every time (it
+   doesn't auto-open a browser). Hit Generate to build a city, then Start
+   Agents to run its residents through a tick loop -- their roster
    already reflects whatever you just generated.
 
 Everything also still works without Ollama running: the Map tab's "Skip
