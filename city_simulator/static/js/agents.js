@@ -6,8 +6,8 @@
 // citymap.js's buildCityMap()), and their combined activity log lives on
 // the Logs tab. This file owns: the roster/settings modal, feeding agent
 // markers into the shared map, the agent detail modal (with the same
-// image/video generation controls a place gets), the treatment plate,
-// and the Logs tab's Agent Activity panel.
+// image/video generation controls a place gets, plus a manual "Generate
+// Treatment" section), and the Logs tab's Agent Activity panel.
 // ======================================================================
 
 const KIND_META = {
@@ -21,6 +21,7 @@ const KIND_META = {
   insight:       { label: 'INSIGHT',   color: '#f59e0b' },
   action:        { label: 'ACTION',    color: '#e5e7eb' },
   dialogue:      { label: 'DIALOGUE',  color: '#4ade80' },
+  move:          { label: 'MOVE',      color: '#2dd4bf' },
   reflect_pause: { label: 'REFLECT',   color: '#a78bfa' },
 };
 
@@ -32,7 +33,6 @@ const aState = {
   lastPhase: null,
   lastAgentsSignature: null, // name@location per agent -- redraw the map only when this changes
   agentRecords: {},          // character id -> their persisted agents/<id>/agent.json, once fetched
-  treatment: null,
 };
 
 // Deterministic per-name color, used everywhere an agent needs one (map
@@ -96,6 +96,14 @@ function agentSettingsModalHtml(){
         <div class="field"><label>Tick pause (s)</label><input type="number" id="tickSleepInput" value="0" min="0" step="0.5" /></div>
       </div>
       <div class="field">
+        <label>Provider</label>
+        <select id="providerInput">
+          <option value="ollama">Ollama (local)</option>
+          <option value="claude">Claude (API)</option>
+        </select>
+        <span class="field-hint">Claude still uses your local Ollama for memory embeddings.</span>
+      </div>
+      <div class="field">
         <label>Chat model (blank = server default)</label>
         <input type="text" id="modelInput" list="modelOptions" placeholder="auto" />
         <datalist id="modelOptions"></datalist>
@@ -113,6 +121,22 @@ function agentSettingsModalHtml(){
   `;
 }
 
+// Refreshes the Chat model <datalist> for whichever provider is currently
+// selected -- called on modal open and again whenever the Provider select
+// changes, since Ollama/Claude have entirely different model lists.
+function refreshModelOptions(provider){
+  fetch(`/api/agents/models?provider=${encodeURIComponent(provider)}`).then(r => r.json()).then(d => {
+    const list = modalBodyEl.querySelector('#modelOptions');
+    if (!list) return;
+    list.innerHTML = '';
+    (d.models || []).forEach(m => {
+      const opt = document.createElement('option');
+      opt.value = m;
+      list.appendChild(opt);
+    });
+  });
+}
+
 function openAgentSettingsModal(){
   loadRoster().then(() => {
     openModal(agentSettingsModalHtml());
@@ -123,14 +147,11 @@ function openAgentSettingsModal(){
         else aState.selectedAgents.delete(el.dataset.agentName);
       });
     });
-    fetch('/api/agents/models').then(r => r.json()).then(d => {
-      const list = modalBodyEl.querySelector('#modelOptions');
-      if (!list) return;
-      (d.models || []).forEach(m => {
-        const opt = document.createElement('option');
-        opt.value = m;
-        list.appendChild(opt);
-      });
+    const providerSelect = modalBodyEl.querySelector('#providerInput');
+    refreshModelOptions(providerSelect.value);
+    providerSelect.addEventListener('change', () => {
+      document.getElementById('modelInput').value = '';
+      refreshModelOptions(providerSelect.value);
     });
     modalBodyEl.querySelector('[data-action="submit-start"]').addEventListener('click', startAgentRun);
   });
@@ -141,6 +162,7 @@ startBtn.addEventListener('click', openAgentSettingsModal);
 function startAgentRun(){
   const payload = {
     ticks: parseInt(document.getElementById('ticksInput').value, 10) || 8,
+    provider: document.getElementById('providerInput').value,
     tick_sleep: parseFloat(document.getElementById('tickSleepInput').value) || 0,
     chat_model: document.getElementById('modelInput').value.trim() || null,
     context_tokens: parseInt(document.getElementById('contextInput').value, 10) || null,
@@ -250,6 +272,7 @@ function eventText(ev){
     case 'insight': return `realizes: ${ev.text}`;
     case 'action': return `[T${ev.tick}] (${ev.location}) ${ev.text}`;
     case 'dialogue': return `→ ${ev.listener}: "${ev.text}"`;
+    case 'move': return `moved to ${ev.to_location} (from ${ev.from_location})`;
     case 'reflect_pause': return `pauses to reflect.`;
     default: return ev.text || JSON.stringify(ev);
   }
@@ -319,17 +342,28 @@ function openAgentModal(name){
     </div>
     ${agent.traits ? `<div class="modal-desc">${escapeHtml(agent.traits)}</div>` : ''}
     <div class="modal-body-pad">${entityMediaHtml(entityId, 'agent', agentMediaPrompt(agent))}</div>
+    <div class="modal-body-pad" id="agentModalHistory"></div>
     <div class="modal-section-label">Plans</div>
     <div class="agent-plans" id="agentModalPlans"></div>
     <div class="modal-section-label">Log</div>
     <div class="agent-log" id="agentModalLog"></div>
+    <div class="modal-section-label">Treatment</div>
+    <div class="agent-treatments" id="agentModalTreatments"></div>
+    <div class="modal-field" id="agentModalTreatmentControls"></div>
+    <div class="modal-actions" id="agentModalTreatmentActions"></div>
   `, { wide: true });
   modalBodyEl.querySelector('[data-close]').addEventListener('click', closeModal);
 
   fetch(`/api/city/agents/${encodeURIComponent(entityId)}`).then(r => r.ok ? r.json() : null).then(data => {
+    const historyEl = document.getElementById('agentModalHistory');
     const plansEl = document.getElementById('agentModalPlans');
     const logEl = document.getElementById('agentModalLog');
-    if (!plansEl || !logEl) return; // modal closed before this resolved
+    const treatmentsEl = document.getElementById('agentModalTreatments');
+    const treatmentControlsEl = document.getElementById('agentModalTreatmentControls');
+    const treatmentActionsEl = document.getElementById('agentModalTreatmentActions');
+    if (!historyEl || !plansEl || !logEl || !treatmentsEl || !treatmentControlsEl || !treatmentActionsEl) return; // modal closed before this resolved
+
+    historyEl.innerHTML = lifeHistoryHtml(data && data.history);
 
     const plans = (data && data.plans) || [];
     plansEl.innerHTML = plans.length
@@ -337,11 +371,7 @@ function openAgentModal(name){
       : '<div class="modal-empty">No plans yet.</div>';
 
     const runs = (data && data.runs) || [];
-    if (!runs.length) {
-      logEl.innerHTML = '<div class="modal-empty">Nothing logged yet.</div>';
-      return;
-    }
-    logEl.innerHTML = '';
+    logEl.innerHTML = runs.length ? '' : '<div class="modal-empty">Nothing logged yet.</div>';
     runs.forEach(run => {
       const header = document.createElement('div');
       header.className = 'agent-run-header';
@@ -349,18 +379,97 @@ function openAgentModal(name){
       logEl.appendChild(header);
       (run.events || []).forEach(ev => logEl.appendChild(makeEventRow(ev)));
     });
+
+    renderAgentTreatments((data && data.treatments) || []);
+    if (runs.length) {
+      treatmentControlsEl.innerHTML = `
+        <div class="field-row">
+          <div class="field">
+            <label>Provider</label>
+            <select id="treatmentProviderInput">
+              <option value="">Default</option>
+              <option value="ollama">Ollama (local)</option>
+              <option value="claude">Claude (API)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Model (blank = provider default)</label>
+            <input type="text" id="treatmentModelInput" list="treatmentModelOptions" placeholder="auto" />
+            <datalist id="treatmentModelOptions"></datalist>
+          </div>
+        </div>
+      `;
+      treatmentActionsEl.innerHTML = '<button class="primary" data-action="generate-treatment">🎬 Generate Treatment</button><span class="media-status" id="agentTreatmentStatus"></span>';
+      const providerSelect = document.getElementById('treatmentProviderInput');
+      refreshTreatmentModelOptions(providerSelect.value);
+      providerSelect.addEventListener('change', () => {
+        document.getElementById('treatmentModelInput').value = '';
+        refreshTreatmentModelOptions(providerSelect.value);
+      });
+      const genBtn = treatmentActionsEl.querySelector('[data-action="generate-treatment"]');
+      if (genBtn) genBtn.addEventListener('click', () => generateAgentTreatment(entityId));
+    } else {
+      treatmentControlsEl.innerHTML = '';
+      treatmentActionsEl.innerHTML = '<div class="modal-empty">No runs yet -- start agents first.</div>';
+    }
   });
 }
 
-// --- treatment plate (Map tab, below the map) -------------------------------
+function refreshTreatmentModelOptions(provider){
+  fetch(`/api/agents/models?provider=${encodeURIComponent(provider)}`).then(r => r.json()).then(d => {
+    const list = document.getElementById('treatmentModelOptions');
+    if (!list) return;
+    list.innerHTML = '';
+    (d.models || []).forEach(m => {
+      const opt = document.createElement('option');
+      opt.value = m;
+      list.appendChild(opt);
+    });
+  });
+}
 
-function renderTreatment(text){
-  aState.treatment = text;
-  const plate = document.getElementById('treatmentPlate');
-  if (!plate) return;
-  if (!text) { plate.style.display = 'none'; return; }
-  plate.style.display = '';
-  document.getElementById('treatmentText').textContent = text;
+function renderAgentTreatments(treatments){
+  const el = document.getElementById('agentModalTreatments');
+  if (!el) return;
+  el.innerHTML = treatments.length
+    ? treatments.map(treatmentEntryHtml).join('')
+    : '<div class="modal-empty">No treatments generated yet.</div>';
+}
+
+function treatmentEntryHtml(entry){
+  const when = entry.created_at ? new Date(entry.created_at).toLocaleString() : '';
+  return `<div class="agent-treatment"><div class="agent-treatment-meta">${escapeHtml(when)}</div><pre>${escapeHtml(entry.text)}</pre></div>`;
+}
+
+function generateAgentTreatment(entityId){
+  const statusEl = document.getElementById('agentTreatmentStatus');
+  const btn = modalBodyEl.querySelector('[data-action="generate-treatment"]');
+  const provider = document.getElementById('treatmentProviderInput');
+  const model = document.getElementById('treatmentModelInput');
+  if (btn) btn.disabled = true;
+  if (statusEl) statusEl.textContent = 'generating…';
+  fetch('/api/agents/treatment', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      agent_id: entityId,
+      provider: provider ? (provider.value || null) : null,
+      model: model ? (model.value.trim() || null) : null,
+    }),
+  }).then(r => r.json()).then(d => {
+    if (btn) btn.disabled = false;
+    if (!d.treatment) {
+      if (statusEl) statusEl.textContent = d.error || 'could not generate a treatment';
+      return;
+    }
+    if (statusEl) statusEl.textContent = '';
+    const el = document.getElementById('agentModalTreatments');
+    if (!el) return; // modal closed before this resolved
+    if (el.querySelector('.modal-empty')) el.innerHTML = '';
+    el.insertAdjacentHTML('beforeend', treatmentEntryHtml(d.treatment));
+  }).catch(() => {
+    if (btn) btn.disabled = false;
+    if (statusEl) statusEl.textContent = 'network error';
+  });
 }
 
 // --- Agent Activity Log (Map tab, next to the map) --------------------------
@@ -455,10 +564,7 @@ function pollAgentLog(){
     const el = document.getElementById('agentLogLive');
     if (el && d.events && d.events.length) {
       const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 20;
-      d.events.forEach(ev => {
-        if (ev.kind === 'treatment') return; // shown in its own plate, not the log
-        el.appendChild(agentLogRowHtml(ev, ev.agent));
-      });
+      d.events.forEach(ev => el.appendChild(agentLogRowHtml(ev, ev.agent)));
       if (atBottom) el.scrollTop = el.scrollHeight;
     }
     agentLogSince = d.next;
@@ -483,7 +589,6 @@ function pollAgentsState(){
     const isNewRun = d.started_at && d.started_at !== aState.lastStartedAt;
     if (isNewRun) {
       aState.lastStartedAt = d.started_at;
-      renderTreatment(null);
       resetAgentLog(d.started_at);
     }
 
@@ -501,10 +606,6 @@ function pollAgentsState(){
     if (phase === 'done' && aState.lastPhase !== 'done') {
       refreshAgentLogHistory();  // fold the just-finished run into the persisted side
       resetAgentLog();           // ...and clear the now-redundant live side
-      fetch('/api/agents/events?since=0').then(r => r.json()).then(ed => {
-        const treatmentEv = (ed.events || []).find(ev => ev.kind === 'treatment');
-        if (treatmentEv) renderTreatment(treatmentEv.text);
-      });
     }
     aState.lastPhase = phase;
   }).catch(() => {});

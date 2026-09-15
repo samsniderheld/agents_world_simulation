@@ -11,7 +11,7 @@ from . import config
 from . import display
 from . import llm
 from .agent import Agent
-from .treatment import generate_treatment
+from .memory import MemoryStream
 from .world import World
 from . import recorder
 
@@ -48,16 +48,21 @@ AGENT_ROSTER = {
     ),
 }
 
+# None until a history is generated (or one is hydrated from a saved city
+# at startup -- see app.py) -- _current_roster() below falls back to
+# AGENT_ROSTER until then.
+_active_roster = None
+
 
 def roster_from_history(history: dict) -> dict:
     """A history's generated characters, restaged as an agent roster: each
-    keeps their real grounded bio AND is placed at their own real
+    keeps their real grounded bio AND starts out placed at their own real
     grounding place (character.place_name -- see history/characters.py),
-    not some shared stand-in location. That means two agents only ever
-    meet if their bios genuinely tied them to the same place (world.py has
-    no movement/pathfinding, so co-location is the only way agents can
-    talk) -- fewer conversations than a shared-hub scheme would force, but
-    nothing an agent does ever contradicts where their bio says they are."""
+    not some shared stand-in location. An agent can later relocate as
+    their plan unfolds (see planning.decompose's WHERE line, and run()
+    below for how the active city's places become their known
+    destinations) -- but nothing an agent does ever contradicts where
+    their bio says they started."""
     roster = {}
     for c in history.get("characters", []):
         traits = (c.get("occupation") or "").strip()
@@ -81,7 +86,13 @@ def set_history_roster(history: dict = None):
 
 
 def _current_roster() -> dict:
-    return _active_roster or AGENT_ROSTER
+    # Deliberately not `_active_roster or AGENT_ROSTER` -- a real history
+    # with zero characters yet (e.g. just generated, before anyone's used
+    # the manual "Generate Character" flow) sets _active_roster to {},
+    # which is falsy and would otherwise silently fall back to the
+    # hardcoded noir cast. Only "no history at all" (_active_roster is
+    # None) should fall back to it.
+    return AGENT_ROSTER if _active_roster is None else _active_roster
 
 
 def roster_summary() -> list:
@@ -91,22 +102,62 @@ def roster_summary() -> list:
 
 def build_agents(names: list) -> list:
     roster = _current_roster()
+    if not roster:
+        return []
     chosen = [n for n in names if n in roster] or [next(iter(roster))]
-    return [Agent(name=name, **roster[name]) for name in chosen]
+    agents = [Agent(name=name, **roster[name]) for name in chosen]
+    if _active_roster is not None:  # only a history-backed roster has citystate characters
+        _hydrate_agents(agents)
+    return agents
 
 
-def run(ticks: int = 8, chat_model: str = None, embed_model: str = None,
+def _hydrate_agents(agents: list) -> None:
+    """Reconstruct each agent's memory from every past run recorded
+    against their citystate character, so a second (or Nth) run against
+    the same generated cast remembers what happened before instead of
+    starting blank. Only ever reached for the history roster -- the
+    hardcoded AGENT_ROSTER has no matching citystate characters, and
+    build_agents() never calls this for it, so that cast behaves exactly
+    as it always has."""
+    city = citystate.get()
+    if not city:
+        return
+    name_to_id = {c["name"]: c["id"] for c in city.get("characters", [])}
+    for agent in agents:
+        agent_id = name_to_id.get(agent.name)
+        if not agent_id:
+            continue
+        record = citystate.get_agent(agent_id)
+        if record and record.get("runs"):
+            agent.memory = MemoryStream.from_persisted(record)
+            print(f"{agent.name} remembers {len(agent.memory.nodes)} things from earlier runs.")
+
+
+def run(ticks: int = 8, provider: str = None, chat_model: str = None, embed_model: str = None,
         context_tokens: int = None, tick_sleep: float = 0,
         agent_names: list = None, verbose: bool = False, stop_flag=None):
     """Blocking -- meant to be called on a background thread (see
     agents/jobs.py). Configures config.py's overridable settings, builds
-    the chosen agents, and runs the tick loop."""
+    the chosen agents, and runs the tick loop.
+
+    `provider` picks which agent LLM backend generates chat completions
+    ("ollama" or "claude" -- see agents/providers/); embeddings always use
+    Ollama regardless (see llm.py's docstring). `chat_model` overrides
+    whichever provider is active (CLAUDE_MODEL for "claude", CHAT_MODEL
+    otherwise); `context_tokens` likewise overrides Ollama's input-context
+    window or Claude's output max_tokens, whichever applies."""
+    if provider:
+        config.PROVIDER = provider
     if chat_model:
-        config.CHAT_MODEL = chat_model
+        if config.PROVIDER == "claude":
+            config.CLAUDE_MODEL = chat_model
+        else:
+            config.CHAT_MODEL = chat_model
     if embed_model:
         config.EMBED_MODEL = embed_model
     if context_tokens:
         config.CHAT_CONTEXT_TOKENS = context_tokens
+        config.CLAUDE_MAX_TOKENS = context_tokens
 
     llm.check_connection()
 
@@ -122,14 +173,24 @@ def run(ticks: int = 8, chat_model: str = None, embed_model: str = None,
             for a in agents
         ],
         meta={
-            "chat_model": config.CHAT_MODEL, "embed_model": config.EMBED_MODEL,
+            "provider": config.PROVIDER,
+            "chat_model": config.CLAUDE_MODEL if config.PROVIDER == "claude" else config.CHAT_MODEL,
+            "embed_model": config.EMBED_MODEL,
             "context_tokens": config.CHAT_CONTEXT_TOKENS, "ticks": ticks,
         },
     )
 
-    world = World(agents, tick_sleep=tick_sleep, verbose=verbose, stop_flag=stop_flag)
+    city_data = citystate.get()
+    if city_data and city_data.get("places"):
+        known_places = sorted({
+            p["name"] for p in city_data["places"]
+            if p.get("status") == "active" and p.get("name")
+        })
+    else:
+        known_places = sorted({a.location for a in agents})
+
+    world = World(agents, tick_sleep=tick_sleep, verbose=verbose, stop_flag=stop_flag,
+                  known_places=known_places)
     world.run(ticks)
 
-    treatment = generate_treatment(world.log, [a.name for a in agents])
-    recorder.log("treatment", world.tick, text=treatment)
     citystate.append_agent_run(recorder.to_dict())

@@ -58,6 +58,20 @@ def start(params: dict, on_done=None):
     return True, None
 
 
+def delete():
+    """Returns (ok, error_message). Refuses while a generation is already
+    running, to avoid deleting a city out from under the very job that's
+    about to overwrite it."""
+    with _lock:
+        if _thread and _thread.is_alive():
+            return False, "a history generation is already in progress"
+        citystate.delete()
+        history_log.reset()
+        _status["phase"] = "idle"
+        _status["error"] = None
+    return True, None
+
+
 def get_status() -> dict:
     with _lock:
         return dict(_status)

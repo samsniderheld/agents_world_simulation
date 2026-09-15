@@ -1,23 +1,28 @@
 /* Agents tab -- the shared city map (see citymap.js) with a second agent-
-   marker layer, a post-run treatment plate, and the flat per-agent event
-   log shown inside that agent's modal. Builds on base.css's tokens/
-   modal/canvas styling. */
+   marker layer, and the flat per-agent event log + generated treatments
+   shown inside that agent's modal. Builds on base.css's tokens/modal/
+   canvas styling. */
 
-.treatment-plate{
-  margin: 20px 18px;
+/* An agent's generated treatments (agents/<id>/agent.json's "treatments"
+   -- see citystate/store.py's add_treatment(), triggered manually from
+   the modal's own Generate Treatment button), shown at the bottom of
+   their modal, oldest first. */
+.agent-treatments{ padding: 4px 18px 12px; }
+.agent-treatment{
+  margin-bottom: 12px;
   border: 1px solid var(--border);
   background: var(--panel);
-  padding: 18px 20px;
+  padding: 14px 16px;
 }
-.treatment-plate .label{
+.agent-treatment .agent-treatment-meta{
   font-family: var(--mono);
   font-size: 10px;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--accent);
-  margin-bottom: 10px;
+  color: var(--text-faint);
+  margin-bottom: 8px;
 }
-.treatment-plate pre{
+.agent-treatment pre{
   margin: 0;
   white-space: pre-wrap;
   font-family: var(--mono);

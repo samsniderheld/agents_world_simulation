@@ -1,3 +1,29 @@
+# Fallback (no-LLM) personal life-history sentences -- see characters.py's
+# _fallback_life_history(). Three phase pools spanning a resident's own
+# lifetime (birth -> present), each a complete sentence with
+# {name}/{place}/{domain} slots, one line drawn from each phase in order
+# so even the offline fallback reads as a real (if brief) life arc rather
+# than three unrelated facts.
+life_event_templates:
+  early:
+    - "{name} was born into a family that never had much money, but never went without."
+    - "{name} grew up in a cramped tenement full of noise and cousins."
+    - "{name} showed an early stubborn streak that never really went away."
+    - "{name} lost a parent young, and grew up faster for it."
+    - "{name} was, by all accounts, an unremarkable child, right up until they weren't."
+  arrival:
+    - "{name} first came to {place} looking for work, and never really left."
+    - "{name} took up with {place} almost by accident, and stayed out of habit."
+    - "{name} arrived in the neighborhood with little more than a suitcase and an address."
+    - "{name} found steady footing at {place} after a string of jobs that didn't stick."
+    - "{name} settled into the rhythm of life at {place}, for better or worse."
+  recent:
+    - "{name} has become a fixture around {place}, whether anyone asked for that or not."
+    - "{name} earned a quiet reputation locally, tied up with {domain} more than anything."
+    - "{name} still can't say exactly how the years added up so fast."
+    - "{name} keeps mostly to old routines these days, and doesn't apologize for it."
+    - "{name} has seen enough of the neighborhood change to have opinions about all of it."
+
 # Free-prose hints handed to the LLM (loose instructions, not filled-in
 # sentences) describing a resident's relationship to their grounding place.
 relationship_hints:

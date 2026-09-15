@@ -233,9 +233,11 @@ details.figures-toggle[open] summary::before{ content: '▾ '; }
 .hempty-note{ text-align: center; color: var(--text-faint); font-style: italic; padding: 60px 20px; }
 
 .residents-section{ margin: 40px 18px 24px; padding-top: 20px; border-top: 1px solid var(--border); }
+.residents-section .section-header{ display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
 .residents-section .section-header h2{ font-size: 20px; font-weight: 700; color: var(--accent); margin: 0; }
 .residents-section .section-header .desc{ font-style: italic; color: var(--text-dim); font-size: 13px; margin: 4px 0 16px; }
 .resident-grid{ display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+.resident-empty{ color: var(--text-faint); font-style: italic; padding: 20px 0; }
 .resident-card{ border: 1px solid var(--border); background: var(--panel); padding: 14px 16px; border-radius: 3px; }
 .resident-card .name{ font-weight: 700; font-size: 16px; margin: 0; color: var(--text); }
 .resident-card .role{ font-size: 12px; color: var(--text-dim); margin-bottom: 6px; }
@@ -251,6 +253,33 @@ details.figures-toggle[open] summary::before{ content: '▾ '; }
   color: var(--accent);
   text-decoration: none;
 }
+
+/* A resident's own life history (history/characters.py's
+   _generate_life_history()) -- generic, not scoped to .resident-card
+   like .place-card's own details/.history rules, since this same block
+   is reused in the character draft form and the agent modal too. */
+.life-history summary{
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  list-style: none;
+  margin-top: 10px;
+}
+.life-history summary::-webkit-details-marker{ display: none; }
+.life-history summary::before{ content: '▸ '; color: var(--text-faint); }
+.life-history[open] summary::before{ content: '▾ '; }
+.life-history .history{
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border);
+  display: grid;
+  gap: 6px;
+}
+.life-history .history .entry{ font-size: 13px; line-height: 1.5; color: var(--text); }
+.life-history .history .entry .year{ font-family: var(--mono); font-size: 10.5px; color: var(--text-faint); margin-right: 4px; }
 
 /* Per-entity attached media (place/character cards) -- see
    citystate/store.py and history.js's entityMediaHtml(). */

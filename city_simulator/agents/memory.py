@@ -59,11 +59,72 @@ class MemoryStream:
         self.nodes: list[MemoryNode] = []
         self.importance_since_reflection = 0.0
 
+    @classmethod
+    def from_persisted(cls, agent_record: dict) -> "MemoryStream":
+        """Rebuild a MemoryStream from every past run in an agent's
+        citystate record (agent_record["runs"], each already this agent's
+        own event slice, in chronological append order -- see
+        citystate.store.append_agent_run) -- see agents/simulation.py's
+        _hydrate_agents() for where this gets called.
+
+        Only "memory"-kind events become nodes. importance_since_reflection
+        is reconstructed too, by summing "observation" importances and
+        resetting on every "reflect_pause" seen, so a new run picks up
+        mid-way toward the next reflection threshold instead of restarting
+        at 0.
+
+        Rehydrated nodes get sequential negative synthetic ticks (oldest =
+        -N, most recent historical = -1) -- MemoryStream.retrieve()'s
+        recency score is rank-based, not tied to real tick numbers, so
+        this is all that's needed to make every historical node sort
+        strictly older than the new run's own (which start at tick 0)
+        while preserving correct relative order across run boundaries.
+        This never touches World.tick or the simulated-clock display.
+
+        No LLM calls here -- deliberately bypasses add() entirely so
+        rehydration cost is O(1) regardless of history size. A memory
+        persisted before this field existed has no "embedding"; that
+        defaults to [], which _cosine_sim already scores 0.0 for rather
+        than crashing. Evidence ids from an earlier process aren't
+        remapped (they won't resolve against this run's fresh
+        _id_counter ids) -- accepted, since evidence is only ever used
+        for reflection-provenance display, never retrieval scoring.
+        """
+        memory_events = []
+        importance_since_reflection = 0.0
+        for run in agent_record.get("runs", []):
+            for e in run.get("events", []):
+                if e.get("kind") == "memory":
+                    memory_events.append(e)
+                    if e.get("memory_kind") == "observation":
+                        importance_since_reflection += e.get("importance") or 0.0
+                elif e.get("kind") == "reflect_pause":
+                    importance_since_reflection = 0.0
+
+        stream = cls()
+        n = len(memory_events)
+        for i, e in enumerate(memory_events):
+            synthetic_tick = i - n  # oldest -> -n, most recent historical -> -1
+            stream.nodes.append(MemoryNode(
+                id=next(_id_counter),
+                kind=e.get("memory_kind", "observation"),
+                description=e.get("text", ""),
+                created_tick=synthetic_tick,
+                last_accessed_tick=synthetic_tick,
+                importance=e.get("importance") if e.get("importance") is not None else 5.0,
+                embedding=e.get("embedding") or [],
+                evidence=e.get("evidence") or [],
+            ))
+        stream.importance_since_reflection = importance_since_reflection
+        return stream
+
     def add(self, description: str, kind: str = "observation", tick: int = 0,
              importance: float = None, evidence: list = None,
              agent_name: str = "", color: str = "", verbose: bool = False) -> MemoryNode:
         if importance is None:
             importance = self._rate_importance(description)
+        embedding = llm.embed(description)
+        evidence = evidence or []
         node = MemoryNode(
             id=next(_id_counter),
             kind=kind,
@@ -71,16 +132,20 @@ class MemoryStream:
             created_tick=tick,
             last_accessed_tick=tick,
             importance=importance,
-            embedding=llm.embed(description),
-            evidence=evidence or [],
+            embedding=embedding,
+            evidence=evidence,
         )
         self.nodes.append(node)
         if kind == "observation":
             self.importance_since_reflection += importance
         if verbose:
             print(display.memory_line(agent_name, color, kind, importance, description))
+        # embedding/evidence ride along on the persisted event too -- this is
+        # what makes from_persisted() below able to reconstruct a real
+        # MemoryStream from a past run without any re-embedding calls.
         recorder.log("memory", tick, agent=agent_name or None,
-                     memory_kind=kind, importance=importance, text=description)
+                     memory_kind=kind, importance=importance, text=description,
+                     embedding=embedding, evidence=evidence)
         return node
 
     def _rate_importance(self, description: str) -> float:

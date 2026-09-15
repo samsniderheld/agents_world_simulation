@@ -458,15 +458,10 @@ function refreshPlaceMediaBoxes(placeId){
 
 document.addEventListener('entity-media-refreshed', (e) => refreshPlaceMediaBoxes(e.detail.entityId));
 
-document.addEventListener('click', (e) => {
-  const frame = e.target.closest('.box-frame.has-media');
-  if (!frame) return;
-  const url = frame.dataset.lightbox;
-  const isVideo = !!frame.querySelector('video');
-  openModal(isVideo
-    ? `<video src="${cityFileUrl(url)}" controls autoplay style="display:block;max-width:100%;"></video>`
-    : `<img src="${cityFileUrl(url)}" style="display:block;max-width:100%;" />`, { wide: true });
-});
+// Click-to-expand for .box-frame.has-media is handled by the shared
+// [data-lightbox] listener in main.js (it already carries that same
+// attribute) -- one lightbox handler for both this and the generic
+// entity-thumb media strip, not two copies of the same logic.
 
 function openPlaceModal(cm, placeId, fromNid){
   const data = hState.data;

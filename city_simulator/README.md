@@ -77,20 +77,35 @@ backend those buttons call. Everything generated is persisted to disk by
    ```
    First use downloads the model (several GB); see `visuals/NOTES.md` for
    the hardware/memory details this was built against.
-5. Run it:
+5. Ollama is the default for the Agents side too, but the Start Agents
+   modal's Provider picker can switch a run to the **Claude API** instead
+   (`agents/providers/claude.py`) -- needs its own key, same `.env`
+   pattern as `FAL_KEY`:
+   ```bash
+   export ANTHROPIC_API_KEY=...
+   ```
+   Memory retrieval still needs Ollama's embedding model either way --
+   Claude has no embeddings endpoint, so picking it only swaps out the
+   chat/dialogue/planning calls, not `nomic-embed-text`.
+6. Run it:
    ```bash
    python3 app.py
    ```
-   Opens a browser to the Map tab. Hit Generate to build a city, then
-   Start Agents to run its residents through a tick loop -- their roster
+   Serves at `http://127.0.0.1:8420` -- a fixed port (`app.py`'s `PORT`),
+   not an ephemeral one, so the URL survives a restart and you can just
+   refresh an existing tab instead of a new one opening every time (it
+   doesn't auto-open a browser). Hit Generate to build a city, then Start
+   Agents to run its residents through a tick loop -- their roster
    already reflects whatever you just generated.
 
 Everything also still works without Ollama running: the Map tab's "Skip
 Ollama" checkbox falls back to pure-grammar names/prose, and starting
-agents raises a clear error if the configured model isn't pulled. Without
-`FAL_KEY` set (and no local provider configured), a "+ Media" generation
-starts normally but its status flips to an error the moment fal.ai is
-actually called.
+agents raises a clear error if the configured model isn't pulled (or, if
+Claude is the picked provider, if `ANTHROPIC_API_KEY` isn't set --
+checked up front, before any simulation work starts). Without `FAL_KEY`
+set (and no local provider configured), a "+ Media" generation starts
+normally but its status flips to an error the moment fal.ai is actually
+called.
 
 ## Layout
 
@@ -259,7 +274,7 @@ place the active city's data actually lives.
 | `history/summary.py` | history | One LLM call at the very end of a run: reads the whole chronological event record and writes a short narrative summary of the city's history (`summary` field in the JSON payload, shown on the Logs tab). Its own larger context window/timeout (`data/config.yaml`'s `summary:` section), same pattern as `agents/treatment.py`'s post-run treatment; falls back to a plain stats sentence with no LLM. |
 | `history/generate.py` | history | `run_history()` (called by `jobs.py`) and a standalone CLI (`python3 -m history.generate --seed 42`) that does the same thing plus writes `history.json`/`map.txt`/`characters.json`. |
 | `history/jobs.py` / `routes.py` | history | Background-thread job orchestration and the `/api/history/*` Flask blueprint. |
-| `agents/config.py` / `agents/llm.py` | agents | Config (recency/reflection/retrieval tuning, from the reference implementation) and a thin Ollama chat+embeddings wrapper. |
+| `agents/config.py` / `agents/llm.py` / `agents/providers/` | agents | Config (recency/reflection/retrieval tuning, from the reference implementation; `PROVIDER`/`ANTHROPIC_API_KEY`/`CLAUDE_MODEL` for the Claude option, `ANTHROPIC_API_KEY` read the same `.env`/env-var way as `FAL_KEY`). `llm.py` is a thin dispatcher to whichever `providers/` backend is active (`ollama.py` default, `claude.py` -- raw REST to the Messages API, no SDK dependency) -- every other agents/ file just calls `llm.complete()`/etc. and never knows a provider swap is possible. `embed()` always goes to `ollama.py` specifically regardless of the active chat provider, since Claude has no embeddings endpoint. |
 | `agents/agent.py`, `memory.py`, `planning.py`, `reflection.py`, `world.py` | agents | The generative-agents cognitive core -- memory stream + retrieval, reflection, planning, reacting/dialogue, and the tick-based simulation loop. See each file's docstring. |
 | `agents/simulation.py` | agents | `run()`, the hardcoded noir `AGENT_ROSTER` fallback, and `roster_from_history()` -- restages a generated history's characters as agents, each placed at their own real grounding place (so two agents only meet if history itself put them at the same place). |
 | `agents/jobs.py` / `routes.py` | agents | Background-thread job orchestration and the `/api/agents/*` Flask blueprint. |

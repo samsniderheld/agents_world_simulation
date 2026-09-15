@@ -29,6 +29,7 @@ _CONTINUE_TAG = "\033[2m" if _ENABLED else ""     # dim
 _MEMORY_TAG = "\033[2m" if _ENABLED else ""       # dim
 _FOCAL_TAG = "\033[93m" if _ENABLED else ""       # yellow
 _INSIGHT_TAG = "\033[1;93m" if _ENABLED else ""   # bold yellow
+_MOVE_TAG = "\033[1;36m" if _ENABLED else ""      # bold cyan
 
 
 def agent_colors(names: list) -> dict:
@@ -120,3 +121,8 @@ def focal_line(agent_name: str, color: str, question: str) -> str:
 def insight_line(agent_name: str, color: str, insight: str) -> str:
     """A reflection insight was distilled from retrieved memories."""
     return f"    {_tag('INSIGHT', _INSIGHT_TAG)} {_name(agent_name, color)} realizes: {_clean(insight)}"
+
+
+def move_line(agent_name: str, color: str, old_location: str, new_location: str) -> str:
+    """`agent_name` relocated for their next broad step -- planning.decompose."""
+    return f"    {_tag('MOVE', _MOVE_TAG)} {_name(agent_name, color)} moves from {old_location} to {new_location}"

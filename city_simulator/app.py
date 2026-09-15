@@ -11,7 +11,6 @@ Usage:
 """
 
 import logging
-import webbrowser
 
 from flask import Flask, render_template
 from werkzeug.serving import make_server
@@ -49,18 +48,20 @@ def create_app() -> Flask:
     return app
 
 
+# Fixed, not ephemeral -- the URL survives a restart, so the workflow is
+# refreshing whatever tab you already have open rather than a new one
+# opening every time (see main()). If something else on this machine is
+# already using this port, change it here.
+PORT = 8420
+
+
 def main():
     app = create_app()
-    # make_server (not app.run()) so an ephemeral port (0) resolves to a
-    # real port we can print/open a browser to, and threaded=True so the
-    # long-lived SSE stream doesn't block other requests.
-    srv = make_server("127.0.0.1", 0, app, threaded=True)
+    # make_server (not app.run()) so threaded=True is available -- the
+    # long-lived SSE stream would otherwise block other requests.
+    srv = make_server("127.0.0.1", PORT, app, threaded=True)
     url = f"http://127.0.0.1:{srv.server_port}/"
-    print(f"Serving City Simulator at {url} (Ctrl+C to stop)")
-    try:
-        webbrowser.open(url)
-    except Exception:
-        pass
+    print(f"Serving City Simulator at {url} -- refresh your existing tab, or open it (Ctrl+C to stop)")
     try:
         srv.serve_forever()
     except KeyboardInterrupt:

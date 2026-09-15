@@ -7,6 +7,7 @@
     <div class="spacer"></div>
     <button class="danger" id="stopBtn" style="display:none">■ Stop</button>
     <button id="startBtn">▶ Start Agents</button>
+    <button class="danger" id="deleteCityBtn" style="display:none">🗑 Delete City</button>
     <button class="primary" id="generateBtn">▶ Generate</button>
   </div>
 
@@ -38,6 +39,17 @@
           </div>
         </div>
       </div>
+
+      <section class="residents-section" id="residentsSection" style="display:none">
+        <div class="section-header">
+          <div>
+            <h2>Residents of the City, c. 1959</h2>
+            <div class="desc">People living here today, each grounded in a piece of the city's history -- generate one whenever you like.</div>
+          </div>
+          <button id="generateCharacterBtn">+ Generate Character</button>
+        </div>
+        <div class="resident-grid" id="residentGrid"></div>
+      </section>
     </div>
   </main>
 </div>
