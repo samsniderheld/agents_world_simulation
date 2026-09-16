@@ -241,7 +241,7 @@ function placeCardHtml(place){
         <summary>${place.history.length} recorded event${place.history.length === 1 ? '' : 's'}</summary>
         <div class="history">${historyHtml}</div>
       </details>
-      ${entityMediaHtml(place.id, 'place', placeMediaPrompt(place), PLACE_MEDIA_TAGS)}
+      ${entityMediaHtml(place.id, 'place', placeMediaFullPrompt(place), PLACE_MEDIA_TAGS)}
     </div>
   `;
 }
@@ -296,7 +296,7 @@ function residentCardHtml(person){
       <div class="bio">${escapeHtml(person.bio)}</div>
       ${linkHtml}
       ${lifeHistoryHtml(person.history)}
-      ${person.id ? entityMediaHtml(person.id, 'character', characterMediaPrompt(person)) : ''}
+      ${person.id ? entityMediaHtml(person.id, 'character', characterMediaFullPrompt(person)) : ''}
     </div>
   `;
 }

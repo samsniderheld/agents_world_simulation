@@ -1,0 +1,113 @@
+/* Director tab -- treatment picker, per-shot storyboard cards, and a
+   character-map generator. Builds on base.css's tokens/.field/.modal-field/
+   .modal-actions/button styling; not the compact .entity-media widget
+   history.css defines (this tab's cards are full-size and always expanded,
+   with no "+ Media" toggle to collapse behind). */
+
+#directorContent .modal-field{ padding: 0 18px; margin-bottom: 14px; }
+#directorContent .modal-actions{ display: flex; align-items: center; gap: 8px; }
+
+.director-section{
+  margin: 0 18px 28px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+.director-section:first-of-type{ border-top: none; padding-top: 0; }
+
+.director-section .section-header{ margin-bottom: 12px; }
+.director-section .section-header h2{
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--accent);
+  margin: 0;
+}
+.director-section .section-header .desc{
+  font-style: italic;
+  color: var(--text-dim);
+  font-size: 12.5px;
+  margin-top: 4px;
+}
+
+.director-section .media-status{
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-faint);
+  margin-left: 8px;
+}
+
+.director-treatment-text{
+  margin: 10px 0 0;
+  padding: 14px 16px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  white-space: pre-wrap;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text);
+  max-height: 340px;
+  overflow-y: auto;
+}
+
+.storyboard-grid{
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+}
+.storyboard-shot{
+  border: 1px solid var(--border);
+  background: var(--panel);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.storyboard-shot .shot-label{
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.storyboard-shot .shot-prompt-input{
+  width: 100%;
+  font-family: var(--sans);
+  font-size: 12px;
+  line-height: 1.5;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 8px 9px;
+  border-radius: 3px;
+  resize: vertical;
+}
+
+.director-result{ margin-top: 4px; }
+.director-result-media{ display: flex; flex-direction: column; gap: 6px; }
+.director-result img, .director-result video{
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  cursor: zoom-in;
+}
+.director-download{
+  align-self: flex-start;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-dim);
+  text-decoration: none;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 4px 9px;
+}
+.director-download:hover{ color: var(--text); border-color: var(--text-dim); }
+.director-result-empty{
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-faint);
+  padding: 10px 0;
+}

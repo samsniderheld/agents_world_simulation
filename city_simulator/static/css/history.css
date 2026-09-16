@@ -74,7 +74,7 @@
   border-bottom: 1px solid var(--border);
 }
 .place-media-box .box-frame{
-  aspect-ratio: 16 / 10;
+  aspect-ratio: 16 / 9;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -182,7 +182,8 @@
 
 .place-card{ border: 1px solid var(--border); background: var(--panel); padding: 12px 14px; border-radius: 3px; }
 .place-card.hidden{ display: none; }
-.place-card .name{ font-weight: 700; font-size: 15px; margin: 0 0 2px; color: var(--text); }
+.place-card .name{ font-weight: 700; font-size: 15px; margin: 0 0 2px; color: var(--text); cursor: pointer; width: fit-content; }
+.place-card .name:hover{ color: var(--accent); text-decoration: underline; }
 .place-card .meta{ font-size: 12px; color: var(--text-dim); margin-bottom: 8px; }
 .place-card .meta .status-destroyed{ color: var(--bad); font-style: italic; }
 .place-card .architecture{ font-size: 13px; line-height: 1.6; color: var(--text); margin-bottom: 8px; }
@@ -335,20 +336,24 @@ details.figures-toggle[open] summary::before{ content: '▾ '; }
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  align-items: center;
+  align-items: flex-start;
   margin-top: 8px;
 }
 .entity-media-form[hidden]{ display: none; }
-.entity-media-form .media-prompt-input{
+.entity-media-form .media-prompt-input,
+.entity-media-form .media-extra-input{
   flex: 1 1 100%;
   font-family: var(--sans);
   font-size: 12.5px;
+  line-height: 1.5;
   background: var(--bg);
   border: 1px solid var(--border);
   color: var(--text);
   padding: 6px 9px;
   border-radius: 3px;
+  resize: vertical;
 }
+.entity-media-form .media-extra-input{ color: var(--text-dim); }
 .media-form-actions{ display: flex; gap: 6px; }
 .media-form-actions button{ font-size: 10px; padding: 5px 9px; }
 .entity-media .media-status{

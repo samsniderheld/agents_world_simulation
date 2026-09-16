@@ -18,6 +18,7 @@ from . import config
 _EXT_BY_CONTENT_TYPE = {
     "image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp",
     "video/mp4": ".mp4", "video/webm": ".webm",
+    "audio/wav": ".wav", "audio/x-wav": ".wav", "audio/mpeg": ".mp3",
 }
 
 

@@ -29,6 +29,7 @@ FAL_TEXT_TO_IMAGE_MODEL = _RAW["fal"]["text_to_image_model"]
 FAL_IMAGE_EDIT_MODEL = _RAW["fal"]["image_edit_model"]
 FAL_IMAGE_TO_VIDEO_MODEL = _RAW["fal"]["image_to_video_model"]
 FAL_REFERENCE_TO_VIDEO_MODEL = _RAW["fal"]["reference_to_video_model"]
+FAL_MUSIC_MODEL = _RAW["fal"]["music_model"]
 FAL_POLL_INTERVAL_SECONDS = _RAW["fal"]["poll_interval_seconds"]
 FAL_TIMEOUT_SECONDS = _RAW["fal"]["timeout_seconds"]
 

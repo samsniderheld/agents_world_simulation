@@ -123,6 +123,16 @@ class FalProvider(Provider):
         result = self._submit_and_wait(config.FAL_REFERENCE_TO_VIDEO_MODEL, payload)
         return {"video": self._save_video(result["video"])}
 
+    def generate_music(self, prompt: str, **options) -> dict:
+        payload = {"prompt": prompt, **options}
+        result = self._submit_and_wait(config.FAL_MUSIC_MODEL, payload)
+        audio = result["audio"]
+        local_path = storage.save_url(audio["url"])
+        return {"audio": {
+            "local_path": str(local_path), "url": storage.relative_path(local_path),
+            "content_type": audio.get("content_type"), "file_size": audio.get("file_size"),
+        }}
+
     def _save_video(self, video: dict) -> dict:
         local_path = storage.save_url(video["url"])
         return {

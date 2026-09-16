@@ -17,11 +17,16 @@ fal:
   # editing the upload in place, and any reference_video_urls entry is
   # capped by fal at 3 seconds.
   reference_to_video_model: "google/gemini-omni-flash/v1.1/reference-to-video"
+  # Google Lyria 2 -- text-to-music, 48kHz WAV, ~30s clips. Confirmed via
+  # fal's own API docs (fal.ai/models/fal-ai/lyria2/api): takes just
+  # prompt/negative_prompt/seed, returns {"audio": {url, ...}} -- no
+  # image/video-style aspect_ratio or resolution options to default here.
+  music_model: "fal-ai/lyria2"
   poll_interval_seconds: 2
   timeout_seconds: 600
 
 image_defaults:
-  aspect_ratio: "1:1"
+  aspect_ratio: "16:9"
   resolution: "1K"
   output_format: "png"
 

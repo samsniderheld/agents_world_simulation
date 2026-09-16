@@ -1,0 +1,64 @@
+<div class="tab-panel" data-tab-panel="studio" hidden>
+  <main>
+    <section class="studio-section">
+      <div class="section-header">
+        <div>
+          <h2>Studio</h2>
+          <div class="desc">Generate any image you like -- no city, place, or character required. Renders at 16:9.</div>
+        </div>
+      </div>
+      <textarea id="studioPrompt" rows="4" placeholder="Describe the image you want…"></textarea>
+
+      <div class="studio-refs">
+        <label class="studio-refs-label" for="studioRefInput">Reference images (optional)</label>
+        <input type="file" id="studioRefInput" accept="image/*" multiple />
+        <div class="studio-refs-list" id="studioRefsList"></div>
+      </div>
+
+      <div class="studio-actions">
+        <button class="primary" id="studioGenerateBtn">Generate</button>
+        <span class="media-status" id="studioStatus"></span>
+      </div>
+    </section>
+
+    <section class="studio-section">
+      <div class="section-header">
+        <div>
+          <h2>Session Gallery</h2>
+          <div class="desc">Everything you've generated this session, newest first -- nothing here is saved, so download anything you want to keep.</div>
+        </div>
+      </div>
+      <div class="studio-gallery" id="studioGallery"></div>
+      <div class="studio-gallery-empty" id="studioGalleryEmpty">Nothing generated yet.</div>
+    </section>
+
+    <section class="studio-section">
+      <div class="section-header">
+        <div>
+          <h2>Music</h2>
+          <div class="desc">Text-to-music via Google Lyria 2 (fal.ai) -- about 30 seconds of 48kHz audio per generation. Shares the same generator slot as images above, so only one can run at a time.</div>
+        </div>
+      </div>
+      <textarea id="studioMusicPrompt" rows="3" placeholder="Describe the music you want…"></textarea>
+      <div class="field studio-music-negative">
+        <label for="studioMusicNegative">Negative prompt (optional)</label>
+        <input type="text" id="studioMusicNegative" placeholder="low quality" />
+      </div>
+      <div class="studio-actions">
+        <button class="primary" id="studioMusicGenerateBtn">Generate</button>
+        <span class="media-status" id="studioMusicStatus"></span>
+      </div>
+    </section>
+
+    <section class="studio-section">
+      <div class="section-header">
+        <div>
+          <h2>Music Gallery</h2>
+          <div class="desc">Everything you've generated this session, newest first -- nothing here is saved, so download anything you want to keep.</div>
+        </div>
+      </div>
+      <div class="studio-music-gallery" id="studioMusicGallery"></div>
+      <div class="studio-gallery-empty" id="studioMusicGalleryEmpty">Nothing generated yet.</div>
+    </section>
+  </main>
+</div>

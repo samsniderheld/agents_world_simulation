@@ -23,3 +23,8 @@ class Provider:
         and/or reference image(s) -- not an in-place edit of `video_path`.
         Returns {"video": {"local_path", "url", "content_type", "file_size"}}."""
         raise NotImplementedError
+
+    def generate_music(self, prompt: str, **options) -> dict:
+        """Text-to-music. Returns {"audio": {"local_path", "url",
+        "content_type", "file_size"}}."""
+        raise NotImplementedError
