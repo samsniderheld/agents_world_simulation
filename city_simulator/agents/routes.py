@@ -101,3 +101,14 @@ def generate_treatment_for_agent():
     text = treatment.generate_treatment(log, agent_names, model=model, provider=provider)
     entry = citystate.add_treatment(agent_id, text, run_started_at=latest.get("started_at"))
     return json_response({"treatment": entry})
+
+
+@bp.get("/treatment/shots")
+def treatment_shots():
+    """Parses whichever treatment text the Director tab currently has
+    selected into its individual storyboard shots -- a query param, not
+    tied to a stored treatment id, since treatment entries don't have one
+    (see citystate.store.add_treatment's schema) and this needs to work
+    for a just-generated treatment too, before any re-fetch from disk."""
+    text = request.args.get("text", "")
+    return json_response({"shots": treatment.parse_storyboard_shots(text)})

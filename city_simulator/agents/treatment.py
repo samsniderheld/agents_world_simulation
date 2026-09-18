@@ -6,10 +6,14 @@ not automatically at the end of every run.
 """
 
 import datetime
+import re
 
 from . import config
 from . import llm
 from .config import TICK_MINUTES
+
+_STORYBOARD_HEADER_RE = re.compile(r"^\s*storyboard\s*:?\s*$", re.IGNORECASE)
+_SHOT_LINE_RE = re.compile(r"^\s*\d+\.\s*(.+)$")
 
 # Matches World.__init__'s own hardcoded default exactly (simulation.py's
 # one World(...) call never overrides start_time) -- needed here because
@@ -109,3 +113,26 @@ def generate_treatment(log: list[str], agent_names: list[str], model: str = None
         prompt, model=model, temperature=0.8,
         context_tokens=config.TREATMENT_CONTEXT_TOKENS, provider=provider,
     )
+
+
+def parse_storyboard_shots(text: str) -> list:
+    """Pulls the numbered shot lines out of a treatment's STORYBOARD
+    section (agents/routes.py's GET /api/agents/treatment/shots, for the
+    Director tab) -- each returned line is the *whole* shot ("<shot
+    description> | Art direction: ... | Lighting: ... | DOP: ..."), since
+    that whole line is exactly what makes a good single-image prompt, not
+    just the leading description. Returns however many shots were
+    actually found (not hardcoded to 6 -- the LLM's own count can vary);
+    an empty list if there's no STORYBOARD section at all, which callers
+    must handle gracefully rather than assume a fixed count."""
+    lines = text.splitlines()
+    start = next((i for i, line in enumerate(lines) if _STORYBOARD_HEADER_RE.match(line)), None)
+    if start is None:
+        return []
+
+    shots = []
+    for line in lines[start + 1:]:
+        match = _SHOT_LINE_RE.match(line)
+        if match:
+            shots.append(match.group(1).strip())
+    return shots

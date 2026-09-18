@@ -341,7 +341,7 @@ function openAgentModal(name){
       <div class="modal-sub">age ${escapeHtml(String(agent.age))} · ${escapeHtml(agent.location || '')}</div>
     </div>
     ${agent.traits ? `<div class="modal-desc">${escapeHtml(agent.traits)}</div>` : ''}
-    <div class="modal-body-pad">${entityMediaHtml(entityId, 'agent', agentMediaPrompt(agent))}</div>
+    <div class="modal-body-pad">${entityMediaHtml(entityId, 'agent', agentMediaFullPrompt(agent))}</div>
     <div class="modal-body-pad" id="agentModalHistory"></div>
     <div class="modal-section-label">Plans</div>
     <div class="agent-plans" id="agentModalPlans"></div>

@@ -497,7 +497,7 @@ function openPlaceModal(cm, placeId, fromNid){
     <div class="place-media-boxes" id="placeMediaBoxes" data-place-id="${escapeHtml(place.id)}">
       ${PLACE_MEDIA_TAGS.map(t => placeMediaBoxHtml(place.id, t)).join('')}
     </div>
-    <div class="modal-body-pad">${entityMediaHtml(place.id, 'place', placeMediaPrompt(place), PLACE_MEDIA_TAGS)}</div>
+    <div class="modal-body-pad">${entityMediaHtml(place.id, 'place', placeMediaFullPrompt(place), PLACE_MEDIA_TAGS)}</div>
     <div class="modal-section-label">History</div>
     ${timeline}
   `, { wide: true });
@@ -506,3 +506,40 @@ function openPlaceModal(cm, placeId, fromNid){
   const back = modalBodyEl.querySelector('[data-back]');
   if (back) back.addEventListener('click', () => openNeighborhoodModal(cm, fromNid));
 }
+
+// A dedicated, mostly-full-width image-generation view for one place --
+// opened by clicking its name on the Logs tab's place card (see the
+// listener below). Deliberately just the Exterior/Interior boxes plus the
+// generation form (the same placeMediaBoxHtml/entityMediaHtml pieces
+// openPlaceModal above already uses), with no history timeline/founder
+// stats -- those already live on the place card itself, right behind this
+// modal, so repeating them here would just be noise in a view whose whole
+// point is giving image generation room to work.
+function openPlaceImageModal(placeId){
+  const data = hState.data;
+  if (!data) return;
+  const place = data.places.find(p => p.id === placeId);
+  if (!place) return;
+
+  openModal(`
+    <div class="modal-header">
+      <button class="modal-close" data-close>×</button>
+      <h3>${escapeHtml(place.name)}</h3>
+      <div class="modal-sub">${escapeHtml(place.place_type)} · domain: ${escapeHtml(place.domain)}</div>
+    </div>
+    <div class="place-media-boxes" id="placeMediaBoxes" data-place-id="${escapeHtml(place.id)}">
+      ${PLACE_MEDIA_TAGS.map(t => placeMediaBoxHtml(place.id, t)).join('')}
+    </div>
+    <div class="modal-body-pad">${entityMediaHtml(place.id, 'place', placeMediaFullPrompt(place), PLACE_MEDIA_TAGS)}</div>
+  `, { full: true });
+
+  modalBodyEl.querySelector('[data-close]').addEventListener('click', closeModal);
+}
+
+document.addEventListener('click', (e) => {
+  const nameEl = e.target.closest('.place-card .name');
+  if (!nameEl) return;
+  const card = nameEl.closest('.place-card');
+  const placeId = card.id.replace(/^place-/, '');
+  openPlaceImageModal(placeId);
+});

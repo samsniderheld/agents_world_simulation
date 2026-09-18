@@ -106,3 +106,14 @@ def generate_video_from_reference():
     }
     ok, error = jobs.start("video_reference", params)
     return json_response({"ok": ok, "error": error}, status=200 if ok else 409)
+
+
+@bp.post("/generate-music")
+def generate_music():
+    body = request.get_json(silent=True) or {}
+    params = {
+        "prompt": body.get("prompt", ""),
+        "options": body.get("options") or {},
+    }
+    ok, error = jobs.start("music", params)
+    return json_response({"ok": ok, "error": error}, status=200 if ok else 409)

@@ -12,6 +12,14 @@ function cityFileUrl(relativeUrl){
   return '/api/city/files/' + relativeUrl;
 }
 
+// Raw visuals output (visuals/data/, see visuals/storage.py) -- for
+// anything not attached to a citystate entity (the Studio tab's results,
+// and reference-image uploads used as generate-image input), which never
+// gets relocated into citystate/data/ the way cityFileUrl's targets do.
+function visualsFileUrl(relativeUrl){
+  return '/api/visuals/files/' + relativeUrl;
+}
+
 // --- shared modal shell ------------------------------------------------
 //
 // One overlay for the whole app (settings forms, place/agent detail,
@@ -21,9 +29,10 @@ function cityFileUrl(relativeUrl){
 const modalOverlayEl = document.getElementById('modalOverlay');
 const modalBodyEl = document.getElementById('modalBody');
 
-function openModal(html, { wide = false } = {}){
+function openModal(html, { wide = false, full = false } = {}){
   modalBodyEl.innerHTML = html;
   modalBodyEl.classList.toggle('wide', wide);
+  modalBodyEl.classList.toggle('full', full);
   modalOverlayEl.style.display = '';
 }
 
@@ -132,8 +141,9 @@ const CHARACTER_SHEET_STYLE = (
 );
 
 const PLACE_STYLE = (
-  "Create a the following image with a black & painting style, remenicsent of edward hopper "
-
+  "Create a the following image with a black & painting style, remenicsent of edward hopper " +
+  "any people generated in the scene should have a 1980's rotoscoped animation look, but keep the wardobe and " +
+  "look 1950's in style."
 );
 
 // Appended on top of PLACE_STYLE specifically when the "Interior" tag is
@@ -147,6 +157,26 @@ const INTERIOR_STYLE = (
   + "domain described above -- not an exterior view of the building."
 );
 
+// Combines a place/agent/resident's own description with its fixed style
+// block into the single starting value shown in entityMediaHtml's main
+// prompt box -- computed once, at the call site, so the box always shows
+// the *entire* prompt that will actually be sent, nothing appended
+// invisibly later. A resident and an agent are the same underlying person
+// (see agents/simulation.py's roster_from_history()), just portrayed from
+// two different card layouts -- both get the same character-sheet
+// treatment, so a portrait made from either entry point looks the same.
+function placeMediaFullPrompt(place){
+  return `${placeMediaPrompt(place)}\n\n${PLACE_STYLE}`;
+}
+
+function agentMediaFullPrompt(agent){
+  return `${agentMediaPrompt(agent)}\n\n${CHARACTER_SHEET_STYLE}`;
+}
+
+function characterMediaFullPrompt(person){
+  return `${characterMediaPrompt(person)}\n\n${CHARACTER_SHEET_STYLE}`;
+}
+
 // Rendered once as part of a card/modal's own HTML, then refreshed in
 // place (see refreshEntityMediaDom) after a generation completes.
 // `defaultPrompt` (built by placeMediaPrompt/characterMediaPrompt/
@@ -157,7 +187,7 @@ const INTERIOR_STYLE = (
 // small tag picker to the generate form so a new image/video can be
 // filed under one of those slots -- see citymap.js's place modal for
 // where the tagged boxes above this strip read them back out.
-function entityMediaHtml(entityId, entityType, defaultPrompt, tags){
+function entityMediaHtml(entityId, entityType, defaultPrompt, tags, defaultExtra){
   const items = entityMediaList(entityId);
   const hasImage = items.some(m => m.kind === 'image');
   const tagPicker = tags && tags.length
@@ -173,7 +203,8 @@ function entityMediaHtml(entityId, entityType, defaultPrompt, tags){
         <button class="entity-media-toggle" data-action="toggle-media-form">+ Media</button>
       </div>
       <div class="entity-media-form" hidden>
-        <input type="text" class="media-prompt-input" placeholder="Describe the image…" value="${escapeHtml(defaultPrompt || '')}" />
+        <textarea class="media-prompt-input" rows="3" placeholder="Describe the image…">${escapeHtml(defaultPrompt || '')}</textarea>
+        <textarea class="media-extra-input" rows="2" placeholder="Add any additional details…">${escapeHtml(defaultExtra || '')}</textarea>
         ${tagPicker}
         <div class="media-form-actions">
           <button data-action="gen-image">Generate Image</button>
@@ -187,17 +218,18 @@ function entityMediaHtml(entityId, entityType, defaultPrompt, tags){
 
 // Re-renders every on-page copy of one entity's media strip (a place can
 // appear both in its map modal and, in principle, elsewhere) by rebuilding
-// each from scratch, carrying forward whatever's currently in the prompt
-// input -- including any edit the user made -- rather than resetting it
+// each from scratch, carrying forward whatever's currently in both prompt
+// boxes -- including any edit the user made -- rather than resetting them
 // back to the generated default.
 function refreshEntityMediaDom(entityId){
   document.querySelectorAll(`.entity-media[data-entity-id="${CSS.escape(entityId)}"]`).forEach(wrap => {
     const entityType = wrap.dataset.entityType;
     const currentPrompt = wrap.querySelector('.media-prompt-input').value;
+    const currentExtra = wrap.querySelector('.media-extra-input').value;
     const tagSelect = wrap.querySelector('.media-tag-input');
     const tags = tagSelect ? Array.from(tagSelect.options).map(o => o.value).filter(Boolean) : null;
     const temp = document.createElement('div');
-    temp.innerHTML = entityMediaHtml(entityId, entityType, currentPrompt, tags);
+    temp.innerHTML = entityMediaHtml(entityId, entityType, currentPrompt, tags, currentExtra);
     wrap.replaceWith(temp.firstElementChild);
     document.dispatchEvent(new CustomEvent('entity-media-refreshed', { detail: { entityId } }));
   });
@@ -245,23 +277,23 @@ document.addEventListener('click', (e) => {
   if (genBtn) {
     const wrap = genBtn.closest('.entity-media');
     const promptInput = wrap.querySelector('.media-prompt-input');
+    const extraInput = wrap.querySelector('.media-extra-input');
     const basePrompt = promptInput.value.trim();
     const statusEl = wrap.querySelector('.media-status');
     if (!basePrompt) { statusEl.textContent = 'enter a description first'; return; }
     const tagSelect = wrap.querySelector('.media-tag-input');
     const tag = tagSelect ? tagSelect.value : '';
     const kind = genBtn.dataset.action === 'gen-video' ? 'video' : 'image';
-    // Agent portraits always render as a character sheet, and places
-    // always render in the house style -- the box only ever holds what
-    // the entity is/who they are (see agentMediaPrompt/placeMediaPrompt),
-    // so these fixed composition/style blocks are appended here, at
-    // generation time, not shown as part of the editable prompt.
+    // The main box already carries the entity's full prompt, style block
+    // included (see placeMediaFullPrompt/agentMediaFullPrompt) -- only the
+    // second, "additional details" box gets appended here, plus the
+    // interior-specific direction, which stays tied to the tag picker
+    // (a structural choice, not free text) rather than typed by hand.
     let prompt = basePrompt;
-    if (kind === 'image' && wrap.dataset.entityType === 'agent') {
-      prompt = `${basePrompt}\n\n${CHARACTER_SHEET_STYLE}`;
-    } else if (kind === 'image' && wrap.dataset.entityType === 'place') {
-      prompt = `${basePrompt}\n\n${PLACE_STYLE}`;
-      if (tag === 'interior') prompt += `\n\n${INTERIOR_STYLE}`;
+    const extra = extraInput.value.trim();
+    if (extra) prompt += `\n\n${extra}`;
+    if (kind === 'image' && wrap.dataset.entityType === 'place' && tag === 'interior') {
+      prompt += `\n\n${INTERIOR_STYLE}`;
     }
     startEntityMediaGeneration(wrap.dataset.entityId, kind, prompt, tag, wrap);
   }
@@ -285,7 +317,7 @@ function startEntityMediaGeneration(entityId, kind, prompt, tag, wrap){
     payload = { prompt, image_path: sourcePath, options: {} };
   } else {
     endpoint = '/api/visuals/generate-image';
-    payload = { prompt, image_paths: null, options: {} };
+    payload = { prompt, image_paths: null, options: { aspect_ratio: '16:9' } };
   }
 
   fetch(endpoint, {

@@ -33,6 +33,9 @@ def _worker(kind: str, params: dict):
                 params["prompt"], video_path=params.get("video_path"),
                 image_paths=params.get("image_paths"), **params.get("options", {}),
             )
+        elif kind == "music":
+            provider = providers.get_provider()
+            result = provider.generate_music(params["prompt"], **params.get("options", {}))
         else:
             raise ValueError(f"unknown visuals job kind: {kind!r}")
         with _lock:

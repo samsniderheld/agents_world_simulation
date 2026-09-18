@@ -143,3 +143,8 @@ class LocalProvider(Provider):
         raise NotImplementedError(
             "the local provider does not support video generation -- only fal.ai does right now"
         )
+
+    def generate_music(self, prompt: str, **options) -> dict:
+        raise NotImplementedError(
+            "the local provider does not support music generation -- only fal.ai does right now"
+        )
