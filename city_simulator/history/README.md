@@ -2,9 +2,9 @@
 
 Procedurally generates a ~330-year history (1624 Dutch colonization → the
 late 1950s) for a single NYC-inspired city: a cast of historical figures,
-a catalog of places they found/destroy/rename/fight over, a map of the
-resulting city, and a handful of present-day residents grounded in all of
-it. Entry point: `generate.run_history()` (called by `jobs.py`'s
+a catalog of places they found/destroy/rename/fight over, and a handful of
+present-day residents grounded in all of it. Entry point:
+`generate.run_history()` (called by `jobs.py`'s
 background thread; `python3 -m history.generate` runs the same thing as a
 standalone CLI — see the project root [README.md](../README.md)).
 
@@ -298,25 +298,19 @@ harbor pilots.
 From here, `place_1.status == "destroyed"` is exactly what a later
 `rebuilt_place` event's `place_filter` would key off of, and this event's
 own `figure_id`/`place_id` are what group it under the right figure/place
-in the final JSON and (via `citymap.py`) locate it on the map. The one
-thing this event did *not* need to know about — the 1715 rivalry — is the
-one thing that made its `{cause}` feel motivated instead of arbitrary.
+in the final JSON. The one thing this event did *not* need to know about
+— the 1715 rivalry — is the one thing that made its `{cause}` feel
+motivated instead of arbitrary.
 
-## After the event loop: map, characters, summary
+## After the event loop: characters, summary
 
-`run_history()` runs three more steps after `generate()` returns, each
+`run_history()` runs two more steps after `generate()` returns, each
 reading the finished figures/places/events but not feeding back into them:
 
 ```
 run_history()
   │
   ├─ generate()                    → figures, places, events (above)
-  │
-  ├─ citymap.build_map(places, figures)
-  │     groups places by the era of their founding figure, grows a
-  │     domain-warped noise archipelago, carves era-band × west/east-column
-  │     sections as neighborhoods, drops a numbered [N] label for every
-  │     place — see "The map" below
   │
   ├─ characters.generate_characters(places, figures, count=10)
   │     for each of 10 residents: pick a place (weighted toward one with
@@ -332,66 +326,11 @@ run_history()
         summary offline.
 ```
 
-## The map (`citymap.py`)
-
-Also generative, not templated, using an unrelated technique (fractal
-noise, not a replacement grammar) for a different reason: geography needs
-to look organic, not grammatically rich.
-
-```
-_generate_island_mask()
-  1. two Perlin noise fields: one for elevation, one to "warp" the
-     coordinates the elevation field is sampled at (domain warping —
-     what bends coastlines into hooks/spits instead of blobby contours)
-  2. elevation = fractal_noise(warped x, y) − center_bias · distanceᵖ
-     (a soft pull toward the map center, not a hard boundary)
-  3. threshold at sea_level → land/water mask
-  4. connected-component analysis:
-       - auto-adjust sea_level until the largest landmass clears a floor
-         (MAIN_ISLAND_MIN_FRACTION) without flooding the whole map
-       - cull any component smaller than MIN_ISLAND_DOTS as a noise speck
-  5. ~most runs (EDGE_LANDMASS_CHANCE) also get a secondary landmass
-     hugging the west or east edge, elevation-boosted from a center placed
-     off-frame — reads as "Brooklyn" continuing past the frame
-
-texture + rasterize
-  dot_grid(): sparser dots for water than land (LAND_DENSITY/WATER_DENSITY)
-  → packed into Unicode braille characters (2×4 dots per glyph) for the
-    CLI's plain-text map
-
-neighborhoods
-  each era gets a horizontal band (newest era = top); each band is split
-  into NEIGHBORHOOD_COLUMNS (west/east); band and column boundaries are
-  themselves noise-wobbled curves (_wavy_boundaries), not straight cuts,
-  clamped so they never cross. Every (era × column) cell is one
-  neighborhood: named by the LLM from a sample of its places (or a plain
-  "{column} {era} Quarter" fallback), given a golden-ratio-stepped hue so
-  adjacent neighborhoods never look near-identical, and every place
-  founded in that era gets shuffled into a column and stamped with a
-  numbered [N] label on its own land.
-```
-
-`build_map()` returns two different shapes depending on mode:
-
-- **Procedural (default)**: `{text, neighborhoods, graphic}` — `graphic`
-  carries the raw land mask, boundary curves, and marker positions the
-  web UI's interactive canvas (`static/js/citymap.js`) draws from at full
-  resolution; `text` is the same data already rasterized to braille for
-  the CLI.
-- **LLM-drawn (`llm_map=True`, opt-in)**: the LLM freehand-draws the whole
-  map as ASCII art instead, validated (every place's `[N]` label must
-  actually appear in the reply, checked over up to `LLM_MAP_MAX_RETRIES`
-  attempts with the specific problem fed back as retry feedback) before
-  being accepted; falls back to the procedural map on repeated failure.
-  Returns `{text, body, caption, neighborhoods: []}` — no `graphic` key,
-  which is exactly what the frontend checks to tell the two modes apart,
-  since freeform ASCII art has no structured grid for a canvas to draw.
-
 ## Everything is tunable, not hardcoded
 
 Every knob mentioned above — figures/events per era, the LLM flourish
-rate, every map-noise parameter, chat-model tiers by available RAM — lives
-in `data/config.yaml`, loaded once by `config.py`. All *content* — era
+rate, chat-model tiers by available RAM — lives in `data/config.yaml`,
+loaded once by `config.py`. All *content* — era
 definitions, 10 domains and 10 factions per era (`entities.yaml`, looked
 up by `domains_for_era()`/`factions_for_era()` so a figure only ever gets
 a domain/rival/ally that actually fits its own era), roles/place-types and

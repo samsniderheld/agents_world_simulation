@@ -21,24 +21,11 @@
         <div class="stats" id="cityStats"></div>
       </header>
 
-      <div class="map-plate">
-        <div class="label">A Map of the City, By Era of Settlement</div>
-        <div class="map-columns">
-          <div class="map-column map-primary">
-            <div class="city-map-wrap">
-              <canvas id="cityCanvas" class="city-canvas" style="display:none"></canvas>
-            </div>
-            <pre id="mapText"></pre>
-            <div class="caption" id="mapCaption"></div>
-            <div class="neighborhood-key" id="neighborhoodKey"></div>
-          </div>
-          <div class="map-column" id="agentLogColumn">
-            <div class="map-column-label">Agent Activity Log</div>
-            <div class="agent-log" id="agentLogHistory"></div>
-            <div class="agent-log" id="agentLogLive"></div>
-          </div>
-        </div>
-      </div>
+      <section class="agent-log-panel" id="agentLogColumn">
+        <div class="label">Agent Activity Log</div>
+        <div class="agent-log" id="agentLogHistory"></div>
+        <div class="agent-log" id="agentLogLive"></div>
+      </section>
 
       <section class="residents-section" id="residentsSection" style="display:none">
         <div class="section-header">

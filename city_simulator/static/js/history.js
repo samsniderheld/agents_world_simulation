@@ -47,51 +47,65 @@ function renderSummary(data){
   document.getElementById('summaryText').textContent = data.summary;
 }
 
-// --- the interactive city map (see citymap.js for the shared renderer) -
+// --- place detail: Exterior/Interior media boxes + the full-width image-
+// generation modal (moved here from the now-removed citymap.js, which
+// used to also own the geographic map these were shown alongside) -------
 
-const historyMap = createCityMap(document.getElementById('cityCanvas'));
+const PLACE_MEDIA_TAGS = ['exterior', 'interior'];
 
-// Redraws the one shared map from whatever's currently in hState.data,
-// including the agent-marker layer (see agents.js's buildAgentMarkers) --
-// called both after a fresh generation (renderMap, below) and whenever
-// agents.js's poll sees the current run's agent roster/locations change,
-// so the two tabs-that-used-to-be never need two separate canvases.
-function redrawCityMap(){
-  if (!hState.data || !hState.data.map || !hState.data.map.graphic) return;
-  buildCityMap(historyMap, hState.data.map, {
-    onPlaceClick: (cm, marker) => openPlaceModal(cm, marker.place_id, null),
-    onNeighborhoodClick: (cm, nid) => openNeighborhoodModal(cm, nid),
-    extraMarkers: (typeof buildAgentMarkers === 'function' && typeof aState !== 'undefined')
-      ? buildAgentMarkers(hState.data, aState.agents) : [],
-  });
+function placeMediaBoxHtml(entityId, tag){
+  const item = latestTaggedMedia(entityId, tag);
+  const label = tag[0].toUpperCase() + tag.slice(1);
+  const frame = item
+    ? `<div class="box-frame has-media" data-lightbox="${escapeHtml(item.url)}">${
+        item.kind === 'video'
+          ? `<video src="${cityFileUrl(item.url)}" muted loop playsinline></video>`
+          : `<img src="${cityFileUrl(item.url)}" alt="${escapeHtml(item.prompt)}" />`
+      }</div>`
+    : `<div class="box-frame"><span class="box-empty">No ${label.toLowerCase()} shot yet</span></div>`;
+  return `<div class="place-media-box"><div class="box-label">${escapeHtml(label)}</div>${frame}</div>`;
 }
 
-function renderMap(data){
-  const map = data.map;
-  const canvas = document.getElementById('cityCanvas');
-  const pre = document.getElementById('mapText');
-  document.getElementById('mapCaption').textContent = (map && map.caption) || '';
-
-  if (!map || typeof map !== 'object' || !map.graphic) {
-    canvas.style.display = 'none';
-    pre.style.display = '';
-    pre.textContent = map ? (map.body || map.text || '') : (map || '');
-    document.getElementById('neighborhoodKey').innerHTML = '';
-    return;
-  }
-
-  pre.style.display = 'none';
-  canvas.style.display = '';
-  redrawCityMap();
-
-  const keyEl = document.getElementById('neighborhoodKey');
-  keyEl.innerHTML = (map.neighborhoods || []).map(n =>
-    `<span class="entry" data-nid="${escapeHtml(n.id || '')}"><span class="swatch" style="background:${n.color}"></span>${escapeHtml(n.name)}</span>`
-  ).join('');
-  keyEl.querySelectorAll('.entry[data-nid]').forEach(el => {
-    el.addEventListener('click', () => openNeighborhoodModal(historyMap, el.dataset.nid));
-  });
+function refreshPlaceMediaBoxes(placeId){
+  const wrap = document.getElementById('placeMediaBoxes');
+  if (!wrap || wrap.dataset.placeId !== placeId) return;
+  wrap.innerHTML = PLACE_MEDIA_TAGS.map(t => placeMediaBoxHtml(placeId, t)).join('');
 }
+
+document.addEventListener('entity-media-refreshed', (e) => refreshPlaceMediaBoxes(e.detail.entityId));
+
+// A dedicated, mostly-full-width image-generation view for one place --
+// opened by clicking its name on a place card below. Deliberately just
+// the Exterior/Interior boxes plus the generation form, no history
+// timeline/founder stats -- those already live on the place card itself.
+function openPlaceImageModal(placeId){
+  const data = hState.data;
+  if (!data) return;
+  const place = data.places.find(p => p.id === placeId);
+  if (!place) return;
+
+  openModal(`
+    <div class="modal-header">
+      <button class="modal-close" data-close>×</button>
+      <h3>${escapeHtml(place.name)}</h3>
+      <div class="modal-sub">${escapeHtml(place.place_type)} · domain: ${escapeHtml(place.domain)}</div>
+    </div>
+    <div class="place-media-boxes" id="placeMediaBoxes" data-place-id="${escapeHtml(place.id)}">
+      ${PLACE_MEDIA_TAGS.map(t => placeMediaBoxHtml(place.id, t)).join('')}
+    </div>
+    <div class="modal-body-pad">${entityMediaHtml(place.id, 'place', placeMediaFullPrompt(place), PLACE_MEDIA_TAGS)}</div>
+  `, { full: true });
+
+  modalBodyEl.querySelector('[data-close]').addEventListener('click', closeModal);
+}
+
+document.addEventListener('click', (e) => {
+  const nameEl = e.target.closest('.place-card .name');
+  if (!nameEl) return;
+  const card = nameEl.closest('.place-card');
+  const placeId = card.id.replace(/^place-/, '');
+  openPlaceImageModal(placeId);
+});
 
 // --- generate-settings modal -------------------------------------------
 
@@ -112,10 +126,6 @@ function historySettingsModalHtml(){
       <label class="checkbox-row">
         <input type="checkbox" id="noLlmInput" />
         <span>Skip Ollama (pure grammar output)</span>
-      </label>
-      <label class="checkbox-row">
-        <input type="checkbox" id="llmMapInput" />
-        <span>Let the LLM draw the whole map (freeform ASCII art)</span>
       </label>
     </div>
     <div class="modal-actions">
@@ -138,7 +148,6 @@ function startHistoryGeneration(confirmOverwrite){
     figures_per_era: parseIntOrNull(document.getElementById('figuresInput').value),
     events_per_figure: parseIntOrNull(document.getElementById('eventsInput').value),
     no_llm: document.getElementById('noLlmInput').checked,
-    llm_map: document.getElementById('llmMapInput').checked,
     confirm_overwrite: !!confirmOverwrite,
   };
   fetch('/api/history/generate', {
@@ -516,7 +525,6 @@ function renderHistory(data){
   const indexes = buildIndexes(data);
   renderHeader(data);
   renderSummary(data);
-  renderMap(data);
   populateTypeFilter(data);
   renderEras(data, indexes);
   renderResidents(data);

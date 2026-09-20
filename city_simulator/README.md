@@ -7,8 +7,7 @@ via [Ollama](https://ollama.com):
    (1624 Dutch colonization → the late 1950s) for a single NYC-inspired
    city: a catalog of historical places (taverns, markets, churches,
    shipyards, tenements, theaters) each with a full internally-consistent
-   backstory, an interactive map colored by neighborhood, and ten
-   present-day residents grounded in that history.
+   backstory, and ten present-day residents grounded in that history.
 2. **Agents** (`agents/`) — a minimal implementation of the "Generative
    Agents" architecture (Park et al., 2023): agents with a memory stream,
    retrieval, reflection, planning, and reacting/dialogue. The residents
@@ -18,14 +17,14 @@ via [Ollama](https://ollama.com):
    them at the same place; without a generated history, a fixed
    five-person noir cast is used instead.
 
-Both halves render onto one shared interactive city map
-(`static/js/citymap.js`): places as numbered markers, agents as a second
-colored marker layer at their current location. A separate `visuals/`
-package (fal.ai hosted models, or a local Z-Image Turbo pipeline on Apple
-Silicon) generates the actual images/video behind the "+ Media" controls
-on place/character/agent cards — it isn't a tab of its own, just the
-backend those buttons call. Everything generated is persisted to disk by
-`citystate/` (see Architecture below), so it survives a restart.
+Both halves show up in the City tab: places and residents as cards, the
+Agent Activity Log as a running feed of what each agent is doing. A
+separate `visuals/` package (fal.ai hosted models, or a local Z-Image
+Turbo pipeline on Apple Silicon) generates the actual images/video behind
+the "+ Media" controls on place/character/agent cards — it isn't a tab of
+its own, just the backend those buttons call. Everything generated is
+persisted to disk by `citystate/` (see Architecture below), so it
+survives a restart.
 
 ## Setup
 
@@ -98,7 +97,7 @@ backend those buttons call. Everything generated is persisted to disk by
    Agents to run its residents through a tick loop -- their roster
    already reflects whatever you just generated.
 
-Everything also still works without Ollama running: the Map tab's "Skip
+Everything also still works without Ollama running: the City tab's "Skip
 Ollama" checkbox falls back to pure-grammar names/prose, and starting
 agents raises a clear error if the configured model isn't pulled (or, if
 Claude is the picked provider, if `ANTHROPIC_API_KEY` isn't set --
@@ -124,7 +123,7 @@ city_simulator/
                                  bio templates
     config.py, llm.py, log.py
     eras.py, entities.py, events.py, grammar.py, names.py
-    citymap.py, characters.py, summary.py
+    characters.py, summary.py
     generate.py           run_history() + a standalone CLI
     jobs.py                 background-thread job state
     routes.py                 Blueprint: /api/history/*
@@ -169,18 +168,16 @@ city_simulator/
 
   templates/            Jinja2 templates
     index.html            page shell (tabs nav, links static/, includes below)
-    _history_tab.html       the Map tab
+    _history_tab.html       the City tab
     _logs_tab.html           the Logs tab
 
   static/
-    css/base.css           shared tokens/modal/canvas/components
+    css/base.css           shared tokens/modal/components
     css/history.css, css/agents.css   per-tab styling
     js/main.js               escapeHtml(), the shared modal shell, tab
                                switching, and the per-entity media
                                (attach/generate) system
-    js/citymap.js             the shared interactive map canvas + place/
-                               neighborhood detail modals
-    js/history.js, js/agents.js       Map/Logs tab logic (state, rendering, polling)
+    js/history.js, js/agents.js       City/Logs tab logic (state, rendering, polling)
 ```
 
 `history/`, `agents/`, `visuals/`, and `citystate/` are plain Python
@@ -191,9 +188,9 @@ blueprint needs them.
 ## How it works
 
 ```text
-templates/index.html (Map, Logs tabs)
+templates/index.html (City, Logs tabs)
   |
-  |-- Map tab: Generate --> POST /api/history/generate --> history/jobs.start()
+  |-- City tab: Generate --> POST /api/history/generate --> history/jobs.start()
   |                           |                              |
   |                           |                              `-- history/generate.py's run_history()
   |                           |                                    |
@@ -201,9 +198,6 @@ templates/index.html (Map, Logs tabs)
   |                           |                                    |                     Figure's life events in true
   |                           |                                    |                     chronological order (see
   |                           |                                    |                     generate.py's docstring)
-  |                           |                                    |-- citymap.build_map()      the archipelago map +
-  |                           |                                    |                             the "graphic" data the
-  |                           |                                    |                             canvas draws from
   |                           |                                    |-- characters.generate_characters()  present-day
   |                           |                                    |                                      residents grounded
   |                           |                                    |                                      in real places/figures
@@ -212,10 +206,10 @@ templates/index.html (Map, Logs tabs)
   |                           |                                    `-- citystate.store.replace()   the new city becomes
   |                           |                                                                      the persisted one
   |                           v
-  |                         GET /api/history/status (poll) --> GET /api/history/data (once done) --> the map + era/place
+  |                         GET /api/history/status (poll) --> GET /api/history/data (once done) --> the era/place
   |                                                                                                    browser + residents
   |
-  |-- Map tab: Start Agents --> POST /api/agents/run --> agents/jobs.start() --> simulation.run()
+  |-- City tab: Start Agents --> POST /api/agents/run --> agents/jobs.start() --> simulation.run()
   |                                |                                                |
   |                                |                                                |-- simulation.build_agents()   roster_from_history() if a
   |                                |                                                |                                history was generated this
@@ -228,9 +222,9 @@ templates/index.html (Map, Logs tabs)
   |                                |                                                                                          events per agent into
   |                                |                                                                                          each one's own persisted file
   |                                v
-  |                              GET /api/agents/state (poll) --> agent markers on the shared map; GET /api/agents/events -->
-  |                              the Map tab's live Agent Activity feed; GET /api/city/agents/<id> --> that agent's full
-  |                              persisted plans/runs, shown in their detail modal and the Activity Log's history side
+  |                              GET /api/agents/state (poll), GET /api/agents/events --> the City tab's live Agent Activity
+  |                              feed; GET /api/city/agents/<id> --> that agent's full persisted plans/runs, shown in their
+  |                              detail modal and the Activity Log's history side
   |
   `-- a card's "+ Media" control --> POST /api/visuals/generate-image (or /generate-video) --> visuals/jobs.start()
                                         |                                                          |
@@ -267,12 +261,11 @@ place the active city's data actually lives.
 | File(s) | Half | What it does |
 |---|---|---|
 | `app.py` | all | Flask app factory + entrypoint: registers every blueprint, serves `templates/index.html`, hydrates the agent roster from a persisted city (if any) at startup. |
-| `history/data/config.yaml` / `history/config.py` / `history/llm.py` | history | Every tunable knob (LLM behavior, figure/event counts, map-noise parameters) lives in `data/config.yaml`; `config.py` just loads it and picks a chat-model tier for this machine. `llm.py` is a thin Ollama chat wrapper, tuned for many short name/prose-fill calls. |
+| `history/data/config.yaml` / `history/config.py` / `history/llm.py` | history | Every tunable knob (LLM behavior, figure/event counts) lives in `data/config.yaml`; `config.py` just loads it and picks a chat-model tier for this machine. `llm.py` is a thin Ollama chat wrapper, tuned for many short name/prose-fill calls. |
 | `history/eras.py`, `entities.py`, `events.py`, `grammar.py`, `names.py` | history | The procedural-history engine itself -- modeled on Jason Grinblat's GDC talk on Caves of Qud's mythic-biography generator: entities as mutable-property bags, events resolved by reading current state (not simulated causality), text produced by a real replacement grammar (`grammar.py`). All *content* -- eras, domains/factions/roles/place types, era-flavored name word lists, and event templates (grammar text; `requires_place`/`effects`/`place_filter`/`precondition` reference Python functions by name) -- lives in the matching `.yaml` file in `data/`; the `.py` file loads it and holds only behavior. |
-| `history/citymap.py` | history | The city map: a domain-warped-noise archipelago (one main landmass plus organic islets), era neighborhoods carved along noise-wobbled boundary curves, rendered as braille dot-density text (the CLI's map.txt) plus the structured `graphic` data the web viewer's interactive canvas draws from. |
 | `history/characters.py` | history | Present-day residents, each grounded in one real place's founder/domain/history. Fallback relationship hints and bio-sentence templates live in `data/characters.yaml`. |
 | `history/summary.py` | history | One LLM call at the very end of a run: reads the whole chronological event record and writes a short narrative summary of the city's history (`summary` field in the JSON payload, shown on the Logs tab). Its own larger context window/timeout (`data/config.yaml`'s `summary:` section), same pattern as `agents/treatment.py`'s post-run treatment; falls back to a plain stats sentence with no LLM. |
-| `history/generate.py` | history | `run_history()` (called by `jobs.py`) and a standalone CLI (`python3 -m history.generate --seed 42`) that does the same thing plus writes `history.json`/`map.txt`/`characters.json`. |
+| `history/generate.py` | history | `run_history()` (called by `jobs.py`) and a standalone CLI (`python3 -m history.generate --seed 42`) that does the same thing plus writes `history.json`/`characters.json`. |
 | `history/jobs.py` / `routes.py` | history | Background-thread job orchestration and the `/api/history/*` Flask blueprint. |
 | `agents/config.py` / `agents/llm.py` / `agents/providers/` | agents | Config (recency/reflection/retrieval tuning, from the reference implementation; `PROVIDER`/`ANTHROPIC_API_KEY`/`CLAUDE_MODEL` for the Claude option, `ANTHROPIC_API_KEY` read the same `.env`/env-var way as `FAL_KEY`). `llm.py` is a thin dispatcher to whichever `providers/` backend is active (`ollama.py` default, `claude.py` -- raw REST to the Messages API, no SDK dependency) -- every other agents/ file just calls `llm.complete()`/etc. and never knows a provider swap is possible. `embed()` always goes to `ollama.py` specifically regardless of the active chat provider, since Claude has no embeddings endpoint. |
 | `agents/agent.py`, `memory.py`, `planning.py`, `reflection.py`, `world.py` | agents | The generative-agents cognitive core -- memory stream + retrieval, reflection, planning, reacting/dialogue, and the tick-based simulation loop. See each file's docstring. |
@@ -287,7 +280,7 @@ place the active city's data actually lives.
 | `visuals/providers/__init__.py` | visuals | `get_provider(name=None)` -- memoized per provider name (not just once), so switching backends at runtime doesn't discard/reload an already-built one (`LocalProvider`'s loaded pipeline in particular). Falls back to `config.PROVIDER` when no name is given. |
 | `visuals/storage.py` | visuals | Saves uploaded/downloaded/generated bytes under `data/uploads/` or `data/outputs/` with a uuid filename (`save_upload()`, `save_url()`, `save_pil_image()`); provider-agnostic. `citystate.store.add_media()` relocates the result out of here into the owning entity's own directory once it's attached. |
 | `visuals/jobs.py` / `routes.py` | visuals | Background-thread job orchestration (one slot) and the `/api/visuals/*` Flask blueprint: generation, `/upload`, `/files/<path>`, `GET /providers` + `POST /provider` for switching `providers.get_provider()`'s active backend. Every route stays reachable via the API even though there's no Visuals tab rendering a UI for it right now. |
-| `citystate/store.py` | citystate | The persisted "active city" record, split across `data/history.json` (eras/figures/events/map/summary), `data/locations.json` (every place), and one `data/agents/<id>/agent.json` per character (an "agent" and a "character" are the same identity -- see `agents/simulation.py`'s `roster_from_history()`) -- each entity's own `media/` directory sits alongside its data, so a place's or agent's photos live right next to them rather than in a shared pool. Atomic writes, lazy-loaded once per process (a server restart just picks it back up). `get()` still composes/returns one dict shaped exactly like a single-blob version would, so `history/jobs.py`, `agents/simulation.py`, `app.py`, and every frontend reader of `/api/history/data` never see the split. |
+| `citystate/store.py` | citystate | The persisted "active city" record, split across `data/history.json` (eras/figures/events/summary), `data/locations.json` (every place), and one `data/agents/<id>/agent.json` per character (an "agent" and a "character" are the same identity -- see `agents/simulation.py`'s `roster_from_history()`) -- each entity's own `media/` directory sits alongside its data, so a place's or agent's photos live right next to them rather than in a shared pool. Atomic writes, lazy-loaded once per process (a server restart just picks it back up). `get()` still composes/returns one dict shaped exactly like a single-blob version would, so `history/jobs.py`, `agents/simulation.py`, `app.py`, and every frontend reader of `/api/history/data` never see the split. |
 | `citystate/routes.py` | citystate | The `/api/city/*` blueprint: `GET /agents/<id>` (one agent's full record, including their persisted `plans`/`runs`), `POST /media`/`DELETE /media/<entity_id>/<media_id>` for attaching/removing media (entity type is inferred from the id prefix -- `place_*` vs everything else), and `GET /files/<path:filename>` serving the relocated media itself from `citystate/data/`. |
 | `hardware.py` | history, agents | Detects available memory (Apple unified memory or NVIDIA VRAM) so each config can size its chat model to the machine it's running on. |
 | `jsonutil.py` | all | Shared `json_response()` helper every blueprint uses. |
@@ -307,11 +300,6 @@ place the active city's data actually lives.
   were researched and are currently blocked or not real as specced; that
   file has the exact repo ids/pipeline classes/versions to re-verify
   against if you revisit them later.
-- `citymap.py`'s `_generate_island_mask()` (the domain-warped noise
-  archipelago) and `_wavy_boundaries()` (the noise-perturbed neighborhood
-  borders) are the seams to change for a different generated geography --
-  see their docstrings and `history/data/config.yaml`'s `map:` section for
-  the exact knobs.
 - See `history/generate.py`'s and `agents/world.py`'s "Deliberate
   simplifications" notes (in their docstrings) for known scope cuts worth
   revisiting.

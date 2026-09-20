@@ -2,8 +2,7 @@
 city -- a catalog of historical Places (with their full event-by-event
 backstory) and present-day characters. `run_history()` is what
 history/jobs.py calls on a background thread; `main()` is a standalone CLI
-for offline use that writes the same data to history.json/map.txt/
-characters.json.
+for offline use that writes the same data to history.json/characters.json.
 
 Usage:
     python3 -m history.generate [--seed N] [--figures-per-era N] [--events-per-figure N] [--out PATH] [--no-llm]
@@ -16,7 +15,6 @@ import random
 import sys
 
 from . import characters
-from . import citymap
 from . import config
 from . import entities
 from . import events
@@ -126,7 +124,7 @@ def generate(seed=None, figures_per_era=None, events_per_figure=None):
     return all_figures, all_places, all_events
 
 
-def to_json(figures, places, events_list, map_data=None, characters_list=None, summary_text=""):
+def to_json(figures, places, events_list, characters_list=None, summary_text=""):
     return {
         "generated_at": datetime.datetime.now().isoformat(),
         "summary": summary_text,
@@ -151,13 +149,12 @@ def to_json(figures, places, events_list, map_data=None, characters_list=None, s
             for p in places
         ],
         "events": events_list,
-        "map": map_data,
         "characters": characters_list or [],
     }
 
 
 def run_history(seed=None, figures_per_era=None, events_per_figure=None,
-                 characters_count=10, use_llm=True, llm_map=False) -> dict:
+                 characters_count=10, use_llm=True) -> dict:
     """Everything a full run produces, as one JSON-shaped dict -- no file
     I/O, no argparse. Called by history/jobs.py's background thread (see
     routes.py's POST /api/history/generate); main() below is the
@@ -173,10 +170,6 @@ def run_history(seed=None, figures_per_era=None, events_per_figure=None,
     )
     history_log.log(f"{len(figures)} figures, {len(places)} places, {len(events_list)} events.")
 
-    history_log.log("Drawing the map...")
-    map_data = citymap.build_map(places, figures, seed=seed, llm_map=llm_map)
-    history_log.log("Map complete.")
-
     history_log.log(f"Generating {characters_count} present-day residents...")
     characters_list = characters.generate_characters(
         places, figures, count=characters_count, seed=seed,
@@ -190,7 +183,7 @@ def run_history(seed=None, figures_per_era=None, events_per_figure=None,
     history_log.log("Done.")
 
     return to_json(
-        figures, places, events_list, map_data=map_data,
+        figures, places, events_list,
         characters_list=characters_list, summary_text=summary_text,
     )
 
@@ -201,11 +194,9 @@ def main():
     parser.add_argument("--figures-per-era", type=int, default=None)
     parser.add_argument("--events-per-figure", type=int, default=None)
     parser.add_argument("--out", default="history.json")
-    parser.add_argument("--map-out", default="map.txt", help="path for the ASCII map (blank to skip)")
     parser.add_argument("--characters", type=int, default=10, help="number of present-day residents to generate")
     parser.add_argument("--characters-out", default="characters.json", help="path for the generated characters (blank to skip)")
     parser.add_argument("--no-llm", action="store_true", help="skip Ollama entirely (pure grammar output)")
-    parser.add_argument("--llm-map", action="store_true", help="let the LLM draw the whole map as freeform ASCII art")
     args = parser.parse_args()
 
     if not args.no_llm:
@@ -218,7 +209,7 @@ def main():
     payload = run_history(
         seed=args.seed, figures_per_era=args.figures_per_era,
         events_per_figure=args.events_per_figure,
-        characters_count=args.characters, use_llm=not args.no_llm, llm_map=args.llm_map,
+        characters_count=args.characters, use_llm=not args.no_llm,
     )
     with open(args.out, "w") as f:
         json.dump(payload, f, indent=2, default=str)
@@ -226,12 +217,6 @@ def main():
     print(f"\n{len(payload['figures'])} figures, {len(payload['places'])} places, "
           f"{len(payload['events'])} events.")
     print(f"Saved to {args.out}")
-
-    print(f"\n{payload['map']['text']}")
-    if args.map_out:
-        with open(args.map_out, "w") as f:
-            f.write(payload["map"]["text"] + "\n")
-        print(f"\nSaved map to {args.map_out}")
 
     print(f"\n{payload['summary']}")
 

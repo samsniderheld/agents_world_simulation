@@ -50,9 +50,9 @@ document.addEventListener('keydown', (e) => {
 
 // --- per-entity media (attached images/video, see citystate/store.py) --
 //
-// Shared here (not history.js) because both the place modal (citymap.js)
-// and character/place cards (history.js) need it, and this file loads
-// before either. Reads/writes hState.data.media -- hState itself is
+// Shared here (not history.js) because both the place image-generation
+// modal and character/place cards (both history.js) need it, and this
+// file loads before it. Reads/writes hState.data.media -- hState itself is
 // declared later, in history.js, but only ever touched here at call time
 // (after the whole page has loaded).
 
@@ -185,8 +185,8 @@ function characterMediaFullPrompt(person){
 // with what the generator already knows, but the user can still type over
 // it. `tags`, if given (e.g. ["exterior", "interior"] for a place), adds a
 // small tag picker to the generate form so a new image/video can be
-// filed under one of those slots -- see citymap.js's place modal for
-// where the tagged boxes above this strip read them back out.
+// filed under one of those slots -- see history.js's placeMediaBoxHtml()
+// for where the tagged boxes above this strip read them back out.
 function entityMediaHtml(entityId, entityType, defaultPrompt, tags, defaultExtra){
   const items = entityMediaList(entityId);
   const hasImage = items.some(m => m.kind === 'image');
