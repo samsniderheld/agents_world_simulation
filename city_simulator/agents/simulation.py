@@ -135,7 +135,7 @@ def _hydrate_agents(agents: list) -> None:
 
 def run(ticks: int = 8, provider: str = None, chat_model: str = None, embed_model: str = None,
         context_tokens: int = None, tick_sleep: float = 0,
-        agent_names: list = None, verbose: bool = False, stop_flag=None):
+        agent_names: list = None, verbose: bool = False, stop_flag=None, convene_at: str = None):
     """Blocking -- meant to be called on a background thread (see
     agents/jobs.py). Configures config.py's overridable settings, builds
     the chosen agents, and runs the tick loop.
@@ -145,7 +145,16 @@ def run(ticks: int = 8, provider: str = None, chat_model: str = None, embed_mode
     Ollama regardless (see llm.py's docstring). `chat_model` overrides
     whichever provider is active (CLAUDE_MODEL for "claude", CHAT_MODEL
     otherwise); `context_tokens` likewise overrides Ollama's input-context
-    window or Claude's output max_tokens, whichever applies."""
+    window or Claude's output max_tokens, whichever applies.
+
+    `convene_at` (a place name, not id -- see routes.py's /run) overrides
+    every selected agent's starting location for this run only, so they
+    convene somewhere none of them are individually grounded. Nothing
+    else needs to change for this to work: world.py's co-presence check
+    is plain `a.location == b.location`, and every event that carries a
+    location already reads it live off the agent at log time (see
+    recorder.py's docstring) -- the same mechanism that already lets an
+    agent's bio-grounded starting location work with no special casing."""
     if provider:
         config.PROVIDER = provider
     if chat_model:
@@ -162,6 +171,9 @@ def run(ticks: int = 8, provider: str = None, chat_model: str = None, embed_mode
     llm.check_connection()
 
     agents = build_agents(agent_names or list(_current_roster()))
+    if convene_at:
+        for a in agents:
+            a.location = convene_at
     agent_hex_colors = display.agent_hex_colors([a.name for a in agents])
 
     recorder.start(

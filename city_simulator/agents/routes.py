@@ -53,6 +53,24 @@ def events():
 @bp.post("/run")
 def run():
     body = request.get_json(silent=True) or {}
+
+    # "convene" (the node-based UI's Location -> Simulation edge) makes
+    # every selected agent start this run at `place_id` instead of their
+    # own grounding place -- resolved to a place *name* here, since
+    # world.py's co-presence check is plain location-string equality
+    # (agents/world.py), not an id lookup. "grounded" (default, and the
+    # only mode the old UI ever used) leaves each agent's own location
+    # untouched.
+    place_id = body.get("place_id")
+    location_mode = body.get("location_mode") or "grounded"
+    convene_at = None
+    if place_id and location_mode == "convene":
+        city = citystate.get()
+        place = next((p for p in (city or {}).get("places") or [] if p["id"] == place_id), None)
+        if place is None:
+            return json_response({"ok": False, "error": f"no such place: {place_id!r}"}, status=400)
+        convene_at = place["name"]
+
     params = {
         "ticks": int(body.get("ticks", 8)),
         "provider": body.get("provider") or None,
@@ -62,6 +80,7 @@ def run():
         "context_tokens": body.get("context_tokens") or None,
         "agent_names": body.get("agent_names") or None,
         "verbose": bool(body.get("verbose", False)),
+        "convene_at": convene_at,
     }
     ok, error = jobs.start(params)
     return json_response({"ok": ok, "error": error}, status=200 if ok else 409)

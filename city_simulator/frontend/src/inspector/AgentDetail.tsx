@@ -1,0 +1,116 @@
+import { useEffect, useState } from 'react';
+import { city } from '../api/client';
+import type { AgentRecord } from '../api/types';
+import { eventLine, fmtDate } from './format';
+import { MediaGrid } from './MediaGrid';
+
+type Tab = 'bio' | 'plans' | 'events' | 'treatments' | 'media';
+
+export function AgentDetail({ characterId }: { characterId: string }) {
+  const [record, setRecord] = useState<AgentRecord | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [tab, setTab] = useState<Tab>('bio');
+
+  useEffect(() => {
+    setRecord(null);
+    setError(null);
+    city.getAgent(characterId).then(setRecord).catch((e) => setError(String(e)));
+  }, [characterId]);
+
+  if (error) return <div className="inspector-body inspector-empty">{error}</div>;
+  if (!record) return <div className="inspector-body inspector-empty">Loading…</div>;
+
+  return (
+    <>
+      <div className="inspector-header">
+        <div className="inspector-title">{record.name}</div>
+        <div className="inspector-subtitle">{record.occupation ?? 'resident'}</div>
+      </div>
+      <div className="inspector-tabs">
+        {(['bio', 'plans', 'events', 'treatments', 'media'] as Tab[]).map((t) => (
+          <button key={t} className={`inspector-tab ${tab === t ? 'is-active' : ''}`} onClick={() => setTab(t)}>
+            {t === 'events' ? 'event log' : t}
+          </button>
+        ))}
+      </div>
+      <div className="inspector-body">
+        {tab === 'bio' && <Bio record={record} />}
+        {tab === 'plans' && <Plans record={record} />}
+        {tab === 'events' && <EventLog record={record} />}
+        {tab === 'treatments' && <Treatments record={record} />}
+        {tab === 'media' && <MediaGrid items={record.media} />}
+      </div>
+    </>
+  );
+}
+
+function Bio({ record }: { record: AgentRecord }) {
+  return (
+    <div>
+      <div className="inspector-kv">
+        <b>age</b> {record.age ?? '—'} · <b>@</b> {record.place_name ?? '—'}
+      </div>
+      {record.quirk && <p style={{ fontStyle: 'italic', color: 'var(--accent)' }}>{record.quirk}</p>}
+      <p>{record.bio}</p>
+      {(record.history ?? []).map((h, i) => (
+        <div className="inspector-entry" key={i}>
+          <span className="inspector-entry-year">{h.year}</span>
+          {h.gospel_text}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Plans({ record }: { record: AgentRecord }) {
+  if (record.plans.length === 0) return <div className="inspector-empty">No plans yet.</div>;
+  return (
+    <div>
+      {record.plans.map((p, i) => (
+        <div className="inspector-entry" key={i}>
+          <div className="inspector-kv">
+            <b>tick {p.tick}</b> · run started {fmtDate(p.run_started_at)}
+          </div>
+          <ol style={{ margin: '4px 0 0', paddingLeft: 18 }}>
+            {p.items.map((item, j) => (
+              <li key={j}>{item}</li>
+            ))}
+          </ol>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function EventLog({ record }: { record: AgentRecord }) {
+  if (record.runs.length === 0) return <div className="inspector-empty">No runs yet.</div>;
+  return (
+    <div>
+      {record.runs.map((run, i) => (
+        <div key={i}>
+          <div className="inspector-run-header">run · {fmtDate(run.started_at)}</div>
+          {run.events.map((e, j) => (
+            <div className="inspector-event-row" key={j}>
+              <span className="inspector-event-badge">{e.kind}</span>
+              <span>{eventLine(e)}</span>
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Treatments({ record }: { record: AgentRecord }) {
+  if (record.treatments.length === 0) return <div className="inspector-empty">No treatments generated yet.</div>;
+  return (
+    <div>
+      {record.treatments.map((t, i) => (
+        <div className="inspector-entry" key={i}>
+          <div className="inspector-kv">{fmtDate(t.created_at)}</div>
+          <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'var(--sans)', fontSize: 13 }}>{t.text}</pre>
+        </div>
+      ))}
+    </div>
+  );
+}

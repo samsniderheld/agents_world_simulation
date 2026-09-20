@@ -7,11 +7,18 @@ map.txt
 characters.json
 .env
 
+# frontend/ (Vite + React) -- installed deps and build output, not source
+city_simulator/frontend/node_modules/
+city_simulator/static/dist/
+
 # Visuals tab: uploaded/generated media, not source
 city_simulator/visuals/data/uploads/*
 city_simulator/visuals/data/outputs/*
 !city_simulator/visuals/data/uploads/.gitkeep
 !city_simulator/visuals/data/outputs/.gitkeep
+
+# The global style library -- user-created, not source
+city_simulator/visuals/data/styles.json
 
 # The persisted active city -- generated state, not source (history.json/
 # locations.json/agents/*/agent.json plus each entity's own media/ dir)

@@ -71,12 +71,44 @@ def upload():
     return json_response({"ok": True, "path": str(path), "url": storage.relative_path(path)})
 
 
+def _style_prompt(body: dict) -> str:
+    """Merges a node's own prompt with a connected Style node's
+    style_prompt -- joined server-side (per the design spec: "never
+    string-concatenated in the UI") so multiple Style nodes feeding one
+    port, or a future change to how they're joined, only ever needs
+    changing here.
+
+    Deliberately NOT forwarding `negative_prompt`/`style_strength` to the
+    provider: the active fal models (see data/config.yaml -- Gemini 3 Pro
+    Image Preview / Gemini Omni Flash) are natural-language-prompted, not
+    classic diffusion models, and neither exposes a verified negative-
+    prompt or CFG-strength-style parameter. Sending unverified fields to
+    fal's API risks a hard failure on every generation, which is worse
+    than the field being a no-op -- StyleRef still captures both (see
+    visuals/styles.py) for a future provider that can actually honor them.
+    """
+    prompt = body.get("prompt", "")
+    style_prompt = body.get("style_prompt")
+    return ", ".join(p for p in (prompt, style_prompt) if p)
+
+
+def _style_reference_images(body: dict) -> list:
+    """Style reference images are a distinct concept from `image_paths`
+    (which means "edit/animate this exact image" -- see Director's
+    storyboard and Studio's reference-image flow, both of which already
+    depend on that meaning) -- so they're merged into the same
+    image_paths list the edit model already accepts, rather than
+    replacing or renaming that field."""
+    return list(body.get("image_paths") or []) + list(body.get("style_reference_images") or [])
+
+
 @bp.post("/generate-image")
 def generate_image():
     body = request.get_json(silent=True) or {}
+    image_paths = _style_reference_images(body)
     params = {
-        "prompt": body.get("prompt", ""),
-        "image_paths": body.get("image_paths") or None,
+        "prompt": _style_prompt(body),
+        "image_paths": image_paths or None,
         "options": body.get("options") or {},
     }
     ok, error = jobs.start("image", params)
@@ -87,7 +119,7 @@ def generate_image():
 def generate_video():
     body = request.get_json(silent=True) or {}
     params = {
-        "prompt": body.get("prompt", ""),
+        "prompt": _style_prompt(body),
         "image_path": body.get("image_path"),
         "options": body.get("options") or {},
     }

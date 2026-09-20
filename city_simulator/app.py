@@ -1,30 +1,40 @@
-"""The primary interface: a local Flask app serving the frontend (templates/
-+ static/) plus a small JSON/SSE API for both halves of the app -- history
-generation (history/routes.py, /api/history/*) and the agent simulation
-(agents/routes.py, /api/agents/*). Each runs on its own background thread
-with its own status (see each package's jobs.py), so the frontend can drive
-both independently: generate a history in the first tab, then (once it's
-done) run agents seeded from it in the second.
+"""The primary interface: a local Flask app serving the React/React-Flow
+frontend (frontend/, built into static/dist/ -- see frontend/vite.config.ts)
+plus a small JSON API for all four halves of the app -- history generation
+(history/routes.py, /api/history/*), the agent simulation (agents/routes.py,
+/api/agents/*), media generation (visuals/routes.py, /api/visuals/*), and
+the persisted city (citystate/routes.py, /api/city/*). Each job-style
+endpoint runs on its own background thread with its own status (see each
+package's jobs.py), so the frontend can drive them independently.
+
+The old templates/ + static/js Jinja frontend is retired but not yet
+deleted (it's unreachable now that / serves the SPA instead) -- it's
+formally removed once the rewrite no longer needs it as a reference.
 
 Usage:
-    python3 app.py
+    python3 app.py                                   # serve the built SPA
+    (cd frontend && npm run dev)                      # SPA dev server, proxies /api to this process
 """
 
 import logging
 
-from flask import Flask, render_template
+from flask import Flask, send_from_directory
 from werkzeug.serving import make_server
 
 from agents import jobs as agents_jobs
 from agents.routes import bp as agents_bp
 from citystate import store as citystate
+from citystate.graph_routes import bp as graph_bp
 from citystate.routes import bp as city_bp
 from history.routes import bp as history_bp
 from visuals.routes import bp as visuals_bp
+from visuals.styles_routes import bp as styles_bp
 
 # The frontend is the interface now; keep the terminal quiet (matches the
 # old bare http.server Handler's log_message no-op).
 logging.getLogger("werkzeug").setLevel(logging.ERROR)
+
+_DIST_DIR = "static/dist"
 
 
 def create_app() -> Flask:
@@ -33,6 +43,8 @@ def create_app() -> Flask:
     app.register_blueprint(agents_bp)
     app.register_blueprint(visuals_bp)
     app.register_blueprint(city_bp)
+    app.register_blueprint(graph_bp)
+    app.register_blueprint(styles_bp)
 
     # citystate.store.get() lazily reads a previously-saved city off disk
     # on its own -- the one thing it can't derive by itself is the agent
@@ -41,9 +53,20 @@ def create_app() -> Flask:
     if saved_city is not None:
         agents_jobs.set_history_roster(saved_city)
 
+    # The SPA owns client-side routing (/, /agent/<id>, /place/<id>,
+    # /scratch/<id> -- see frontend/src/routes/router.ts), so every one of
+    # those paths serves the same built index.html and lets it route from
+    # there client-side. A matched /api/* GET (POST/DELETE never reach
+    # this GET-only rule at all) is claimed by the blueprints above before
+    # this ever runs; an *unmatched* one still 404s here rather than
+    # silently returning the SPA shell, which would hide a real API bug
+    # behind a confusing 200.
     @app.get("/")
-    def index():
-        return render_template("index.html")
+    @app.get("/<path:_client_route>")
+    def spa(_client_route: str = ""):
+        if _client_route.startswith("api/"):
+            return "not found", 404
+        return send_from_directory(_DIST_DIR, "index.html")
 
     return app
 

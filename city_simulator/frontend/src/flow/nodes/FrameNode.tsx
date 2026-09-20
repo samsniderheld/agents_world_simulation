@@ -1,0 +1,70 @@
+import { useState } from 'react';
+import type { Node, NodeProps } from '@xyflow/react';
+import { city } from '../../api/client';
+import type { MediaItem } from '../../api/types';
+import { NodeShell } from './NodeShell';
+import { Port } from './Port';
+import { useImageGeneration } from './useImageGeneration';
+
+export interface FrameNodeData extends Record<string, unknown> {
+  entityId: string; // the treatment's subject agent -- storyboard images attach to them, same as the old Director tab
+  shotIndex: number;
+  prompt: string;
+  mediaId?: string;
+  mediaUrl?: string;
+  localPath?: string;
+  // Resolved by pipeline.ts's enrichPipelineNodes() from any connected
+  // Style node(s) -- merged (per the design's rule: prompts joined with
+  // ", ", reference arrays concatenated) since more than one can feed
+  // this port.
+  mergedStylePrompt?: string;
+  mergedStyleReferenceImages?: string[];
+  onUpdate: (nodeId: string, patch: { prompt?: string; mediaId?: string; mediaUrl?: string; localPath?: string }) => void;
+}
+
+export type FrameNodeType = Node<FrameNodeData, 'frame'>;
+
+// A storyboard shot -- spawned by a Treatment node's "emit frames" action
+// (pre-filled with that shot's parsed prompt and already wired via a
+// shot:in edge), sharing ImageNode's generation logic but requiring the
+// upstream connection rather than being free-standing.
+export function FrameNode({ id, data, selected }: NodeProps<FrameNodeType>) {
+  const [prompt, setPrompt] = useState(data.prompt);
+  const { pending, error, generate } = useImageGeneration(data.entityId);
+
+  async function onGenerate() {
+    const media: MediaItem | null = await generate(prompt, `storyboard_${data.shotIndex}`, {
+      stylePrompt: data.mergedStylePrompt,
+      styleReferenceImages: data.mergedStyleReferenceImages,
+    });
+    if (media) data.onUpdate(id, { prompt, mediaId: media.id, mediaUrl: city.fileUrl(media.url), localPath: media.local_path });
+  }
+
+  return (
+    <NodeShell typeLabel={`Frame ${String(data.shotIndex + 1).padStart(2, '0')}`} selected={selected} running={pending} error={Boolean(error)}>
+      <div className="node-thumb-row">
+        <div className="node-thumb" style={{ width: 64, height: 64 }}>
+          {data.mediaUrl ? <img src={data.mediaUrl} alt="" /> : '🎬'}
+        </div>
+      </div>
+      <textarea
+        className="node-prompt-input"
+        rows={3}
+        value={prompt}
+        onChange={(e) => setPrompt(e.target.value)}
+        onBlur={() => prompt !== data.prompt && data.onUpdate(id, { prompt })}
+      />
+      {data.mergedStylePrompt && <div className="node-subtitle">style: {data.mergedStylePrompt}</div>}
+      {error && <div className="node-error-text">{error}</div>}
+      <div className="node-controls">
+        <button className="node-run-btn" disabled={pending || !prompt.trim()} onClick={onGenerate}>
+          {pending ? 'generating…' : data.mediaId ? '↻ regenerate' : '▶ generate'}
+        </button>
+      </div>
+
+      <Port id="shot:in" type="shot" direction="in" label="shot" top="calc(100% - 34px)" />
+      <Port id="style:in" type="style" direction="in" label="style" optional={!data.mergedStylePrompt} top="calc(100% - 14px)" />
+      <Port id="image:out" type="image" direction="out" label="image" top="calc(100% - 14px)" />
+    </NodeShell>
+  );
+}

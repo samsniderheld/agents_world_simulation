@@ -189,6 +189,16 @@ def replace(history_payload: dict) -> None:
         for character in characters:
             _write_agent(character["id"], character=character)
 
+    # Deliberately NOT touching graph_store here. A regenerate mints
+    # fresh char_*/place_* ids, so the previous city.json's nodes will
+    # reconcile as "missing" (dangling references) the next time the
+    # frontend loads it -- exactly the case that reconciliation exists
+    # for (see graph_store.py's docstring and the frontend's reconcile.ts:
+    # "never auto-delete a node the user positioned"). Regenerating is a
+    # normal, frequent iteration action, not a "start over" -- wiping the
+    # user's whole canvas arrangement every time they re-roll a history
+    # would defeat the point of persisting it at all.
+
 
 def delete() -> None:
     """Wipes the active city entirely -- history/locations/every agent's

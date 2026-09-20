@@ -1,0 +1,85 @@
+/* Dark terminal/canvas identity -- ported from the old app's base.css and
+   extended with the node-canvas tokens from the node-based-UI design spec
+   (Design.pdf Part I.9). Deliberately single-theme: the old app never had
+   a light mode, and the design spec commits to this identity on purpose
+   ("near-black is the right ground for a canvas app"), so there's no
+   media-query/toggle split to maintain here. */
+
+:root {
+  /* App chrome (breadcrumb, panels, inputs) -- unchanged from base.css */
+  --bg: #0a0a0b;
+  --panel: #111113;
+  --border: #232326;
+  --text: #e5e5e8;
+  --text-dim: #8a8a92;
+  --text-faint: #55555c;
+  --accent: #f5c451;
+  --ok: #4ade80;
+  --bad: #f87171;
+
+  /* Canvas + nodes -- their own slightly different palette per the design
+     spec, kept distinct from app-chrome tokens above rather than reusing
+     --accent/--bad, since "running"/"error" need to read unambiguously
+     against fifty nodes at once, not blend into general UI color. */
+  --canvas-bg: #0a0a0b;
+  --canvas-dot: #1c1c1f;
+  --node-body: #131316;
+  --node-border: #2a2a2e;
+  --node-radius: 3px;
+  --node-header-h: 28px;
+  --node-selected: #f0f0f0;
+  --node-running: #f0a02a;
+  --node-error: #d05a3c;
+  --node-text: #e8e6e1;
+  --node-text-dim: #8a8a90;
+  --edge-rest: #3a3a40;
+
+  /* Typed ports -- matched chroma/lightness so none dominates */
+  --port-entity: #c9b98a;   /* agent, place, run -- warm neutral, entity refs */
+  --port-narrative: #6fb3c2; /* treatment, shot -- cool cyan, narrative data */
+  --port-media: #6fbf8b;     /* image, video -- green, media artifacts */
+  --port-style: #a98fd6;     /* style -- violet, deliberately the odd one out */
+
+  /* Inspector panel -- one inversion from the canvas: a slightly lifted
+     ground with comfortable prose, since long-form reading (an event log,
+     a treatment) is the one thing tracked uppercase mono is bad at. */
+  --inspector-bg: #161619;
+
+  --mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  --sans: 'IBM Plex Sans', -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+  color: inherit;
+}
+
+.mono {
+  font-family: var(--mono);
+}

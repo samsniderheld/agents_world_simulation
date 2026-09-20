@@ -1,0 +1,41 @@
+.canvas-tray {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: calc(100% - 32px);
+  overflow-y: auto;
+  background: var(--node-body);
+  border: 1px solid var(--node-border);
+  border-radius: var(--node-radius);
+  padding: 8px;
+  width: 200px;
+}
+
+.canvas-tray-label {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--node-text-dim);
+  margin-bottom: 2px;
+}
+
+.canvas-tray-item {
+  background: transparent;
+  border: none;
+  text-align: left;
+  padding: 4px 6px;
+  font-size: 12px;
+  color: var(--node-text);
+  cursor: pointer;
+  border-radius: 2px;
+}
+
+.canvas-tray-item:hover {
+  background: var(--panel);
+  color: var(--accent);
+}
