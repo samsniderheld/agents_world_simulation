@@ -2,7 +2,7 @@
 each thing is easy to find on disk instead of one growing JSON blob:
 
     citystate/data/
-      history.json          -- eras, figures, events, map, summary, generated_at
+      history.json          -- eras, figures, events, summary, generated_at
       locations.json        -- every place (each with its own embedded "media" list)
       locations/<id>/media/ -- that place's own image/video files
       agents/<id>/
