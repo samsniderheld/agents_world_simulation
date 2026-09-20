@@ -1,7 +1,6 @@
-/* Agents tab -- the shared city map (see citymap.js) with a second agent-
-   marker layer, and the flat per-agent event log + generated treatments
-   shown inside that agent's modal. Builds on base.css's tokens/modal/
-   canvas styling. */
+/* Agent detail modal -- persisted plans, generated treatments, and the
+   flat per-agent event log shown inside it. Builds on base.css's tokens/
+   modal styling. */
 
 /* An agent's generated treatments (agents/<id>/agent.json's "treatments"
    -- see citystate/store.py's add_treatment(), triggered manually from

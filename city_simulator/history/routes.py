@@ -67,7 +67,6 @@ def generate():
         # default (and the CLI's --characters flag) are unaffected.
         "characters_count": 0,
         "use_llm": not bool(body.get("no_llm", False)),
-        "llm_map": bool(body.get("llm_map", False)),
     }
     ok, error = jobs.start(params, on_done=agents_jobs.set_history_roster)
     return json_response({"ok": ok, "error": error}, status=200 if ok else 409)

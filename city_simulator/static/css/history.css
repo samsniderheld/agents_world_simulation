@@ -1,6 +1,6 @@
-/* Map tab (the map itself) and Logs tab (history summary, era/place
-   browser, present-day residents, the generation log). Builds on
-   base.css's tokens/modal/details styling. */
+/* City tab (masthead, agent activity log, present-day residents) and Logs
+   tab (history summary, era/place browser, present-day residents, the
+   generation log). Builds on base.css's tokens/modal/details styling. */
 
 .masthead-inline{ padding: 20px 18px 0; }
 .masthead-inline h2{ font-size: 22px; font-weight: 700; margin: 0 0 4px; color: var(--text); letter-spacing: 0.02em; }
@@ -13,35 +13,21 @@
   color: var(--text-faint);
 }
 
-.map-plate{
+/* Shared "plated" box look -- the Logs tab's history-summary plate and
+   the City tab's agent-log panel below both use it. */
+.map-plate, .agent-log-panel{
   margin: 20px 18px;
   border: 1px solid var(--border);
   background: var(--panel);
   padding: 18px 20px;
 }
-.map-plate .label{
+.map-plate .label, .agent-log-panel .label{
   font-family: var(--mono);
   font-size: 10px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--accent);
   margin-bottom: 10px;
-}
-.map-plate pre{
-  margin: 0;
-  font-family: var(--mono);
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--text);
-  overflow-x: auto;
-}
-.map-plate .caption{
-  margin-top: 14px;
-  font-style: italic;
-  color: var(--text-dim);
-  font-size: 13px;
-  border-top: 1px solid var(--border);
-  padding-top: 12px;
 }
 .map-plate #summaryText{
   font-size: 13.5px;
@@ -93,53 +79,14 @@
   font-style: italic;
 }
 
-.map-plate .map-columns{
-  display: flex;
-  gap: 24px;
-  align-items: flex-start;
-  flex-wrap: wrap;
-}
-.map-plate .map-column{ flex: 1 1 340px; min-width: 0; }
-.map-plate .map-column.map-primary{ flex: 2 1 480px; }
-.map-plate .map-column-label{
-  font-family: var(--mono);
-  font-size: 10px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--text-faint);
-  margin-bottom: 8px;
-}
-#agentLogColumn .agent-log{
+.agent-log-panel .agent-log{
   max-height: 300px;
   overflow-y: auto;
   border: 1px solid var(--border);
   border-radius: 3px;
 }
-#agentLogColumn .agent-log:empty{ display: none; }
-#agentLogColumn .agent-log + .agent-log{ margin-top: 10px; }
-.map-plate .neighborhood-key{
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 18px;
-  margin-top: 14px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border);
-}
-.map-plate .neighborhood-key .entry{
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--text-dim);
-  cursor: pointer;
-}
-.map-plate .neighborhood-key .swatch{
-  width: 10px;
-  height: 10px;
-  border: 1px solid var(--border);
-  flex: none;
-}
+.agent-log-panel .agent-log:empty{ display: none; }
+.agent-log-panel .agent-log + .agent-log{ margin-top: 10px; }
 
 .hcontrols{
   display: flex;

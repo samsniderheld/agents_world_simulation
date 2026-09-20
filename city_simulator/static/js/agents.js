@@ -1,13 +1,10 @@
 "use strict";
 
 // ======================================================================
-// Agents -- no tab of their own anymore: agents render as a second
-// marker layer on the shared city map (see history.js's redrawCityMap(),
-// citymap.js's buildCityMap()), and their combined activity log lives on
-// the Logs tab. This file owns: the roster/settings modal, feeding agent
-// markers into the shared map, the agent detail modal (with the same
-// image/video generation controls a place gets, plus a manual "Generate
-// Treatment" section), and the Logs tab's Agent Activity panel.
+// Agents -- no tab of their own: this file owns the roster/settings
+// modal, the agent detail modal (with the same image/video generation
+// controls a place gets, plus a manual "Generate Treatment" section),
+// and the Agent Activity Log panel.
 // ======================================================================
 
 const KIND_META = {
@@ -31,7 +28,6 @@ const aState = {
   selectedAgents: new Set(),
   lastStartedAt: null,      // detects a new/changed run
   lastPhase: null,
-  lastAgentsSignature: null, // name@location per agent -- redraw the map only when this changes
   agentRecords: {},          // character id -> their persisted agents/<id>/agent.json, once fetched
 };
 
@@ -182,81 +178,6 @@ function startAgentRun(){
 stopBtn.addEventListener('click', () => {
   fetch('/api/agents/stop', { method: 'POST' });
 });
-
-// --- agent markers on the shared map --------------------------------------
-
-function agentInitial(name){
-  return (name.trim()[0] || '?').toUpperCase();
-}
-
-// Agents sharing a place get spread in a small ring around its marker so
-// they don't sit exactly on top of one another (or the place marker).
-function offsetsFor(count){
-  if (count <= 1) return [{ dx: 0, dy: 0 }];
-  const radius = 12;
-  return Array.from({ length: count }, (_, i) => {
-    const angle = (i / count) * Math.PI * 2;
-    return { dx: Math.round(Math.cos(angle) * radius), dy: Math.round(Math.sin(angle) * radius) };
-  });
-}
-
-// Who gets a marker: anyone in the *live* run roster (their current-run
-// location), plus -- so a page reload or a city with no run yet this
-// session still shows people -- anyone else who has at least one
-// *persisted* run on record (agents/<id>/agent.json's "runs"), placed at
-// their character's grounding location (world.py gives agents a fixed
-// location for a whole run, so that's also their last-known one). Without
-// this second group, agent markers only ever appeared after clicking
-// Start Agents in the current browser session, even though the map is
-// meant to reflect what's actually been persisted.
-function agentsToShow(cityData, liveAgents){
-  const liveByName = new Map(liveAgents.map(a => [a.name, a]));
-  const shown = [];
-  (cityData.characters || []).forEach(c => {
-    const live = liveByName.get(c.name);
-    if (live) {
-      shown.push({ name: c.name, location: live.location });
-      return;
-    }
-    const record = aState.agentRecords[c.id];
-    if (record && record.runs && record.runs.length) {
-      shown.push({ name: c.name, location: c.place_name || '' });
-    }
-  });
-  return shown;
-}
-
-function buildAgentMarkers(cityData, liveAgents){
-  const markerByPlaceId = new Map((cityData.map.graphic.markers || []).map(m => [m.place_id, m]));
-  const placeIdByName = new Map(cityData.places.map(p => [p.name, p.id]));
-
-  const byPlace = new Map();
-  agentsToShow(cityData, liveAgents).forEach(a => {
-    const placeId = placeIdByName.get(a.location);
-    const marker = placeId ? markerByPlaceId.get(placeId) : null;
-    if (!marker) return; // hardcoded noir roster locations don't resolve to a real place
-    if (!byPlace.has(marker.place_id)) byPlace.set(marker.place_id, []);
-    byPlace.get(marker.place_id).push({ agent: a, marker });
-  });
-
-  const extraMarkers = [];
-  byPlace.forEach(entries => {
-    const offsets = offsetsFor(entries.length);
-    entries.forEach(({ agent, marker }, i) => {
-      extraMarkers.push({
-        row: marker.row, col: marker.col,
-        dx: offsets[i].dx, dy: offsets[i].dy,
-        color: agentColorFor(agent.name), label: agentInitial(agent.name),
-        onClick: () => openAgentModal(agent.name),
-      });
-    });
-  });
-  return extraMarkers;
-}
-
-function agentsSignature(agents){
-  return agents.map(a => a.name + '@' + a.location).sort().join('|');
-}
 
 // --- agent detail modal (flat chronological log + media) -------------------
 
@@ -493,8 +414,10 @@ function agentLogRowHtml(ev, agentName){
   if (agentName) {
     const color = agentColorFor(agentName);
     const prefix = document.createElement('span');
-    prefix.style.cssText = `color:${color};font-weight:700;margin-right:6px;flex:none;`;
+    prefix.style.cssText = `color:${color};font-weight:700;margin-right:6px;flex:none;cursor:pointer;`;
     prefix.textContent = agentName + ':';
+    prefix.title = `View ${agentName}`;
+    prefix.addEventListener('click', () => openAgentModal(agentName));
     row.prepend(prefix);
   }
   return row;
@@ -541,11 +464,6 @@ function refreshAgentLogHistory(){
           .forEach(({ ev, agentName }) => el.appendChild(agentLogRowHtml(ev, agentName)));
       });
     }
-
-    // Now that we know who actually has persisted runs, the map's agent
-    // markers can include them too (see agentsToShow()) -- not just
-    // whoever's in the current live roster.
-    if (typeof redrawCityMap === 'function') redrawCityMap();
   }).catch(() => {});
 }
 
@@ -590,15 +508,6 @@ function pollAgentsState(){
     if (isNewRun) {
       aState.lastStartedAt = d.started_at;
       resetAgentLog(d.started_at);
-    }
-
-    // Redraw the shared map's agent-marker layer only when the roster or
-    // anyone's location actually changed -- a full map redraw every poll
-    // tick regardless would be wasted work (and a visible flicker).
-    const sig = agentsSignature(aState.agents);
-    if (sig !== aState.lastAgentsSignature) {
-      aState.lastAgentsSignature = sig;
-      if (typeof redrawCityMap === 'function') redrawCityMap();
     }
 
     if (phase !== 'idle') pollAgentLog();
