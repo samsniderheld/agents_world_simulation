@@ -9,6 +9,7 @@ import type {
   AgentRecord,
   AgentsState,
   Character,
+  CitySummary,
   GraphDoc,
   HistoryData,
   JobStatus,
@@ -45,10 +46,13 @@ export const history = {
 
   log: (since = 0) => request<{ lines: string[]; next: number }>(`/api/history/log?since=${since}`),
 
-  // A saved city already existing surfaces as a 409 with
-  // needs_confirmation: true (see history/routes.py's generate()) --
-  // callers pass confirmOverwrite: true once the user has confirmed.
+  // Without cityId: always creates a brand new city, no confirmation
+  // needed. With cityId (regenerating an existing one in place): a 409
+  // with needs_confirmation: true comes back first -- callers pass
+  // confirmOverwrite: true once the user has confirmed (see
+  // history/routes.py's generate()).
   generate: (params: {
+    cityId?: string;
     seed?: number;
     figuresPerEra?: number;
     eventsPerFigure?: number;
@@ -60,6 +64,7 @@ export const history = {
       {
         method: 'POST',
         body: json({
+          city_id: params.cityId,
           seed: params.seed,
           figures_per_era: params.figuresPerEra,
           events_per_figure: params.eventsPerFigure,
@@ -68,6 +73,12 @@ export const history = {
         }),
       },
     ),
+
+  listCities: () => request<{ cities: CitySummary[] }>('/api/history/cities'),
+
+  activateCity: (cityId: string) => request<{ ok: boolean; city: HistoryData }>(`/api/history/cities/${cityId}/activate`, { method: 'POST' }),
+
+  deleteCityById: (cityId: string) => request<{ ok: boolean; error: string | null }>(`/api/history/cities/${cityId}`, { method: 'DELETE' }),
 
   previewCharacter: (params: { placeId?: string; occupation?: string; sex?: string }) =>
     request<{ character: Character }>('/api/history/characters/preview', {

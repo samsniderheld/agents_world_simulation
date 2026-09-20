@@ -1,40 +1,52 @@
 // A small hand-rolled scope router -- each scope is a real URL with its
 // own independently-loaded canvas (per the design spec's Part I.3: real
-// routes, not React Flow parent/child subflows), but there's no city
-// *collection* yet (that's Phase 5 -- see citystate/store.py, still a
-// single active-city record), so there's no /c/:cityId segment yet
-// either. Phase 5 adds a real city id here; until then "the active city"
-// is implicit, matching the backend. Deliberately no router library:
-// five route shapes with no nesting/data-loading concerns don't need one.
+// routes, not React Flow parent/child subflows). Deliberately no router
+// library: six route shapes with no nesting/data-loading concerns don't
+// need one.
+//
+// Agent/Location scopes carry their city's id even though char_*/place_*
+// ids are already globally unique -- not for lookup (GET /api/city/
+// agents/<id> only ever reads the *active* city regardless), but because
+// two real things need it: the breadcrumb's "back" link has to know
+// which city to return to, and arriving here directly (a bookmark, a
+// refresh) has to activate the right city first or it'd silently read
+// whichever city happened to already be active. Scratch boards stay
+// global -- they don't belong to any city at all.
 import { useEffect, useState } from 'react';
 
 export type Scope =
-  | { kind: 'city' }
-  | { kind: 'agent'; agentId: string }
-  | { kind: 'place'; placeId: string }
+  | { kind: 'root' }
+  | { kind: 'city'; cityId: string }
+  | { kind: 'agent'; cityId: string; agentId: string }
+  | { kind: 'place'; cityId: string; placeId: string }
   | { kind: 'scratch'; boardId: string };
 
 function parse(pathname: string): Scope {
-  const agent = pathname.match(/^\/agent\/([^/]+)\/?$/);
-  if (agent) return { kind: 'agent', agentId: decodeURIComponent(agent[1]) };
+  const agent = pathname.match(/^\/c\/([^/]+)\/agent\/([^/]+)\/?$/);
+  if (agent) return { kind: 'agent', cityId: decodeURIComponent(agent[1]), agentId: decodeURIComponent(agent[2]) };
 
-  const place = pathname.match(/^\/place\/([^/]+)\/?$/);
-  if (place) return { kind: 'place', placeId: decodeURIComponent(place[1]) };
+  const place = pathname.match(/^\/c\/([^/]+)\/place\/([^/]+)\/?$/);
+  if (place) return { kind: 'place', cityId: decodeURIComponent(place[1]), placeId: decodeURIComponent(place[2]) };
+
+  const city = pathname.match(/^\/c\/([^/]+)\/?$/);
+  if (city) return { kind: 'city', cityId: decodeURIComponent(city[1]) };
 
   const scratch = pathname.match(/^\/scratch\/([^/]+)\/?$/);
   if (scratch) return { kind: 'scratch', boardId: decodeURIComponent(scratch[1]) };
 
-  return { kind: 'city' };
+  return { kind: 'root' };
 }
 
 export function pathFor(scope: Scope): string {
   switch (scope.kind) {
-    case 'city':
+    case 'root':
       return '/';
+    case 'city':
+      return `/c/${encodeURIComponent(scope.cityId)}`;
     case 'agent':
-      return `/agent/${encodeURIComponent(scope.agentId)}`;
+      return `/c/${encodeURIComponent(scope.cityId)}/agent/${encodeURIComponent(scope.agentId)}`;
     case 'place':
-      return `/place/${encodeURIComponent(scope.placeId)}`;
+      return `/c/${encodeURIComponent(scope.cityId)}/place/${encodeURIComponent(scope.placeId)}`;
     case 'scratch':
       return `/scratch/${encodeURIComponent(scope.boardId)}`;
   }

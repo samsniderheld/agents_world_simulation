@@ -9,6 +9,19 @@ export type FigureId = `fig_${string}`;
 export type PlaceId = `place_${string}`;
 export type CharacterId = `char_${string}`;
 
+// GET /api/history/cities -- a lightweight summary, not the full
+// composed city (see citystate/store.py's list_cities() docstring for
+// why it's cheaper than get()).
+export interface CitySummary {
+  id: string;
+  generated_at: string;
+  summary: string;
+  figure_count: number;
+  place_count: number;
+  character_count: number;
+  is_active: boolean;
+}
+
 export interface Era {
   id: string;
   name: string;

@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { CityCanvas } from './flow/CityCanvas';
 import { AgentScreen } from './routes/AgentScreen';
+import { CitiesScreen } from './routes/CitiesScreen';
 import { PlaceScreen } from './routes/PlaceScreen';
 import { ScratchScreen } from './routes/ScratchScreen';
 import { navigate, useRoute, type Scope } from './routes/router';
@@ -9,19 +10,21 @@ import './App.css';
 
 // A single fixed board replaces the old Studio tab exactly (Studio was
 // one page too, not a list of named boards) -- real multi-board
-// management is a top-level-canvas concern that arrives with real
-// multi-city support, not before.
+// management belongs with the top-level canvas, which now exists (see
+// CitiesScreen) but doesn't extend to scratch boards yet.
 const DEFAULT_SCRATCH_BOARD = 'default';
 
 function breadcrumbFor(scope: Scope): { label: string; scope: Scope }[] {
-  const root = { label: 'CITY', scope: { kind: 'city' } as Scope };
+  const root = { label: 'CITIES', scope: { kind: 'root' } as Scope };
   switch (scope.kind) {
-    case 'city':
+    case 'root':
       return [root];
+    case 'city':
+      return [root, { label: scope.cityId, scope }];
     case 'agent':
-      return [root, { label: scope.agentId, scope }];
+      return [root, { label: scope.cityId, scope: { kind: 'city', cityId: scope.cityId } }, { label: scope.agentId, scope }];
     case 'place':
-      return [root, { label: scope.placeId, scope }];
+      return [root, { label: scope.cityId, scope: { kind: 'city', cityId: scope.cityId } }, { label: scope.placeId, scope }];
     case 'scratch':
       return [root, { label: `SCRATCH · ${scope.boardId}`, scope }];
   }
@@ -52,23 +55,24 @@ function App() {
   const scope = useRoute();
   const start = useJobStore((s) => s.start);
   const stop = useJobStore((s) => s.stop);
+  const crumbs = breadcrumbFor(scope);
 
   useEffect(() => {
     start();
     return () => stop();
   }, [start, stop]);
 
+  // Esc goes up one level -- literally the second-to-last breadcrumb,
+  // since scopes nest the same way the breadcrumb displays them.
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && scope.kind !== 'city') {
-        navigate({ kind: 'city' });
+      if (e.key === 'Escape' && crumbs.length > 1) {
+        navigate(crumbs[crumbs.length - 2].scope);
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [scope.kind]);
-
-  const crumbs = breadcrumbFor(scope);
+  }, [crumbs]);
 
   return (
     <div className="app-shell">
@@ -96,9 +100,10 @@ function App() {
       </header>
 
       <main className="app-main">
-        {scope.kind === 'city' && <CityCanvas />}
-        {scope.kind === 'agent' && <AgentScreen characterId={scope.agentId} />}
-        {scope.kind === 'place' && <PlaceScreen placeId={scope.placeId} />}
+        {scope.kind === 'root' && <CitiesScreen />}
+        {scope.kind === 'city' && <CityCanvas cityId={scope.cityId} />}
+        {scope.kind === 'agent' && <AgentScreen cityId={scope.cityId} characterId={scope.agentId} />}
+        {scope.kind === 'place' && <PlaceScreen cityId={scope.cityId} placeId={scope.placeId} />}
         {scope.kind === 'scratch' && <ScratchScreen boardId={scope.boardId} />}
       </main>
 

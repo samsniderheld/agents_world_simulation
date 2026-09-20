@@ -112,15 +112,15 @@ function toGraphNode(n: Node): GraphNode {
   throw new Error(`unknown node type: ${n.type}`);
 }
 
-function CanvasInner({ data }: { data: HistoryData }) {
-  const { doc, save } = usePersistedGraph('city');
+function CanvasInner({ cityId, data }: { cityId: string; data: HistoryData }) {
+  const { doc, save } = usePersistedGraph(`city:${cityId}`);
   const [selection, setSelection] = useState<Selection>({ kind: 'city' });
   const [nodes, setNodes] = useState<Node[] | null>(null);
   const [edges, setEdges] = useState<Edge[]>([]);
   const initializedFor = useRef<string | null>(null);
 
-  const onExpandAgent = useCallback((id: string) => navigate({ kind: 'agent', agentId: id }), []);
-  const onExpandPlace = useCallback((id: string) => navigate({ kind: 'place', placeId: id }), []);
+  const onExpandAgent = useCallback((id: string) => navigate({ kind: 'agent', cityId, agentId: id }), [cityId]);
+  const onExpandPlace = useCallback((id: string) => navigate({ kind: 'place', cityId, placeId: id }), [cityId]);
   const onRemoveMissing = useCallback((nodeId: string) => {
     setNodes((prev) => (prev ? prev.filter((n) => n.id !== nodeId) : prev));
     setEdges((prev) => prev.filter((e) => e.source !== nodeId && e.target !== nodeId));
@@ -400,46 +400,32 @@ function CanvasInner({ data }: { data: HistoryData }) {
   );
 }
 
-function EmptyState() {
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const historyStatus = useJobStore((s) => s.historyStatus);
-  const generating = pending || historyStatus?.phase === 'running';
-
-  async function generate() {
-    setPending(true);
-    setError(null);
-    try {
-      const res = await history.generate({});
-      if (!res.ok) setError(res.error ?? 'failed to start');
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setPending(false);
-    }
-  }
-
+function NotFoundState() {
   return (
     <div className="canvas-empty">
-      <p>No city generated yet.</p>
-      <button className="node-run-btn" style={{ flex: 'none', padding: '8px 16px' }} disabled={generating} onClick={generate}>
-        {generating ? 'generating…' : '▶ Generate a city'}
+      <p>This city no longer exists.</p>
+      <button className="node-run-btn" style={{ flex: 'none', padding: '8px 16px' }} onClick={() => navigate({ kind: 'root' })}>
+        ← back to Cities
       </button>
-      {error && <p style={{ color: 'var(--bad)' }}>{error}</p>}
     </div>
   );
 }
 
-export function CityCanvas() {
+export function CityCanvas({ cityId }: { cityId: string }) {
   const [data, setData] = useState<HistoryData | null | undefined>(undefined);
   const historyStatus = useJobStore((s) => s.historyStatus);
 
+  // Every other endpoint (agents/run, city/media, etc.) operates on
+  // "whichever city is active" implicitly -- see citystate/store.py's
+  // docstring -- so opening this canvas has to activate cityId server-
+  // side first, not just navigate to it client-side. If it's already the
+  // active city this is a cheap no-op re-read, not a real switch.
   const load = useCallback(() => {
     history
-      .data()
-      .then(setData)
+      .activateCity(cityId)
+      .then((res) => setData(res.city))
       .catch(() => setData(null));
-  }, []);
+  }, [cityId]);
 
   useEffect(load, [load]);
 
@@ -450,11 +436,11 @@ export function CityCanvas() {
   }, [historyStatus?.phase, load]);
 
   if (data === undefined) return <div className="canvas-empty">Loading…</div>;
-  if (data === null) return <EmptyState />;
+  if (data === null) return <NotFoundState />;
 
   return (
     <ReactFlowProvider>
-      <CanvasInner data={data} />
+      <CanvasInner cityId={cityId} data={data} />
     </ReactFlowProvider>
   );
 }
