@@ -17,6 +17,26 @@ from .. import config
 
 AVAILABLE_PROVIDERS = ["fal", "local"]
 
+# What the node-based UI's canvas can honor per provider, so it can grey
+# out a port/field instead of failing at generate time (per the design
+# spec). Verified against each provider's actual implementation, not
+# assumed: fal's image editing goes through Gemini 3 Pro Image Preview's
+# edit model (image_paths -- see fal.py's generate_image); local's
+# Z-Image Turbo pipeline (local.py) explicitly raises on image_paths
+# (text-to-image only) and never implements video/music at all.
+CAPABILITIES = {
+    "fal": {
+        "supports_reference_images": True,
+        "supports_video": True,
+        "supports_music": True,
+    },
+    "local": {
+        "supports_reference_images": False,
+        "supports_video": False,
+        "supports_music": False,
+    },
+}
+
 _instances = {}
 
 

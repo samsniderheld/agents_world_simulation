@@ -226,16 +226,23 @@ export interface AgentsState {
   event_count: number;
 }
 
+// GET /api/visuals/providers's capabilities block -- what the canvas can
+// honor for the currently active provider (see visuals/providers/
+// __init__.py's CAPABILITIES docstring for how each was verified).
+export interface ProviderCapabilities {
+  supports_reference_images: boolean;
+  supports_video: boolean;
+  supports_music: boolean;
+}
+
 // The global style library (visuals/styles.py) -- independent of any
-// city, reusable across canvases. negative_prompt/strength are captured
-// but not forwarded to the current fal/Gemini provider (see
-// visuals/routes.py's _style_prompt() docstring for why).
+// city, reusable across canvases. Just a text prompt plus reference
+// images; the current fal/Gemini provider has no negative-prompt or
+// CFG-strength-style parameter, so the Style model doesn't carry either.
 export interface Style {
   id: string;
   name: string;
   style_prompt: string;
-  negative_prompt: string;
-  strength: number;
   reference_images: string[];
 }
 

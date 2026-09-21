@@ -1,109 +1,58 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { DragEvent } from 'react';
 import type { Connection, Edge, Node } from '@xyflow/react';
-import {
-  addEdge,
-  applyEdgeChanges,
-  applyNodeChanges,
-  Background,
-  BackgroundVariant,
-  Controls,
-  Panel,
-  ReactFlow,
-  ReactFlowProvider,
-} from '@xyflow/react';
+import { addEdge, applyEdgeChanges, applyNodeChanges, Background, BackgroundVariant, Controls, MiniMap, ReactFlow, ReactFlowProvider, useReactFlow } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { stylesApi } from '../api/client';
-import type { GraphNode, Style } from '../api/types';
+import { history } from '../api/client';
+import type { Character, GraphNode, HistoryData, Place } from '../api/types';
 import '../flow/canvas.css';
 import { isValidConnection as checkValidConnection } from '../flow/edgeRules';
-import { newNodeId, toFlowEdge, toGraphEdge } from '../flow/graphIds';
-import { gridPosition } from '../flow/layout';
+import { entityToGraphNode, toEntityRenderNode } from '../flow/entityNodeKit';
+import { toFlowEdge, toGraphEdge } from '../flow/graphIds';
+import { miniMapNodeColor } from '../flow/miniMapColor';
+import { AgentNode } from '../flow/nodes/AgentNode';
+import { FrameNode } from '../flow/nodes/FrameNode';
+import { LocationNode } from '../flow/nodes/LocationNode';
+import { MissingNode } from '../flow/nodes/MissingNode';
 import { ScratchImageNode, type ScratchImageNodeData } from '../flow/nodes/ScratchImageNode';
 import { ScratchMusicNode, type ScratchMusicNodeData } from '../flow/nodes/ScratchMusicNode';
-import { StyleNode, type StyleNodeData } from '../flow/nodes/StyleNode';
+import { SimulationNode } from '../flow/nodes/SimulationNode';
+import { StyleNode } from '../flow/nodes/StyleNode';
+import { TreatmentNode } from '../flow/nodes/TreatmentNode';
+import { VideoNode } from '../flow/nodes/VideoNode';
+import { enrichPipelineNodes, pipelineToGraphNode, toPipelineRenderNode } from '../flow/pipeline';
+import { reconcile } from '../flow/reconcile';
+import { scratchToGraphNode, toScratchRenderNode } from '../flow/scratchNodeKit';
+import { DRAG_MIME, SideDrawer, type DrawerSection } from '../flow/SideDrawer';
+import { useAddNodeActions } from '../flow/useAddNodeActions';
 import { usePersistedGraph } from '../flow/usePersistedGraph';
+import { usePipelineCallbacks } from '../flow/usePipelineCallbacks';
 
-const nodeTypes = { 'scratch-image': ScratchImageNode, 'scratch-music': ScratchMusicNode, style: StyleNode };
+const nodeTypes = {
+  agent: AgentNode,
+  location: LocationNode,
+  missing: MissingNode,
+  sim: SimulationNode,
+  treatment: TreatmentNode,
+  frame: FrameNode,
+  video: VideoNode,
+  style: StyleNode,
+  'scratch-image': ScratchImageNode,
+  'scratch-music': ScratchMusicNode,
+};
 
-interface Callbacks {
-  onImageUpdate: (nodeId: string, patch: Partial<ScratchImageNodeData>) => void;
-  onMusicUpdate: (nodeId: string, patch: Partial<ScratchMusicNodeData>) => void;
-  onStyleLoaded: (nodeId: string, style: Style) => void;
-  onStyleUpdate: (nodeId: string, patch: Partial<Style>) => void;
-}
+const PIPELINE_TYPES = new Set(['sim', 'treatment', 'frame', 'video', 'style']);
+const SCRATCH_TYPES = new Set(['scratch-image', 'scratch-music']);
 
-function toRenderNode(gn: GraphNode, cb: Callbacks): Node | null {
-  if (gn.type === 'scratch-image') {
-    return {
-      id: gn.id,
-      type: 'scratch-image',
-      position: gn.position,
-      data: { prompt: (gn.data.prompt as string) ?? '', url: gn.data.url as string | undefined, localPath: gn.data.localPath as string | undefined, onUpdate: cb.onImageUpdate },
-    };
-  }
-  if (gn.type === 'scratch-music') {
-    return {
-      id: gn.id,
-      type: 'scratch-music',
-      position: gn.position,
-      data: {
-        prompt: (gn.data.prompt as string) ?? '',
-        negativePrompt: (gn.data.negativePrompt as string) ?? '',
-        url: gn.data.url as string | undefined,
-        onUpdate: cb.onMusicUpdate,
-      },
-    };
-  }
-  if (gn.type === 'style') {
-    return { id: gn.id, type: 'style', position: gn.position, data: { styleId: gn.data.styleId as string, onLoaded: cb.onStyleLoaded, onUpdate: cb.onStyleUpdate } };
-  }
-  return null;
-}
-
-function toGraphNode(n: Node): GraphNode {
-  if (n.type === 'scratch-image') {
-    const d = n.data as ScratchImageNodeData;
-    return { id: n.id, type: 'scratch-image', position: n.position, data: { prompt: d.prompt, url: d.url, localPath: d.localPath } };
-  }
-  if (n.type === 'scratch-music') {
-    const d = n.data as ScratchMusicNodeData;
-    return { id: n.id, type: 'scratch-music', position: n.position, data: { prompt: d.prompt, negativePrompt: d.negativePrompt, url: d.url } };
-  }
-  if (n.type === 'style') {
-    const d = n.data as StyleNodeData;
-    return { id: n.id, type: 'style', position: n.position, data: { styleId: d.styleId } };
-  }
-  throw new Error(`unknown scratch node type: ${n.type}`);
-}
-
-// Style is the one node type genuinely shared with the city pipeline (it
-// belongs to the global library, not any board) -- same merge logic as
-// pipeline.ts's Frame/Video enrichment, just scoped to the one consumer
-// scratch boards have (scratch-image's style:in).
-function enrichScratchNodes(nodes: Node[], edges: Edge[]): Node[] {
-  const byId = new Map(nodes.map((n) => [n.id, n]));
-  return nodes.map((n) => {
-    if (n.type !== 'scratch-image') return n;
-    const styles = edges
-      .filter((e) => e.target === n.id && e.targetHandle === 'style:in')
-      .map((e) => byId.get(e.source))
-      .filter((s): s is Node => Boolean(s && s.type === 'style'))
-      .map((s) => (s.data as StyleNodeData).style)
-      .filter((s): s is Style => Boolean(s));
-    if (styles.length === 0) return n;
-    return {
-      ...n,
-      data: {
-        ...n.data,
-        mergedStylePrompt: styles.map((s) => s.style_prompt).filter(Boolean).join(', ') || undefined,
-        mergedStyleReferenceImages: styles.flatMap((s) => s.reference_images),
-      },
-    };
-  });
-}
-
-function ScratchCanvasInner({ boardId }: { boardId: string }) {
+// A Scratch board still has the full node palette (Agent/Location/
+// Simulation/Treatment/Frame/Video), not just Style/Image/Music -- it's
+// "ungrounded" in that it doesn't belong to any one city, but it can
+// still reference whichever city happens to be active, same as opening
+// any other tab would show. If nothing's ever been generated, the
+// Agents/Locations sections are just honestly empty.
+function ScratchCanvasInner({ boardId, cityData }: { boardId: string; cityData: HistoryData | null }) {
   const { doc, save } = usePersistedGraph(`scratch:${boardId}`);
+  const { screenToFlowPosition } = useReactFlow();
   const [nodes, setNodes] = useState<Node[] | null>(null);
   const [edges, setEdges] = useState<Edge[]>([]);
   const initializedFor = useRef<string | null>(null);
@@ -114,34 +63,81 @@ function ScratchCanvasInner({ boardId }: { boardId: string }) {
   const onMusicUpdate = useCallback((nodeId: string, patch: Partial<ScratchMusicNodeData>) => {
     setNodes((prev) => (prev ? prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, ...patch } } : n)) : prev));
   }, []);
-  const onStyleLoaded = useCallback((nodeId: string, style: Style) => {
-    setNodes((prev) => (prev ? prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, style } } : n)) : prev));
-  }, []);
-  const onStyleUpdate = useCallback((nodeId: string, patch: Partial<Style>) => {
-    setNodes((prev) =>
-      prev
-        ? prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, style: { ...(n.data as { style: Style }).style, ...patch } } } : n))
-        : prev,
-    );
+  // No navigation from a scratch board -- Agent/Location nodes here are
+  // reference/context for wiring into a Simulation, not a way to drill
+  // into that entity's own screen.
+  const noExpand = useCallback(() => {}, []);
+  const onRemoveMissing = useCallback((nodeId: string) => {
+    setNodes((prev) => (prev ? prev.filter((n) => n.id !== nodeId) : prev));
+    setEdges((prev) => prev.filter((e) => e.source !== nodeId && e.target !== nodeId));
   }, []);
 
-  // No reconciliation here, deliberately -- unlike CityCanvas/EntityCanvas
-  // nodes (which reference char_*/place_*/media_* ids that can go stale),
-  // a scratch node's own data (prompt, url, localPath) IS its entire
-  // state; there's no external entity it could drift out of sync with.
+  const pipeline = usePipelineCallbacks(setNodes, setEdges);
+  const { addToCanvas, addPipelineNode, addStyleNode, addNewAgent, addScratchNode } = useAddNodeActions({
+    data: cityData,
+    setNodes,
+    onExpandAgent: noExpand,
+    onExpandPlace: noExpand,
+    onRemoveMissing,
+    pipeline,
+    onImageUpdate,
+    onMusicUpdate,
+  });
+
+  // No media/entity reconciliation the way CityCanvas/EntityCanvas need
+  // (scratch-image/scratch-music's own data IS their entire state), but
+  // Agent/Location nodes dropped here DO reference real ids and need the
+  // same reconciliation as everywhere else once cityData is known.
   useEffect(() => {
     if (!doc) return;
-    const key = `${doc.rev}`;
+    const agentIds = cityData?.characters.map((c) => c.id) ?? [];
+    const placeIds = cityData?.places.map((p) => p.id) ?? [];
+    const key = `${doc.rev}:${cityData?.generated_at ?? 'none'}`;
     if (initializedFor.current === key && nodes) return;
     initializedFor.current = key;
-    const cb = { onImageUpdate, onMusicUpdate, onStyleLoaded, onStyleUpdate };
-    setNodes(doc.nodes.map((gn) => toRenderNode(gn, cb)).filter((n): n is Node => n !== null));
-    setEdges(doc.edges.map(toFlowEdge));
+
+    const agentRecon = reconcile(doc.nodes.filter((n) => n.type === 'agent'), agentIds, (n) => n.data.characterId as string);
+    const placeRecon = reconcile(doc.nodes.filter((n) => n.type === 'location'), placeIds, (n) => n.data.placeId as string);
+    const alreadyMissing = doc.nodes.filter((n) => n.type === 'missing');
+    const danglingAsMissing: GraphNode[] = [...agentRecon.missing, ...placeRecon.missing].map((n) => ({
+      id: n.id,
+      type: 'missing',
+      position: n.position,
+      data: { entityId: (n.data.characterId ?? n.data.placeId) as string },
+    }));
+    const builtEntity = cityData
+      ? [...agentRecon.present, ...placeRecon.present, ...alreadyMissing, ...danglingAsMissing]
+          .map((gn) => toEntityRenderNode(gn, cityData, noExpand, noExpand, onRemoveMissing))
+          .filter((n): n is Node => n !== null)
+      : [];
+
+    const pipelineGraphNodes = doc.nodes.filter((n) => PIPELINE_TYPES.has(n.type));
+    const builtPipeline = cityData ? pipelineGraphNodes.map((gn) => toPipelineRenderNode(gn, cityData, pipeline)).filter((n): n is Node => n !== null) : [];
+
+    const scratchGraphNodes = doc.nodes.filter((n) => SCRATCH_TYPES.has(n.type));
+    const builtScratch = scratchGraphNodes.map((gn) => toScratchRenderNode(gn, onImageUpdate, onMusicUpdate)).filter((n): n is Node => n !== null);
+
+    const allBuilt = [...builtEntity, ...builtPipeline, ...builtScratch];
+    const nodeIds = new Set(allBuilt.map((n) => n.id));
+    setNodes(allBuilt);
+    setEdges(doc.edges.filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target)).map(toFlowEdge));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [doc]);
+  }, [doc, cityData]);
+
+  // Prune edges whenever a node disappears (delete key on a selected
+  // node) -- without this, an edge could keep pointing at a removed
+  // node's id forever.
+  useEffect(() => {
+    if (!nodes) return;
+    const ids = new Set(nodes.map((n) => n.id));
+    setEdges((prev) => prev.filter((e) => ids.has(e.source) && ids.has(e.target)));
+  }, [nodes]);
 
   useEffect(() => {
-    if (nodes) save(nodes.map(toGraphNode), edges.map(toGraphEdge));
+    if (nodes) {
+      const graphNodes = nodes.map((n) => entityToGraphNode(n) ?? pipelineToGraphNode(n) ?? scratchToGraphNode(n)).filter((gn): gn is GraphNode => gn !== null);
+      save(graphNodes, edges.map(toGraphEdge));
+    }
   }, [nodes, edges, save]);
 
   const onNodesChange = useCallback((changes: Parameters<typeof applyNodeChanges>[0]) => {
@@ -156,41 +152,80 @@ function ScratchCanvasInner({ boardId }: { boardId: string }) {
     setEdges((eds) => addEdge(c, eds));
   }, []);
 
-  const addNode = useCallback(
-    (type: 'scratch-image' | 'scratch-music') => {
-      setNodes((prev) => {
-        const list = prev ?? [];
-        const position = gridPosition(list.length, { columns: 4, cellWidth: 280, cellHeight: 240 });
-        const id = newNodeId(type);
-        if (type === 'scratch-image') return [...list, { id, type, position, data: { prompt: '', onUpdate: onImageUpdate } }];
-        return [...list, { id, type, position, data: { prompt: '', negativePrompt: '', onUpdate: onMusicUpdate } }];
-      });
-    },
-    [onImageUpdate, onMusicUpdate],
-  );
+  const notOnCanvasAgents = (() => {
+    if (!nodes || !cityData) return [];
+    const onCanvasIds = new Set(nodes.filter((n) => n.type === 'agent').map((n) => (n.data as { character: Character }).character.id));
+    return cityData.characters.filter((c) => !onCanvasIds.has(c.id));
+  })();
+  const notOnCanvasLocations = (() => {
+    if (!nodes || !cityData) return [];
+    const onCanvasIds = new Set(nodes.filter((n) => n.type === 'location').map((n) => (n.data as { place: Place }).place.id));
+    return cityData.places.filter((p) => !onCanvasIds.has(p.id));
+  })();
 
-  const addStyleNode = useCallback(async () => {
-    let created;
-    try {
-      created = await stylesApi.create({ name: 'New Style', stylePrompt: '' });
-    } catch (e) {
-      console.error('failed to create style', e);
-      return;
-    }
-    setNodes((prev) => {
-      const list = prev ?? [];
-      const position = gridPosition(list.length, { columns: 4, cellWidth: 280, cellHeight: 240 });
-      return [...list, { id: newNodeId('style'), type: 'style', position, data: { styleId: created.style.id, style: created.style, onLoaded: onStyleLoaded, onUpdate: onStyleUpdate } }];
-    });
-  }, [onStyleLoaded, onStyleUpdate]);
+  const onDragOver = useCallback((e: DragEvent) => {
+    if (!e.dataTransfer.types.includes(DRAG_MIME)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  }, []);
+
+  const onDrop = useCallback(
+    (e: DragEvent) => {
+      const payload = e.dataTransfer.getData(DRAG_MIME);
+      if (!payload) return;
+      e.preventDefault();
+      const position = screenToFlowPosition({ x: e.clientX, y: e.clientY });
+      const [kind, ...rest] = payload.split(':');
+      if (kind === 'scratch') addScratchNode(rest[0] as 'scratch-image' | 'scratch-music', position);
+      else if (kind === 'style') addStyleNode(position);
+      else if (kind === 'pipeline') addPipelineNode(rest[0] as 'sim' | 'treatment' | 'video', position);
+      else if (kind === 'agent' && rest[0] === 'new') addNewAgent(position);
+      else if (kind === 'agent') addToCanvas({ id: rest[0], kind: 'agent' }, position);
+      else if (kind === 'location') addToCanvas({ id: rest[0], kind: 'location' }, position);
+    },
+    [screenToFlowPosition, addScratchNode, addStyleNode, addPipelineNode, addNewAgent, addToCanvas],
+  );
 
   if (!nodes) return <div className="canvas-empty">Loading canvas…</div>;
 
+  const renderNodes = cityData ? enrichPipelineNodes(nodes, edges, cityData) : nodes;
+
+  const sections: DrawerSection[] = [
+    {
+      id: 'nodes',
+      label: 'Nodes',
+      items: [
+        { id: 'image', label: '+ Image', dragPayload: 'scratch:scratch-image', onAdd: () => addScratchNode('scratch-image') },
+        { id: 'music', label: '+ Music', dragPayload: 'scratch:scratch-music', onAdd: () => addScratchNode('scratch-music') },
+        { id: 'style', label: '+ Style', dragPayload: 'style:new', onAdd: () => addStyleNode() },
+        { id: 'sim', label: 'Simulation', dragPayload: 'pipeline:sim', onAdd: () => addPipelineNode('sim') },
+        { id: 'treatment', label: 'Treatment', dragPayload: 'pipeline:treatment', onAdd: () => addPipelineNode('treatment') },
+        { id: 'video', label: 'Video', dragPayload: 'pipeline:video', onAdd: () => addPipelineNode('video') },
+      ],
+    },
+    {
+      id: 'agents',
+      label: 'Agents',
+      emptyLabel: cityData ? 'no other residents to add' : 'no active city',
+      items: [
+        { id: 'new-agent', label: '+ New agent', sublabel: 'generate a resident', dragPayload: 'agent:new', onAdd: () => addNewAgent() },
+        ...notOnCanvasAgents.map((c) => ({ id: c.id, label: c.name, sublabel: c.occupation, dragPayload: `agent:${c.id}`, onAdd: () => addToCanvas({ id: c.id, kind: 'agent' }) })),
+      ],
+    },
+    {
+      id: 'locations',
+      label: 'Locations',
+      emptyLabel: cityData ? 'every place is already on canvas' : 'no active city',
+      items: notOnCanvasLocations.map((p) => ({ id: p.id, label: p.name, sublabel: p.place_type, dragPayload: `location:${p.id}`, onAdd: () => addToCanvas({ id: p.id, kind: 'location' }) })),
+    },
+  ];
+
   return (
     <div className="city-canvas-layout">
-      <div className="canvas-with-tray">
+      <SideDrawer sections={sections} />
+      <div className="canvas-with-tray" onDragOver={onDragOver} onDrop={onDrop}>
         <ReactFlow
-          nodes={enrichScratchNodes(nodes, edges)}
+          nodes={renderNodes}
           edges={edges}
           nodeTypes={nodeTypes}
           onNodesChange={onNodesChange}
@@ -202,17 +237,7 @@ function ScratchCanvasInner({ boardId }: { boardId: string }) {
         >
           <Background variant={BackgroundVariant.Dots} gap={24} size={1.5} color="var(--canvas-dot)" />
           <Controls showInteractive={false} />
-          <Panel position="top-right" className="canvas-toolbar">
-            <button className="node-run-btn" onClick={() => addNode('scratch-image')}>
-              + Image
-            </button>
-            <button className="node-run-btn" onClick={() => addNode('scratch-music')}>
-              + Music
-            </button>
-            <button className="node-run-btn" onClick={addStyleNode}>
-              + Style
-            </button>
-          </Panel>
+          <MiniMap nodeColor={miniMapNodeColor} pannable zoomable />
         </ReactFlow>
       </div>
     </div>
@@ -220,9 +245,15 @@ function ScratchCanvasInner({ boardId }: { boardId: string }) {
 }
 
 export function ScratchScreen({ boardId }: { boardId: string }) {
+  const [cityData, setCityData] = useState<HistoryData | null>(null);
+
+  useEffect(() => {
+    history.data().then(setCityData).catch(() => setCityData(null));
+  }, []);
+
   return (
     <ReactFlowProvider>
-      <ScratchCanvasInner boardId={boardId} />
+      <ScratchCanvasInner boardId={boardId} cityData={cityData} />
     </ReactFlowProvider>
   );
 }

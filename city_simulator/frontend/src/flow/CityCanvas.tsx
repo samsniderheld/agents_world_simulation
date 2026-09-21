@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { DragEvent } from 'react';
 import type { Connection, Edge, Node, NodeMouseHandler } from '@xyflow/react';
 import {
   addEdge,
@@ -7,32 +8,39 @@ import {
   Background,
   BackgroundVariant,
   Controls,
-  Panel,
+  MiniMap,
   ReactFlow,
   ReactFlowProvider,
+  useReactFlow,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { city, history, stylesApi } from '../api/client';
-import type { Character, GraphNode, HistoryData, MediaItem, Place, Style } from '../api/types';
+import { history } from '../api/client';
+import type { Character, GraphNode, HistoryData, Place } from '../api/types';
 import { Inspector } from '../inspector/Inspector';
 import { navigate } from '../routes/router';
 import { useJobStore } from '../state/jobStore';
 import './canvas.css';
 import { isValidConnection as checkValidConnection } from './edgeRules';
-import { gridPosition } from './layout';
+import { entityToGraphNode, toEntityRenderNode } from './entityNodeKit';
 import { AgentNode } from './nodes/AgentNode';
-import { FrameNode, type FrameNodeData } from './nodes/FrameNode';
+import { FrameNode } from './nodes/FrameNode';
 import { LocationNode } from './nodes/LocationNode';
 import { MissingNode } from './nodes/MissingNode';
+import { ScratchImageNode, type ScratchImageNodeData } from './nodes/ScratchImageNode';
+import { ScratchMusicNode, type ScratchMusicNodeData } from './nodes/ScratchMusicNode';
 import { SimulationNode } from './nodes/SimulationNode';
 import { StyleNode } from './nodes/StyleNode';
-import { TreatmentNode, type TreatmentNodeData } from './nodes/TreatmentNode';
-import { VideoNode, type VideoNodeData } from './nodes/VideoNode';
-import { NotOnCanvasTray } from './NotOnCanvasTray';
+import { TreatmentNode } from './nodes/TreatmentNode';
+import { VideoNode } from './nodes/VideoNode';
+import { DRAG_MIME, SideDrawer, type DrawerSection } from './SideDrawer';
+import { miniMapNodeColor } from './miniMapColor';
 import { enrichPipelineNodes, pipelineToGraphNode, toPipelineRenderNode } from './pipeline';
-import { newNodeId, toFlowEdge, toGraphEdge } from './graphIds';
+import { toFlowEdge, toGraphEdge } from './graphIds';
 import { reconcile } from './reconcile';
+import { scratchToGraphNode, toScratchRenderNode } from './scratchNodeKit';
+import { useAddNodeActions } from './useAddNodeActions';
 import { usePersistedGraph } from './usePersistedGraph';
+import { usePipelineCallbacks } from './usePipelineCallbacks';
 import type { Selection } from './selection';
 
 const nodeTypes = {
@@ -44,76 +52,22 @@ const nodeTypes = {
   frame: FrameNode,
   video: VideoNode,
   style: StyleNode,
+  'scratch-image': ScratchImageNode,
+  'scratch-music': ScratchMusicNode,
 };
 
+// Every non-entity-referencing node type -- these have their own graph
+// representation (pipeline.ts / scratchNodeKit), not entityNodeKit's
+// agent/location/missing mapping. The full palette is available on every
+// canvas now (per the requirement that no node type be scoped to
+// "wherever it happened to make the most obvious sense"), so this same
+// set applies here, in EntityCanvas, and in ScratchScreen alike.
 const PIPELINE_TYPES = new Set(['sim', 'treatment', 'frame', 'video', 'style']);
+const SCRATCH_TYPES = new Set(['scratch-image', 'scratch-music']);
 
-function firstImageUrl(items: MediaItem[] | undefined): string | undefined {
-  const hit = items?.find((m) => m.kind === 'image');
-  return hit ? city.fileUrl(hit.url) : undefined;
-}
-
-// The one place that knows how to go both directions between a node's
-// persisted shape (an entity reference only -- see graph_store.py's
-// docstring) and its enriched render shape. Agent/Location/Missing here;
-// the pipeline node types (sim/treatment/frame/video) have their own
-// pair in pipeline.ts, since their persisted shape is "own fields only,"
-// not an entity reference.
-function toRenderNode(
-  gn: GraphNode,
-  data: HistoryData,
-  onExpandAgent: (id: string) => void,
-  onExpandPlace: (id: string) => void,
-  onRemoveMissing: (nodeId: string) => void,
-): Node | null {
-  if (gn.type === 'agent') {
-    const characterId = gn.data.characterId as string;
-    const character = data.characters.find((c) => c.id === characterId);
-    if (!character) return null;
-    return {
-      id: gn.id,
-      type: 'agent',
-      position: gn.position,
-      data: { character, thumbUrl: firstImageUrl(data.media[characterId]), onExpand: onExpandAgent },
-    };
-  }
-  if (gn.type === 'location') {
-    const placeId = gn.data.placeId as string;
-    const place = data.places.find((p) => p.id === placeId);
-    if (!place) return null;
-    const residentCount = data.characters.filter((c) => c.place_id === placeId).length;
-    return {
-      id: gn.id,
-      type: 'location',
-      position: gn.position,
-      data: { place, thumbUrl: firstImageUrl(data.media[placeId]), residentCount, onExpand: onExpandPlace },
-    };
-  }
-  if (gn.type === 'missing') {
-    return { id: gn.id, type: 'missing', position: gn.position, data: { entityId: gn.data.entityId as string, onRemove: onRemoveMissing } };
-  }
-  return null;
-}
-
-function toGraphNode(n: Node): GraphNode {
-  if (n.type === 'agent') {
-    const character = (n.data as { character: Character }).character;
-    return { id: n.id, type: 'agent', position: n.position, data: { characterId: character.id } };
-  }
-  if (n.type === 'location') {
-    const place = (n.data as { place: Place }).place;
-    return { id: n.id, type: 'location', position: n.position, data: { placeId: place.id } };
-  }
-  if (n.type === 'missing') {
-    return { id: n.id, type: 'missing', position: n.position, data: { entityId: (n.data as { entityId: string }).entityId } };
-  }
-  const pipelineNode = pipelineToGraphNode(n);
-  if (pipelineNode) return pipelineNode;
-  throw new Error(`unknown node type: ${n.type}`);
-}
-
-function CanvasInner({ cityId, data }: { cityId: string; data: HistoryData }) {
+function CanvasInner({ cityId, data, onDataRefresh }: { cityId: string; data: HistoryData; onDataRefresh: () => void }) {
   const { doc, save } = usePersistedGraph(`city:${cityId}`);
+  const { screenToFlowPosition } = useReactFlow();
   const [selection, setSelection] = useState<Selection>({ kind: 'city' });
   const [nodes, setNodes] = useState<Node[] | null>(null);
   const [edges, setEdges] = useState<Edge[]>([]);
@@ -125,78 +79,25 @@ function CanvasInner({ cityId, data }: { cityId: string; data: HistoryData }) {
     setNodes((prev) => (prev ? prev.filter((n) => n.id !== nodeId) : prev));
     setEdges((prev) => prev.filter((e) => e.source !== nodeId && e.target !== nodeId));
   }, []);
-
-  const onTicksChange = useCallback((nodeId: string, ticks: number) => {
-    setNodes((prev) => (prev ? prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, ticks } } : n)) : prev));
-  }, []);
-  const onSubjectChange = useCallback((nodeId: string, subjectId: string) => {
-    setNodes((prev) => (prev ? prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, subjectId } } : n)) : prev));
-  }, []);
-  const onTreatmentGenerated = useCallback((nodeId: string, text: string, shots: string[]) => {
-    setNodes((prev) => (prev ? prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, text, shots } } : n)) : prev));
-  }, []);
-  const onFrameUpdate = useCallback((nodeId: string, patch: Partial<FrameNodeData>) => {
+  const onImageUpdate = useCallback((nodeId: string, patch: Partial<ScratchImageNodeData>) => {
     setNodes((prev) => (prev ? prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, ...patch } } : n)) : prev));
   }, []);
-  const onVideoUpdate = useCallback((nodeId: string, patch: Partial<VideoNodeData>) => {
+  const onMusicUpdate = useCallback((nodeId: string, patch: Partial<ScratchMusicNodeData>) => {
     setNodes((prev) => (prev ? prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, ...patch } } : n)) : prev));
   }, []);
-  const onStyleLoaded = useCallback((nodeId: string, style: Style) => {
-    setNodes((prev) => (prev ? prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, style } } : n)) : prev));
-  }, []);
-  const onStyleUpdate = useCallback((nodeId: string, patch: Partial<Style>) => {
-    setNodes((prev) =>
-      prev
-        ? prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, style: { ...(n.data as { style: Style }).style, ...patch } } } : n))
-        : prev,
-    );
-  }, []);
 
-  // Emit frames: the subject is read from the treatment node's own
-  // current state (not re-derived from candidates) since by the time you
-  // click this, a subject has already been chosen -- one Frame per shot,
-  // fanned out to the right of the Treatment node, each pre-wired with a
-  // shots:out -> shot:in edge so the pipeline reads as connected the
-  // instant it appears, not as orphaned nodes you'd have to wire by hand.
-  const onEmitFrames = useCallback((treatmentNodeId: string, shots: string[]) => {
-    setNodes((prev) => {
-      if (!prev) return prev;
-      const treatmentNode = prev.find((n) => n.id === treatmentNodeId);
-      const subjectId = treatmentNode && (treatmentNode.data as TreatmentNodeData).subjectId;
-      if (!treatmentNode || !subjectId) return prev;
-
-      const newNodes: Node[] = shots.map((shotText, i) => ({
-        id: newNodeId('frame'),
-        type: 'frame',
-        position: { x: treatmentNode.position.x + 340, y: treatmentNode.position.y + i * 260 },
-        data: { entityId: subjectId, shotIndex: i, prompt: shotText, onUpdate: onFrameUpdate },
-      }));
-
-      setEdges((prevEdges) => [
-        ...prevEdges,
-        ...newNodes.map((fn) => ({
-          id: `e:${treatmentNodeId}->${fn.id}`,
-          source: treatmentNodeId,
-          sourceHandle: 'shots:out',
-          target: fn.id,
-          targetHandle: 'shot:in',
-        })),
-      ]);
-
-      return [...prev, ...newNodes];
-    });
-  }, [onFrameUpdate]);
-
-  const pipelineCallbacks = {
-    onTicksChange,
-    onSubjectChange,
-    onTreatmentGenerated,
-    onEmitFrames,
-    onFrameUpdate,
-    onVideoUpdate,
-    onStyleLoaded,
-    onStyleUpdate,
-  };
+  const pipeline = usePipelineCallbacks(setNodes, setEdges);
+  const { addToCanvas, addPipelineNode, addStyleNode, addNewAgent, addScratchNode } = useAddNodeActions({
+    data,
+    setNodes,
+    onExpandAgent,
+    onExpandPlace,
+    onRemoveMissing,
+    onDataRefresh,
+    pipeline,
+    onImageUpdate,
+    onMusicUpdate,
+  });
 
   // Seeded exactly once per (doc, data) pairing -- see the equivalent
   // comment this replaced in Phase 2 for why `data.generated_at` is part
@@ -213,6 +114,7 @@ function CanvasInner({ cityId, data }: { cityId: string; data: HistoryData }) {
     const placeRecon = reconcile(doc.nodes.filter((n) => n.type === 'location'), placeIds, (n) => n.data.placeId as string);
     const alreadyMissing = doc.nodes.filter((n) => n.type === 'missing');
     const pipelineGraphNodes = doc.nodes.filter((n) => PIPELINE_TYPES.has(n.type));
+    const scratchGraphNodes = doc.nodes.filter((n) => SCRATCH_TYPES.has(n.type));
 
     const persisted = [...agentRecon.present, ...placeRecon.present, ...alreadyMissing];
     const danglingAsMissing: GraphNode[] = [...agentRecon.missing, ...placeRecon.missing].map((n) => ({
@@ -222,19 +124,21 @@ function CanvasInner({ cityId, data }: { cityId: string; data: HistoryData }) {
       data: { entityId: (n.data.characterId ?? n.data.placeId) as string },
     }));
 
-    const built = [...persisted, ...danglingAsMissing]
-      .map((gn) => toRenderNode(gn, data, onExpandAgent, onExpandPlace, onRemoveMissing))
+    const builtEntity = [...persisted, ...danglingAsMissing]
+      .map((gn) => toEntityRenderNode(gn, data, onExpandAgent, onExpandPlace, onRemoveMissing))
       .filter((n): n is Node => n !== null);
-    const builtPipeline = pipelineGraphNodes.map((gn) => toPipelineRenderNode(gn, data, pipelineCallbacks)).filter((n): n is Node => n !== null);
+    const builtPipeline = pipelineGraphNodes.map((gn) => toPipelineRenderNode(gn, data, pipeline)).filter((n): n is Node => n !== null);
+    const builtScratch = scratchGraphNodes.map((gn) => toScratchRenderNode(gn, onImageUpdate, onMusicUpdate)).filter((n): n is Node => n !== null);
+    const allBuilt = [...builtEntity, ...builtPipeline, ...builtScratch];
 
     // Edges referencing a node that didn't make it through (e.g. an
     // agent id that no longer exists and became `missing` under a
     // different id scheme) are dropped -- see the general edge-pruning
     // effect below for the steady-state version of this same rule.
-    const nodeIds = new Set([...built, ...builtPipeline].map((n) => n.id));
+    const nodeIds = new Set(allBuilt.map((n) => n.id));
     const builtEdges = doc.edges.filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target)).map(toFlowEdge);
 
-    setNodes([...built, ...builtPipeline]);
+    setNodes(allBuilt);
     setEdges(builtEdges);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [doc, data]);
@@ -249,7 +153,10 @@ function CanvasInner({ cityId, data }: { cityId: string; data: HistoryData }) {
 
   // Autosave whenever the working graph changes.
   useEffect(() => {
-    if (nodes) save(nodes.map(toGraphNode), edges.map(toGraphEdge));
+    if (nodes) {
+      const graphNodes = nodes.map((n) => entityToGraphNode(n) ?? pipelineToGraphNode(n) ?? scratchToGraphNode(n)).filter((gn): gn is GraphNode => gn !== null);
+      save(graphNodes, edges.map(toGraphEdge));
+    }
   }, [nodes, edges, save]);
 
   const onNodesChange = useCallback((changes: Parameters<typeof applyNodeChanges>[0]) => {
@@ -278,90 +185,78 @@ function CanvasInner({ cityId, data }: { cityId: string; data: HistoryData }) {
     [onExpandAgent, onExpandPlace],
   );
 
-  const notOnCanvas = (() => {
+  const notOnCanvasAgents = (() => {
     if (!nodes) return [];
-    const onCanvasAgentIds = new Set(nodes.filter((n) => n.type === 'agent').map((n) => (n.data as { character: Character }).character.id));
-    const onCanvasPlaceIds = new Set(nodes.filter((n) => n.type === 'location').map((n) => (n.data as { place: Place }).place.id));
-    const agents = data.characters.filter((c) => !onCanvasAgentIds.has(c.id)).map((c) => ({ id: c.id, label: c.name, kind: 'agent' as const }));
-    const places = data.places.filter((p) => !onCanvasPlaceIds.has(p.id)).map((p) => ({ id: p.id, label: p.name, kind: 'location' as const }));
-    return [...agents, ...places];
+    const onCanvasIds = new Set(nodes.filter((n) => n.type === 'agent').map((n) => (n.data as { character: Character }).character.id));
+    return data.characters.filter((c) => !onCanvasIds.has(c.id));
+  })();
+  const notOnCanvasLocations = (() => {
+    if (!nodes) return [];
+    const onCanvasIds = new Set(nodes.filter((n) => n.type === 'location').map((n) => (n.data as { place: Place }).place.id));
+    return data.places.filter((p) => !onCanvasIds.has(p.id));
   })();
 
-  const addToCanvas = useCallback(
-    (entry: { id: string; kind: 'agent' | 'location' }) => {
-      setNodes((prev) => {
-        const list = prev ?? [];
-        const position = gridPosition(list.length, { columns: 4, cellWidth: 270, cellHeight: 190 });
-        const built =
-          entry.kind === 'agent'
-            ? toRenderNode({ id: `agent:${entry.id}`, type: 'agent', position, data: { characterId: entry.id } }, data, onExpandAgent, onExpandPlace, onRemoveMissing)
-            : toRenderNode({ id: `place:${entry.id}`, type: 'location', position, data: { placeId: entry.id } }, data, onExpandAgent, onExpandPlace, onRemoveMissing);
-        return built ? [...list, built] : list;
-      });
-    },
-    [data, onExpandAgent, onExpandPlace, onRemoveMissing],
-  );
+  const onDragOver = useCallback((e: DragEvent) => {
+    if (!e.dataTransfer.types.includes(DRAG_MIME)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  }, []);
 
-  const addPipelineNode = useCallback(
-    (type: 'sim' | 'treatment' | 'video') => {
-      setNodes((prev) => {
-        const list = prev ?? [];
-        const position = gridPosition(list.filter((n) => PIPELINE_TYPES.has(n.type ?? '')).length, {
-          columns: 3,
-          cellWidth: 340,
-          cellHeight: 260,
-          originY: 900,
-        });
-        const id = newNodeId(type);
-        const base = { id, position };
-        if (type === 'sim') return [...list, { ...base, type, data: { ticks: 8, agentNames: [], onTicksChange } }];
-        if (type === 'treatment')
-          return [...list, { ...base, type, data: { candidates: [], onSubjectChange, onGenerated: onTreatmentGenerated, onEmitFrames } }];
-        return [...list, { ...base, type, data: { prompt: '', onUpdate: onVideoUpdate } }];
-      });
+  const onDrop = useCallback(
+    (e: DragEvent) => {
+      const payload = e.dataTransfer.getData(DRAG_MIME);
+      if (!payload) return;
+      e.preventDefault();
+      const position = screenToFlowPosition({ x: e.clientX, y: e.clientY });
+      const [kind, ...rest] = payload.split(':');
+      if (kind === 'pipeline') addPipelineNode(rest[0] as 'sim' | 'treatment' | 'video', position);
+      else if (kind === 'style') addStyleNode(position);
+      else if (kind === 'scratch') addScratchNode(rest[0] as 'scratch-image' | 'scratch-music', position);
+      else if (kind === 'agent' && rest[0] === 'new') addNewAgent(position);
+      else if (kind === 'agent') addToCanvas({ id: rest[0], kind: 'agent' }, position);
+      else if (kind === 'location') addToCanvas({ id: rest[0], kind: 'location' }, position);
     },
-    [onTicksChange, onSubjectChange, onTreatmentGenerated, onEmitFrames, onVideoUpdate],
+    [screenToFlowPosition, addPipelineNode, addStyleNode, addScratchNode, addNewAgent, addToCanvas],
   );
-
-  // Styles live in the global library (visuals/styles.py), not the graph
-  // document -- "+ Style" always mints a fresh library entry rather than
-  // opening a picker over existing ones, a deliberate v1 scope cut (see
-  // the design spec's own note that a style authored elsewhere should be
-  // selectable here -- worth adding once there's more than one style to
-  // pick from in practice).
-  const addStyleNode = useCallback(async () => {
-    let created;
-    try {
-      created = await stylesApi.create({ name: 'New Style', stylePrompt: '' });
-    } catch (e) {
-      // No node exists yet to show this on, so surfacing it any more
-      // gracefully means a toast system this app doesn't have yet --
-      // console.error at least beats an unhandled rejection.
-      console.error('failed to create style', e);
-      return;
-    }
-    setNodes((prev) => {
-      const list = prev ?? [];
-      const position = gridPosition(list.filter((n) => PIPELINE_TYPES.has(n.type ?? '')).length, {
-        columns: 3,
-        cellWidth: 340,
-        cellHeight: 260,
-        originY: 900,
-      });
-      return [
-        ...list,
-        { id: newNodeId('style'), type: 'style', position, data: { styleId: created.style.id, style: created.style, onLoaded: onStyleLoaded, onUpdate: onStyleUpdate } },
-      ];
-    });
-  }, [onStyleLoaded, onStyleUpdate]);
 
   if (!nodes) return <div className="canvas-empty">Loading canvas…</div>;
 
   const renderNodes = enrichPipelineNodes(nodes, edges, data);
 
+  const sections: DrawerSection[] = [
+    {
+      id: 'nodes',
+      label: 'Nodes',
+      items: [
+        { id: 'sim', label: 'Simulation', dragPayload: 'pipeline:sim', onAdd: () => addPipelineNode('sim') },
+        { id: 'treatment', label: 'Treatment', dragPayload: 'pipeline:treatment', onAdd: () => addPipelineNode('treatment') },
+        { id: 'video', label: 'Video', dragPayload: 'pipeline:video', onAdd: () => addPipelineNode('video') },
+        { id: 'style', label: 'Style', dragPayload: 'style:new', onAdd: () => addStyleNode() },
+        { id: 'image', label: 'Image', dragPayload: 'scratch:scratch-image', onAdd: () => addScratchNode('scratch-image') },
+        { id: 'music', label: 'Music', dragPayload: 'scratch:scratch-music', onAdd: () => addScratchNode('scratch-music') },
+      ],
+    },
+    {
+      id: 'agents',
+      label: 'Agents',
+      emptyLabel: 'no other residents to add',
+      items: [
+        { id: 'new-agent', label: '+ New agent', sublabel: 'generate a resident', dragPayload: 'agent:new', onAdd: () => addNewAgent() },
+        ...notOnCanvasAgents.map((c) => ({ id: c.id, label: c.name, sublabel: c.occupation, dragPayload: `agent:${c.id}`, onAdd: () => addToCanvas({ id: c.id, kind: 'agent' }) })),
+      ],
+    },
+    {
+      id: 'locations',
+      label: 'Locations',
+      emptyLabel: 'every place is already on canvas',
+      items: notOnCanvasLocations.map((p) => ({ id: p.id, label: p.name, sublabel: p.place_type, dragPayload: `location:${p.id}`, onAdd: () => addToCanvas({ id: p.id, kind: 'location' }) })),
+    },
+  ];
+
   return (
     <div className="city-canvas-layout">
-      <div className="canvas-with-tray">
+      <SideDrawer sections={sections} />
+      <div className="canvas-with-tray" onDragOver={onDragOver} onDrop={onDrop}>
         <ReactFlow
           nodes={renderNodes}
           edges={edges}
@@ -378,22 +273,8 @@ function CanvasInner({ cityId, data }: { cityId: string; data: HistoryData }) {
         >
           <Background variant={BackgroundVariant.Dots} gap={24} size={1.5} color="var(--canvas-dot)" />
           <Controls showInteractive={false} />
-          <Panel position="top-right" className="canvas-toolbar">
-            <button className="node-run-btn" onClick={() => addPipelineNode('sim')}>
-              + Simulation
-            </button>
-            <button className="node-run-btn" onClick={() => addPipelineNode('treatment')}>
-              + Treatment
-            </button>
-            <button className="node-run-btn" onClick={() => addPipelineNode('video')}>
-              + Video
-            </button>
-            <button className="node-run-btn" onClick={addStyleNode}>
-              + Style
-            </button>
-          </Panel>
+          <MiniMap nodeColor={miniMapNodeColor} pannable zoomable />
         </ReactFlow>
-        <NotOnCanvasTray entries={notOnCanvas} onAdd={addToCanvas} />
       </div>
       <Inspector selection={selection} data={data} />
     </div>
@@ -440,7 +321,7 @@ export function CityCanvas({ cityId }: { cityId: string }) {
 
   return (
     <ReactFlowProvider>
-      <CanvasInner cityId={cityId} data={data} />
+      <CanvasInner cityId={cityId} data={data} onDataRefresh={load} />
     </ReactFlowProvider>
   );
 }

@@ -52,9 +52,9 @@ export function toPipelineRenderNode(gn: GraphNode, data: HistoryData, cb: Pipel
     };
   }
   if (gn.type === 'frame') {
-    const entityId = gn.data.entityId as string;
+    const entityId = gn.data.entityId as string | undefined;
     const mediaId = gn.data.mediaId as string | undefined;
-    const media = mediaId ? data.media[entityId]?.find((m) => m.id === mediaId) : undefined;
+    const media = mediaId && entityId ? data.media[entityId]?.find((m) => m.id === mediaId) : undefined;
     return {
       id: gn.id,
       type: 'frame',
@@ -203,6 +203,27 @@ export function enrichPipelineNodes(nodes: Node[], edges: Edge[], historyData: H
     }
 
     if (n.type === 'frame') {
+      const merged = mergeStyles(connectedStyles(n.id, edges, byId));
+      // A Frame from "emit frames" already has entityId baked in at
+      // creation. One dropped manually (per the requirement that every
+      // node type be placeable anywhere, not just spawned by another
+      // node) starts without one -- if it's wired to a Treatment's
+      // shots:out, borrow that treatment's chosen subject rather than
+      // leaving the Frame permanently non-functional.
+      let entityId = (n.data as FrameNodeData).entityId;
+      if (!entityId) {
+        const shotEdge = edges.find((e) => e.target === n.id && e.targetHandle === 'shot:in');
+        const source = shotEdge && byId.get(shotEdge.source);
+        if (source?.type === 'treatment') entityId = (source.data as TreatmentNodeData).subjectId;
+      }
+      return { ...n, data: { ...n.data, entityId, mergedStylePrompt: merged.stylePrompt, mergedStyleReferenceImages: merged.styleReferenceImages } };
+    }
+
+    // ImageNode (entity-attached) and ScratchImageNode (ungrounded) both
+    // take a style:in connection the exact same way Frame does -- merged
+    // here so both actually thread it into their generate call, not just
+    // render a port that looks connected.
+    if (n.type === 'image' || n.type === 'scratch-image') {
       const merged = mergeStyles(connectedStyles(n.id, edges, byId));
       return { ...n, data: { ...n.data, mergedStylePrompt: merged.stylePrompt, mergedStyleReferenceImages: merged.styleReferenceImages } };
     }

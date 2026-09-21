@@ -7,7 +7,12 @@ import { Port } from './Port';
 import { useImageGeneration } from './useImageGeneration';
 
 export interface FrameNodeData extends Record<string, unknown> {
-  entityId: string; // the treatment's subject agent -- storyboard images attach to them, same as the old Director tab
+  // The treatment's subject agent -- storyboard images attach to them,
+  // same as the old Director tab. Set at creation by "emit frames"; a
+  // manually-dropped Frame starts without one and gets it resolved by
+  // pipeline.ts's enrichPipelineNodes() once wired to a Treatment's
+  // shots:out (see that function's 'frame' case).
+  entityId?: string;
   shotIndex: number;
   prompt: string;
   mediaId?: string;
@@ -30,9 +35,11 @@ export type FrameNodeType = Node<FrameNodeData, 'frame'>;
 // upstream connection rather than being free-standing.
 export function FrameNode({ id, data, selected }: NodeProps<FrameNodeType>) {
   const [prompt, setPrompt] = useState(data.prompt);
-  const { pending, error, generate } = useImageGeneration(data.entityId);
+  const { pending, error, generate } = useImageGeneration(data.entityId ?? '');
+  const noSubject = !data.entityId;
 
   async function onGenerate() {
+    if (!data.entityId) return;
     const media: MediaItem | null = await generate(prompt, `storyboard_${data.shotIndex}`, {
       stylePrompt: data.mergedStylePrompt,
       styleReferenceImages: data.mergedStyleReferenceImages,
@@ -55,9 +62,10 @@ export function FrameNode({ id, data, selected }: NodeProps<FrameNodeType>) {
         onBlur={() => prompt !== data.prompt && data.onUpdate(id, { prompt })}
       />
       {data.mergedStylePrompt && <div className="node-subtitle">style: {data.mergedStylePrompt}</div>}
+      {noSubject && <div className="node-subtitle">connect a Treatment's shots to pick who this belongs to</div>}
       {error && <div className="node-error-text">{error}</div>}
       <div className="node-controls">
-        <button className="node-run-btn" disabled={pending || !prompt.trim()} onClick={onGenerate}>
+        <button className="node-run-btn" disabled={pending || noSubject || !prompt.trim()} onClick={onGenerate}>
           {pending ? 'generating…' : data.mediaId ? '↻ regenerate' : '▶ generate'}
         </button>
       </div>

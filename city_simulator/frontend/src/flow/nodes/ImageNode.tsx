@@ -10,6 +10,11 @@ export interface ImageNodeData extends Record<string, unknown> {
   prompt: string;
   mediaId?: string;
   mediaUrl?: string;
+  // Resolved by pipeline.ts's enrichPipelineNodes() from any connected
+  // Style node(s) -- merged (prompts joined with ", ", reference arrays
+  // concatenated) since more than one can feed this port.
+  mergedStylePrompt?: string;
+  mergedStyleReferenceImages?: string[];
   onUpdate: (nodeId: string, patch: { prompt?: string; mediaId?: string; mediaUrl?: string }) => void;
 }
 
@@ -25,7 +30,7 @@ export function ImageNode({ id, data, selected }: NodeProps<ImageNodeType>) {
   const { pending, error, generate } = useImageGeneration(data.entityId);
 
   async function onGenerate() {
-    const media = await generate(prompt);
+    const media = await generate(prompt, '', { stylePrompt: data.mergedStylePrompt, styleReferenceImages: data.mergedStyleReferenceImages });
     if (media) data.onUpdate(id, { prompt, mediaId: media.id, mediaUrl: city.fileUrl(media.url) });
   }
 
@@ -44,6 +49,7 @@ export function ImageNode({ id, data, selected }: NodeProps<ImageNodeType>) {
         onChange={(e) => setPrompt(e.target.value)}
         onBlur={() => prompt !== data.prompt && data.onUpdate(id, { prompt })}
       />
+      {data.mergedStylePrompt && <div className="node-subtitle">style: {data.mergedStylePrompt}</div>}
       {error && <div className="node-error-text">{error}</div>}
       <div className="node-controls">
         <button className="node-run-btn" disabled={pending || !prompt.trim()} onClick={onGenerate}>
@@ -52,7 +58,7 @@ export function ImageNode({ id, data, selected }: NodeProps<ImageNodeType>) {
       </div>
 
       <Port id="shot:in" type="shot" direction="in" label="shot" optional top="calc(100% - 34px)" />
-      <Port id="style:in" type="style" direction="in" label="style" optional top="calc(100% - 14px)" />
+      <Port id="style:in" type="style" direction="in" label="style" optional={!data.mergedStylePrompt} top="calc(100% - 14px)" />
       <Port id="image:out" type="image" direction="out" label="image" top="calc(100% - 14px)" />
     </NodeShell>
   );

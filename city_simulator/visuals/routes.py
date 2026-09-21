@@ -13,7 +13,11 @@ bp = Blueprint("visuals", __name__, url_prefix="/api/visuals")
 
 @bp.get("/providers")
 def providers_list():
-    return json_response({"available": providers.AVAILABLE_PROVIDERS, "current": config.PROVIDER})
+    return json_response({
+        "available": providers.AVAILABLE_PROVIDERS,
+        "current": config.PROVIDER,
+        "capabilities": providers.CAPABILITIES,
+    })
 
 
 @bp.post("/provider")

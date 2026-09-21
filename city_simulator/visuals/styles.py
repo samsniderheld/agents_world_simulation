@@ -37,16 +37,11 @@ def list_styles() -> list:
         return _read()
 
 
-def create_style(name: str, style_prompt: str, negative_prompt: str = "", reference_images: list = None, strength: float = 0.6) -> dict:
+def create_style(name: str, style_prompt: str, reference_images: list = None) -> dict:
     style = {
         "id": f"sty_{uuid.uuid4().hex[:8]}",
         "name": name,
         "style_prompt": style_prompt,
-        # Captured for a future provider that exposes an equivalent knob
-        # -- see visuals/routes.py's generate_image() docstring for why
-        # today's fal/Gemini-based provider doesn't forward these two.
-        "negative_prompt": negative_prompt,
-        "strength": strength,
         "reference_images": reference_images or [],
     }
     with _lock:
@@ -58,10 +53,10 @@ def create_style(name: str, style_prompt: str, negative_prompt: str = "", refere
 
 def update_style(style_id: str, **fields) -> dict:
     """Partial update -- a Style node edits its library entry in place
-    (name/style_prompt/negative_prompt/strength/reference_images), so
-    every canvas pointing at this styleId sees the change next time it
-    loads, matching "reusable across cities" rather than forking a copy
-    per node. Raises if no such style."""
+    (name/style_prompt/reference_images), so every canvas pointing at
+    this styleId sees the change next time it loads, matching "reusable
+    across cities" rather than forking a copy per node. Raises if no such
+    style."""
     with _lock:
         styles = _read()
         for s in styles:

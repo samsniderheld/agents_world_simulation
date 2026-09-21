@@ -32,9 +32,7 @@ def create():
     style = styles.create_style(
         name=name,
         style_prompt=(body.get("style_prompt") or "").strip(),
-        negative_prompt=body.get("negative_prompt", ""),
         reference_images=body.get("reference_images") or [],
-        strength=float(body.get("strength", 0.6)),
     )
     return json_response({"style": style})
 
@@ -47,8 +45,6 @@ def update(style_id):
             style_id,
             name=body.get("name"),
             style_prompt=body.get("style_prompt"),
-            negative_prompt=body.get("negative_prompt"),
-            strength=body.get("strength"),
             reference_images=body.get("reference_images"),
         )
     except KeyError:

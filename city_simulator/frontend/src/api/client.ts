@@ -14,6 +14,7 @@ import type {
   HistoryData,
   JobStatus,
   MediaItem,
+  ProviderCapabilities,
   Style,
   Treatment,
   VisualsResult,
@@ -177,7 +178,8 @@ export const visuals = {
   // to relocate the file into (see city.fileUrl for that other case).
   fileUrl: (url: string) => `/api/visuals/files/${url}`,
 
-  providers: () => request<{ available: string[]; current: string }>('/api/visuals/providers'),
+  providers: () =>
+    request<{ available: string[]; current: string; capabilities: Record<string, ProviderCapabilities> }>('/api/visuals/providers'),
 
   setProvider: (provider: string) =>
     request<{ ok: boolean; provider?: string; error?: string }>('/api/visuals/provider', {
@@ -314,23 +316,18 @@ export const graph = {
 export const stylesApi = {
   list: () => request<{ styles: Style[] }>('/api/styles/'),
 
-  create: (params: { name: string; stylePrompt: string; negativePrompt?: string; strength?: number }) =>
+  create: (params: { name: string; stylePrompt: string }) =>
     request<{ style: Style }>('/api/styles/', {
       method: 'POST',
-      body: json({ name: params.name, style_prompt: params.stylePrompt, negative_prompt: params.negativePrompt, strength: params.strength }),
+      body: json({ name: params.name, style_prompt: params.stylePrompt }),
     }),
 
-  update: (
-    id: string,
-    patch: Partial<{ name: string; stylePrompt: string; negativePrompt: string; strength: number; referenceImages: string[] }>,
-  ) =>
+  update: (id: string, patch: Partial<{ name: string; stylePrompt: string; referenceImages: string[] }>) =>
     request<{ style: Style }>(`/api/styles/${id}`, {
       method: 'PUT',
       body: json({
         name: patch.name,
         style_prompt: patch.stylePrompt,
-        negative_prompt: patch.negativePrompt,
-        strength: patch.strength,
         reference_images: patch.referenceImages,
       }),
     }),

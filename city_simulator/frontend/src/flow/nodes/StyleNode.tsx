@@ -4,6 +4,7 @@ import { stylesApi, visuals } from '../../api/client';
 import type { Style } from '../../api/types';
 import { NodeShell } from './NodeShell';
 import { Port } from './Port';
+import { useProviderCapabilities } from './useProviderCapabilities';
 
 export interface StyleNodeData extends Record<string, unknown> {
   styleId: string;
@@ -22,7 +23,16 @@ export type StyleNodeType = Node<StyleNodeData, 'style'>;
 export function StyleNode({ id, data, selected }: NodeProps<StyleNodeType>) {
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const style = data.style;
+  const capabilities = useProviderCapabilities();
+
+  // Edited locally so onGenerate (fed by data.onUpdate) sees keystrokes
+  // right away without round-tripping to the backend, and Save is a
+  // separate, explicit commit of that local state -- not tied to blur.
+  const [name, setName] = useState(style?.name ?? '');
+  const [prompt, setPrompt] = useState(style?.style_prompt ?? '');
+  const dirty = Boolean(style) && (name !== style!.name || prompt !== style!.style_prompt);
 
   useEffect(() => {
     if (style) return;
@@ -37,18 +47,32 @@ export function StyleNode({ id, data, selected }: NodeProps<StyleNodeType>) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data.styleId, style]);
 
+  useEffect(() => {
+    if (!style) return;
+    setName(style.name);
+    setPrompt(style.style_prompt);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [style?.id]);
+
   async function save(patch: Partial<Style>) {
     try {
       await stylesApi.update(data.styleId, {
         name: patch.name,
         stylePrompt: patch.style_prompt,
-        negativePrompt: patch.negative_prompt,
-        strength: patch.strength,
         referenceImages: patch.reference_images,
       });
       data.onUpdate(id, patch);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  async function onSave() {
+    setSaving(true);
+    try {
+      await save({ name, style_prompt: prompt });
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -76,43 +100,49 @@ export function StyleNode({ id, data, selected }: NodeProps<StyleNodeType>) {
 
   return (
     <NodeShell typeLabel={`Style · ${style.name}`} selected={selected} error={Boolean(error)} wide>
-      <input className="node-select" value={style.name} onChange={(e) => save({ name: e.target.value })} placeholder="style name" />
+      <input
+        className="node-select"
+        value={name}
+        onChange={(e) => {
+          setName(e.target.value);
+          data.onUpdate(id, { name: e.target.value });
+        }}
+        placeholder="style name"
+      />
       <textarea
         className="node-prompt-input"
         rows={2}
-        value={style.style_prompt}
+        value={prompt}
         placeholder="style prompt, e.g. high-contrast film noir, 35mm grain…"
-        onChange={(e) => data.onUpdate(id, { style_prompt: e.target.value })}
-        onBlur={(e) => save({ style_prompt: e.target.value })}
+        onChange={(e) => {
+          setPrompt(e.target.value);
+          data.onUpdate(id, { style_prompt: e.target.value });
+        }}
       />
       <div className="node-controls">
-        <span className="node-subtitle">strength</span>
-        <input
-          type="range"
-          min={0}
-          max={1}
-          step={0.05}
-          value={style.strength}
-          onChange={(e) => data.onUpdate(id, { strength: Number(e.target.value) })}
-          onMouseUp={(e) => save({ strength: Number((e.target as HTMLInputElement).value) })}
-        />
-        <span className="node-subtitle">{style.strength.toFixed(2)}</span>
+        <button className="node-run-btn" disabled={saving || !dirty} onClick={onSave}>
+          {saving ? 'saving…' : dirty ? '● save' : 'saved'}
+        </button>
       </div>
       {style.reference_images.length > 0 && (
         <div className="node-subtitle">{style.reference_images.length} reference image(s)</div>
       )}
-      <div className="node-controls">
-        <label className="node-run-btn" style={{ textAlign: 'center', cursor: 'pointer' }}>
-          {uploading ? 'uploading…' : '+ reference image'}
-          <input
-            type="file"
-            accept="image/*"
-            style={{ display: 'none' }}
-            disabled={uploading}
-            onChange={(e) => e.target.files?.[0] && addReference(e.target.files[0])}
-          />
-        </label>
-      </div>
+      {capabilities?.supports_reference_images === false ? (
+        <div className="node-subtitle">reference images not supported by the current provider</div>
+      ) : (
+        <div className="node-controls">
+          <label className="node-run-btn" style={{ textAlign: 'center', cursor: 'pointer' }}>
+            {uploading ? 'uploading…' : '+ reference image'}
+            <input
+              type="file"
+              accept="image/*"
+              style={{ display: 'none' }}
+              disabled={uploading}
+              onChange={(e) => e.target.files?.[0] && addReference(e.target.files[0])}
+            />
+          </label>
+        </div>
+      )}
       {error && <div className="node-error-text">{error}</div>}
 
       <Port id="style:out" type="style" direction="out" label="style" top="calc(100% - 14px)" />

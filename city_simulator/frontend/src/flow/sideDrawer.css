@@ -1,0 +1,121 @@
+.side-drawer {
+  width: 220px;
+  flex: none;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.side-drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.drawer-close-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-faint);
+  font-size: 13px;
+  padding: 2px;
+  cursor: pointer;
+}
+
+.drawer-close-btn:hover {
+  color: var(--text);
+}
+
+.drawer-expand-tab {
+  flex: none;
+  width: 22px;
+  background: var(--node-body);
+  border: none;
+  border-right: 1px solid var(--border);
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.drawer-expand-tab:hover {
+  color: var(--accent);
+  background: var(--panel);
+}
+
+.side-drawer-body {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.drawer-section-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  padding: 9px 14px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.drawer-section-header:hover {
+  color: var(--text);
+}
+
+.drawer-section-count {
+  color: var(--text-faint);
+}
+
+.drawer-section-items {
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.drawer-empty {
+  padding: 6px 8px;
+  font-size: 11.5px;
+  font-style: italic;
+  color: var(--text-faint);
+}
+
+.drawer-item {
+  padding: 7px 8px;
+  border-radius: 3px;
+  cursor: grab;
+  font-size: 12.5px;
+  color: var(--text);
+}
+
+.drawer-item:hover {
+  background: var(--node-body);
+}
+
+.drawer-item:active {
+  cursor: grabbing;
+}
+
+.drawer-item-label {
+  font-weight: 500;
+}
+
+.drawer-item-sublabel {
+  font-size: 10.5px;
+  color: var(--text-faint);
+  margin-top: 1px;
+}
