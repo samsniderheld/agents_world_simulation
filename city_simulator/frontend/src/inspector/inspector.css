@@ -163,6 +163,7 @@
 }
 
 .inspector-media-item {
+  position: relative;
   aspect-ratio: 16 / 9;
   border: 1px solid var(--border);
   border-radius: 3px;
@@ -176,6 +177,42 @@
   height: 100%;
   object-fit: cover;
   display: block;
+}
+
+.inspector-media-item img.is-expandable {
+  cursor: zoom-in;
+}
+
+.inspector-media-delete {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 20px;
+  height: 20px;
+  line-height: 18px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.55);
+  color: var(--text);
+  font-size: 11px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+
+.inspector-media-item:hover .inspector-media-delete {
+  opacity: 1;
+}
+
+.inspector-media-delete:hover {
+  border-color: var(--bad, #d9534f);
+  color: var(--bad, #d9534f);
+}
+
+.inspector-media-delete:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .inspector-event-row {

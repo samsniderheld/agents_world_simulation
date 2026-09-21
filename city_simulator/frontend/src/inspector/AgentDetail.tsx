@@ -6,7 +6,13 @@ import { MediaGrid } from './MediaGrid';
 
 type Tab = 'bio' | 'plans' | 'events' | 'treatments' | 'media';
 
-export function AgentDetail({ characterId }: { characterId: string }) {
+// `onMediaChanged` is optional and separate from this component's own
+// `record` refetch below -- a caller rendering its own copy of this
+// agent's media elsewhere (e.g. AgentScreen's EntityCanvas, which reads
+// `record.media` from its own independently-fetched state, not this
+// one) needs its own signal to refresh, since deleting here only updates
+// *this* component's local `record`.
+export function AgentDetail({ characterId, onMediaChanged }: { characterId: string; onMediaChanged?: () => void }) {
   const [record, setRecord] = useState<AgentRecord | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>('bio');
@@ -16,6 +22,11 @@ export function AgentDetail({ characterId }: { characterId: string }) {
     setError(null);
     city.getAgent(characterId).then(setRecord).catch((e) => setError(String(e)));
   }, [characterId]);
+
+  function refetchAfterMediaChange() {
+    city.getAgent(characterId).then(setRecord).catch(() => {});
+    onMediaChanged?.();
+  }
 
   if (error) return <div className="inspector-body inspector-empty">{error}</div>;
   if (!record) return <div className="inspector-body inspector-empty">Loading…</div>;
@@ -38,7 +49,7 @@ export function AgentDetail({ characterId }: { characterId: string }) {
         {tab === 'plans' && <Plans record={record} />}
         {tab === 'events' && <EventLog record={record} />}
         {tab === 'treatments' && <Treatments record={record} />}
-        {tab === 'media' && <MediaGrid items={record.media} />}
+        {tab === 'media' && <MediaGrid items={record.media} entityId={characterId} onDeleted={refetchAfterMediaChange} />}
       </div>
     </>
   );

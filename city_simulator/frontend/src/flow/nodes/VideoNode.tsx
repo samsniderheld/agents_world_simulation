@@ -41,17 +41,15 @@ export function VideoNode({ id, data, selected }: NodeProps<VideoNodeType>) {
   const noSource = !data.sourceImagePath || !data.entityId;
 
   return (
-    <NodeShell typeLabel="Video" selected={selected} running={pending} error={Boolean(error)}>
-      <div className="node-thumb-row">
-        <div className="node-thumb" style={{ width: 64, height: 64 }}>
-          {data.mediaUrl ? (
-            <video src={data.mediaUrl} muted loop onMouseEnter={(e) => e.currentTarget.play()} onMouseLeave={(e) => e.currentTarget.pause()} />
-          ) : data.sourceImageUrl ? (
-            <img src={data.sourceImageUrl} alt="" />
-          ) : (
-            '🎞️'
-          )}
-        </div>
+    <NodeShell typeLabel="Video" selected={selected} running={pending} error={Boolean(error)} minWidth={540} minHeight={430}>
+      <div className="node-media-box">
+        {data.mediaUrl ? (
+          <video src={data.mediaUrl} muted loop onMouseEnter={(e) => e.currentTarget.play()} onMouseLeave={(e) => e.currentTarget.pause()} />
+        ) : data.sourceImageUrl ? (
+          <img src={data.sourceImageUrl} alt="" />
+        ) : (
+          <div className="node-media-box-empty">🎞️</div>
+        )}
       </div>
       {noSource && <div className="node-subtitle">connect a generated Frame's image</div>}
       <textarea

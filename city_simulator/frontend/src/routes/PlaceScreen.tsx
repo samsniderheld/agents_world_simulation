@@ -31,7 +31,7 @@ export function PlaceScreen({ cityId, placeId }: { cityId: string; placeId: stri
     <div className="city-canvas-layout">
       <EntityCanvas cityId={cityId} entityId={placeId} scope={`place:${placeId}`} media={data.media[placeId] ?? []} cityData={data} onCityDataRefresh={load} />
       <CollapsibleAside>
-        <PlaceDetail placeId={placeId} data={data} />
+        <PlaceDetail placeId={placeId} data={data} onRefresh={load} />
       </CollapsibleAside>
     </div>
   );

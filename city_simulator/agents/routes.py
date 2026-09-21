@@ -81,6 +81,9 @@ def run():
         "agent_names": body.get("agent_names") or None,
         "verbose": bool(body.get("verbose", False)),
         "convene_at": convene_at,
+        # Simulation node's free-text "guide how the characters are
+        # interacting" field -- see simulation.run()'s docstring.
+        "directive": (body.get("directive") or "").strip() or None,
     }
     ok, error = jobs.start(params)
     return json_response({"ok": ok, "error": error}, status=200 if ok else 409)
@@ -113,11 +116,23 @@ def generate_treatment_for_agent():
 
     latest = runs[-1]
     agent_records = {c["name"]: citystate.get_agent(c["id"]) for c in city.get("characters", [])}
-    log, agent_names = treatment.build_transcript(agent_records, latest.get("started_at"))
+    log, agent_names, locations = treatment.build_transcript(agent_records, latest.get("started_at"))
+
+    # Resolve each bare location name build_transcript() found in the
+    # transcript against its real place record, for its `architecture`
+    # text -- an event only ever stores the place *name* (see recorder.py's
+    # schema), so this is the one spot that can actually reach the visual
+    # description treatment.generate_treatment() needs to stop inventing
+    # scenery from the name alone.
+    places_by_name = {p["name"]: p for p in city.get("places", []) if p.get("name")}
+    location_details = [
+        {"name": name, "architecture": places_by_name[name].get("architecture", "")}
+        for name in locations if name in places_by_name
+    ]
 
     provider = body.get("provider") or None
     model = body.get("model") or None
-    text = treatment.generate_treatment(log, agent_names, model=model, provider=provider)
+    text = treatment.generate_treatment(log, agent_names, model=model, provider=provider, location_details=location_details)
     entry = citystate.add_treatment(agent_id, text, run_started_at=latest.get("started_at"))
     return json_response({"treatment": entry})
 

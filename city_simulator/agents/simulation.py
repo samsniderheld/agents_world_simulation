@@ -135,7 +135,8 @@ def _hydrate_agents(agents: list) -> None:
 
 def run(ticks: int = 8, provider: str = None, chat_model: str = None, embed_model: str = None,
         context_tokens: int = None, tick_sleep: float = 0,
-        agent_names: list = None, verbose: bool = False, stop_flag=None, convene_at: str = None):
+        agent_names: list = None, verbose: bool = False, stop_flag=None, convene_at: str = None,
+        directive: str = None):
     """Blocking -- meant to be called on a background thread (see
     agents/jobs.py). Configures config.py's overridable settings, builds
     the chosen agents, and runs the tick loop.
@@ -149,12 +150,25 @@ def run(ticks: int = 8, provider: str = None, chat_model: str = None, embed_mode
 
     `convene_at` (a place name, not id -- see routes.py's /run) overrides
     every selected agent's starting location for this run only, so they
-    convene somewhere none of them are individually grounded. Nothing
-    else needs to change for this to work: world.py's co-presence check
-    is plain `a.location == b.location`, and every event that carries a
-    location already reads it live off the agent at log time (see
-    recorder.py's docstring) -- the same mechanism that already lets an
-    agent's bio-grounded starting location work with no special casing."""
+    convene somewhere none of them are individually grounded. Setting
+    a.location alone isn't enough to make them *stay* there, though --
+    planning.decompose() independently asks each agent's own LLM call
+    where it wants to be for its next broad step, with no awareness that
+    this run is a convene; left alone, that call routinely relocates a
+    convened agent back to their own bio-grounded haunt within the first
+    couple of ticks, undoing the convene. World's anchored_agents (every
+    convened agent's name) shuts that down by handing decompose() no
+    place to relocate to at all, so they stay put for the whole run.
+    world.py's co-presence check is plain `a.location == b.location`, and
+    every event that carries a location already reads it live off the
+    agent at log time (see recorder.py's docstring) -- the same mechanism
+    that already lets an agent's bio-grounded starting location work with
+    no special casing.
+
+    `directive` is the Simulation node's own free-text field ("guide how
+    the characters are interacting") -- passed straight through to World,
+    which hands it to every plan/decompose/react/dialogue call this run
+    makes (see textutil.directive_block for the actual prompt fragment)."""
     if provider:
         config.PROVIDER = provider
     if chat_model:
@@ -201,8 +215,9 @@ def run(ticks: int = 8, provider: str = None, chat_model: str = None, embed_mode
     else:
         known_places = sorted({a.location for a in agents})
 
+    anchored_agents = {a.name for a in agents} if convene_at else None
     world = World(agents, tick_sleep=tick_sleep, verbose=verbose, stop_flag=stop_flag,
-                  known_places=known_places)
+                  known_places=known_places, anchored_agents=anchored_agents, directive=directive)
     world.run(ticks)
 
     citystate.append_agent_run(recorder.to_dict())

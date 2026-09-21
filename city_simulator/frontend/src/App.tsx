@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { Lightbox } from './components/Lightbox';
 import { CityCanvas } from './flow/CityCanvas';
 import { AgentScreen } from './routes/AgentScreen';
 import { CitiesScreen } from './routes/CitiesScreen';
@@ -108,6 +109,7 @@ function App() {
       </main>
 
       <JobStrip />
+      <Lightbox />
     </div>
   );
 }

@@ -8,18 +8,21 @@ from . import display
 from . import llm
 from . import recorder
 from .agent import Agent
-from .textutil import cast_constraint, extract_tagged_line, parse_list_lines
+from .textutil import cast_constraint, directive_block, extract_tagged_line, parse_list_lines
 
 
 def generate_daily_plan(agent: Agent, tick: int, known_names: list = None,
-                         verbose: bool = False, color: str = "") -> list[str]:
+                         verbose: bool = False, color: str = "", directive: str = None) -> list[str]:
     """Ask the LLM for a 5-8 item broad-strokes schedule for today, store it
     as a 'plan' memory, and set it as the agent's active plan.
 
     Retrieves from memory before asking -- for an agent hydrated from past
     runs (see simulation.py's _hydrate_agents), this is what actually lets
     "today" build on what already happened instead of replaying the same
-    day every run; for a brand-new agent it's just "(no memories yet)"."""
+    day every run; for a brand-new agent it's just "(no memories yet)".
+    `directive` is the Simulation node's free-text scene guidance, if any
+    (see textutil.directive_block) -- shaping the whole day's plan is the
+    broadest lever it has, before decompose()/react() get a narrower say."""
     memories = agent.memory.retrieve(
         f"{agent.name}'s past days, plans, and what actually happened", tick, k=8,
     )
@@ -27,7 +30,8 @@ def generate_daily_plan(agent: Agent, tick: int, known_names: list = None,
 
     prompt = (
         f"{agent.identity_summary()}\n\n"
-        f"{cast_constraint(agent.name, known_names)}\n\n"
+        f"{cast_constraint(agent.name, known_names)}\n"
+        f"{directive_block(directive)}\n"
         f"What {agent.name} remembers from before (may span several earlier days) -- for "
         f"context only, NOT a template to repeat:\n{memory_text}\n\n"
         f"It is a new day for {agent.name}, who typically starts around: {agent.currently}. "
@@ -114,15 +118,18 @@ def _move_agent(agent: Agent, destination: str, tick: int, verbose: bool = False
 
 def decompose(agent: Agent, broad_step: str, tick: int, n_substeps: int = 3,
               known_names: list = None, known_places: list = None,
-              verbose: bool = False, color: str = "") -> list[str]:
+              verbose: bool = False, color: str = "", directive: str = None) -> list[str]:
     """Break one broad-strokes plan item into a handful of finer actions,
     and -- once per broad step (every n_substeps ticks, not every tick) --
     also ask the LLM where the agent should be for that whole step,
     relocating them immediately if it's a real change. See world.py's
-    docstring for why there's no travel time simulated."""
+    docstring for why there's no travel time simulated. `directive` is the
+    Simulation node's free-text scene guidance, if any (see
+    textutil.directive_block)."""
     prompt = (
         f"{agent.identity_summary()}\n\n"
-        f"{cast_constraint(agent.name, known_names)}\n\n"
+        f"{cast_constraint(agent.name, known_names)}\n"
+        f"{directive_block(directive)}\n"
         f"{agent.name}'s broad plan step: \"{broad_step}\"\n\n"
         f"Break this into {n_substeps} smaller, sequential actions "
         f"(a few minutes each). One action per line, no numbering."
@@ -150,16 +157,19 @@ def decompose(agent: Agent, broad_step: str, tick: int, n_substeps: int = 3,
 
 
 def next_action(agent: Agent, tick: int, known_names: list = None, known_places: list = None,
-                 verbose: bool = False, color: str = "") -> str:
+                 verbose: bool = False, color: str = "", directive: str = None) -> str:
     """Advance one step through the current broad step's decomposition,
     decomposing the next broad step off today's plan only once the current
     one's substeps are exhausted. `known_names` should be the names of
     every other agent in the simulation, so planning never invents a new
     named character. `known_places` is every place the agent could
-    plausibly relocate to for the next broad step -- see decompose()."""
+    plausibly relocate to for the next broad step -- see decompose().
+    `directive` is the Simulation node's free-text scene guidance, if any
+    (see textutil.directive_block), passed straight through to both."""
     if agent.substep_cursor >= len(agent.substeps):
         if agent.plan_cursor >= len(agent.plan):
-            generate_daily_plan(agent, tick, known_names=known_names, verbose=verbose, color=color)
+            generate_daily_plan(agent, tick, known_names=known_names, verbose=verbose, color=color,
+                                 directive=directive)
 
         if not agent.plan:
             agent.current_action = "idle"
@@ -168,7 +178,8 @@ def next_action(agent: Agent, tick: int, known_names: list = None, known_places:
         broad_step = agent.plan[agent.plan_cursor]
         agent.plan_cursor += 1
         agent.substeps = decompose(agent, broad_step, tick, known_names=known_names,
-                                    known_places=known_places, verbose=verbose, color=color)
+                                    known_places=known_places, verbose=verbose, color=color,
+                                    directive=directive)
         agent.substep_cursor = 0
 
     agent.current_action = agent.substeps[agent.substep_cursor]

@@ -17,6 +17,8 @@ export function toScratchRenderNode(
       id: gn.id,
       type: 'scratch-image',
       position: gn.position,
+      width: gn.width,
+      height: gn.height,
       data: { prompt: (gn.data.prompt as string) ?? '', url: gn.data.url as string | undefined, localPath: gn.data.localPath as string | undefined, onUpdate: onImageUpdate },
     };
   }
@@ -25,6 +27,8 @@ export function toScratchRenderNode(
       id: gn.id,
       type: 'scratch-music',
       position: gn.position,
+      width: gn.width,
+      height: gn.height,
       data: {
         prompt: (gn.data.prompt as string) ?? '',
         negativePrompt: (gn.data.negativePrompt as string) ?? '',
@@ -39,11 +43,11 @@ export function toScratchRenderNode(
 export function scratchToGraphNode(n: Node): GraphNode | null {
   if (n.type === 'scratch-image') {
     const d = n.data as ScratchImageNodeData;
-    return { id: n.id, type: 'scratch-image', position: n.position, data: { prompt: d.prompt, url: d.url, localPath: d.localPath } };
+    return { id: n.id, type: 'scratch-image', position: n.position, width: n.width, height: n.height, data: { prompt: d.prompt, url: d.url, localPath: d.localPath } };
   }
   if (n.type === 'scratch-music') {
     const d = n.data as ScratchMusicNodeData;
-    return { id: n.id, type: 'scratch-music', position: n.position, data: { prompt: d.prompt, negativePrompt: d.negativePrompt, url: d.url } };
+    return { id: n.id, type: 'scratch-music', position: n.position, width: n.width, height: n.height, data: { prompt: d.prompt, negativePrompt: d.negativePrompt, url: d.url } };
   }
   return null;
 }

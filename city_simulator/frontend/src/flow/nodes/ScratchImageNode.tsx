@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { Node, NodeProps } from '@xyflow/react';
 import { visuals } from '../../api/client';
 import { pollVisualsUntilDone } from '../../api/pollVisuals';
+import { useLightboxStore } from '../../state/lightboxStore';
 import { NodeShell } from './NodeShell';
 import { Port } from './Port';
 
@@ -29,6 +30,7 @@ export function ScratchImageNode({ id, data, selected }: NodeProps<ScratchImageN
   const [prompt, setPrompt] = useState(data.prompt);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const openLightbox = useLightboxStore((s) => s.open);
 
   async function generate() {
     setError(null);
@@ -54,11 +56,16 @@ export function ScratchImageNode({ id, data, selected }: NodeProps<ScratchImageN
   }
 
   return (
-    <NodeShell typeLabel="Image" selected={selected} running={pending} error={Boolean(error)}>
-      <div className="node-thumb-row">
-        <div className="node-thumb" style={{ width: 64, height: 64 }}>
-          {data.url ? <img src={visuals.fileUrl(data.url)} alt="" /> : '🖼'}
-        </div>
+    <NodeShell typeLabel="Image" selected={selected} running={pending} error={Boolean(error)} minWidth={540} minHeight={430}>
+      <div
+        className={`node-media-box ${data.url ? 'is-expandable' : ''}`}
+        onClick={(e) => {
+          if (!data.url) return;
+          e.stopPropagation();
+          openLightbox(visuals.fileUrl(data.url));
+        }}
+      >
+        {data.url ? <img src={visuals.fileUrl(data.url)} alt="" /> : <div className="node-media-box-empty">🖼</div>}
       </div>
       <textarea
         className="node-prompt-input"

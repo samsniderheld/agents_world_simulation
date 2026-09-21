@@ -7,7 +7,7 @@ import './inspector.css';
 // Inspector) -- one place owns the closed/open toggle so both don't
 // drift into different behaviors.
 export function CollapsibleAside({ children }: { children: ReactNode }) {
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
 
   if (collapsed) {
     return (

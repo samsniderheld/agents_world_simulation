@@ -10,6 +10,12 @@ export interface DrawerItem {
   // each canvas defines its own small "kind:id" encoding for what it means.
   dragPayload: string;
   onAdd: () => void; // click-to-add fallback -- drag isn't the only way in
+  // Only the Styles section uses this today (a saved style is a library
+  // entry, not just a canvas node, so it needs a way to delete it that
+  // doesn't require placing a node first) -- every other section's items
+  // (agents/locations/node types) have no library entry of their own to
+  // delete independent of a canvas node.
+  onDelete?: () => void;
 }
 
 export interface DrawerSection {
@@ -28,7 +34,7 @@ export const DRAG_MIME = 'application/x-city-sim-node';
 // the caller (CityCanvas's Nodes/Locations/Agents vs. ScratchScreen's
 // flatter Nodes-only list), so this component owns no domain knowledge.
 export function SideDrawer({ sections }: { sections: DrawerSection[] }) {
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
   const [openIds, setOpenIds] = useState<Set<string>>(() => new Set(sections.map((s) => s.id)));
 
   const toggle = (id: string) =>
@@ -85,6 +91,18 @@ export function SideDrawer({ sections }: { sections: DrawerSection[] }) {
                       >
                         <div className="drawer-item-label">{item.label}</div>
                         {item.sublabel && <div className="drawer-item-sublabel">{item.sublabel}</div>}
+                        {item.onDelete && (
+                          <button
+                            className="drawer-item-delete"
+                            title="Delete"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              item.onDelete!();
+                            }}
+                          >
+                            ✕
+                          </button>
+                        )}
                       </div>
                     ))
                   )}

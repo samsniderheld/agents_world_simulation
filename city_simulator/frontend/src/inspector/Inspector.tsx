@@ -6,12 +6,12 @@ import { CollapsibleAside } from './CollapsibleAside';
 import './inspector.css';
 import { PlaceDetail } from './PlaceDetail';
 
-export function Inspector({ selection, data }: { selection: Selection; data: HistoryData }) {
+export function Inspector({ selection, data, onDataRefresh }: { selection: Selection; data: HistoryData; onDataRefresh?: () => void }) {
   return (
     <CollapsibleAside>
       {selection.kind === 'city' && <CityOverview data={data} />}
-      {selection.kind === 'agent' && <AgentDetail characterId={selection.characterId} />}
-      {selection.kind === 'place' && <PlaceDetail placeId={selection.placeId} data={data} />}
+      {selection.kind === 'agent' && <AgentDetail characterId={selection.characterId} onMediaChanged={onDataRefresh} />}
+      {selection.kind === 'place' && <PlaceDetail placeId={selection.placeId} data={data} onRefresh={onDataRefresh} />}
     </CollapsibleAside>
   );
 }

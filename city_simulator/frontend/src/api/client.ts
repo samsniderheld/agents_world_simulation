@@ -140,6 +140,10 @@ export const agentsApi = {
     // placeId for this run only (see agents/routes.py's run() docstring).
     placeId?: string;
     locationMode?: 'grounded' | 'convene';
+    // Free-text "guide how the characters are interacting" note from the
+    // Simulation node -- threaded through to every plan/decompose/react/
+    // dialogue call this run makes (see agents/textutil.directive_block).
+    directive?: string;
   }) =>
     request<{ ok: boolean; error: string | null }>('/api/agents/run', {
       method: 'POST',
@@ -154,15 +158,16 @@ export const agentsApi = {
         verbose: params.verbose ?? false,
         place_id: params.placeId,
         location_mode: params.locationMode ?? 'grounded',
+        directive: params.directive,
       }),
     }),
 
   stop: () => request<{ ok: boolean }>('/api/agents/stop', { method: 'POST' }),
 
-  generateTreatment: (agentId: string) =>
+  generateTreatment: (agentId: string, params?: { provider?: string; model?: string }) =>
     request<{ treatment: Treatment }>('/api/agents/treatment', {
       method: 'POST',
-      body: json({ agent_id: agentId }),
+      body: json({ agent_id: agentId, provider: params?.provider, model: params?.model }),
     }),
 
   treatmentShots: (text: string) =>
@@ -315,6 +320,13 @@ export const graph = {
 
 export const stylesApi = {
   list: () => request<{ styles: Style[] }>('/api/styles/'),
+
+  // reference_images stores real absolute filesystem paths (needed as-is
+  // by the provider's image_paths, see visuals/routes.py's
+  // _style_reference_images()) -- not a /api/visuals/files/... relative
+  // url, so displaying one goes through this dedicated route instead of
+  // visuals.fileUrl().
+  referenceImageUrl: (path: string) => `/api/styles/reference-image?path=${encodeURIComponent(path)}`,
 
   create: (params: { name: string; stylePrompt: string }) =>
     request<{ style: Style }>('/api/styles/', {

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DragEvent } from 'react';
-import type { Connection, Edge, Node } from '@xyflow/react';
+import type { Connection, Edge, Node, XYPosition } from '@xyflow/react';
 import { addEdge, applyEdgeChanges, applyNodeChanges, Background, BackgroundVariant, Controls, MiniMap, ReactFlow, ReactFlowProvider, useReactFlow } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { history } from '../api/client';
@@ -9,6 +9,7 @@ import '../flow/canvas.css';
 import { isValidConnection as checkValidConnection } from '../flow/edgeRules';
 import { entityToGraphNode, toEntityRenderNode } from '../flow/entityNodeKit';
 import { toFlowEdge, toGraphEdge } from '../flow/graphIds';
+import { NewAgentModal } from '../flow/NewAgentModal';
 import { miniMapNodeColor } from '../flow/miniMapColor';
 import { AgentNode } from '../flow/nodes/AgentNode';
 import { FrameNode } from '../flow/nodes/FrameNode';
@@ -18,6 +19,7 @@ import { ScratchImageNode, type ScratchImageNodeData } from '../flow/nodes/Scrat
 import { ScratchMusicNode, type ScratchMusicNodeData } from '../flow/nodes/ScratchMusicNode';
 import { SimulationNode } from '../flow/nodes/SimulationNode';
 import { StyleNode } from '../flow/nodes/StyleNode';
+import { TextViewerNode } from '../flow/nodes/TextViewerNode';
 import { TreatmentNode } from '../flow/nodes/TreatmentNode';
 import { VideoNode } from '../flow/nodes/VideoNode';
 import { enrichPipelineNodes, pipelineToGraphNode, toPipelineRenderNode } from '../flow/pipeline';
@@ -27,6 +29,7 @@ import { DRAG_MIME, SideDrawer, type DrawerSection } from '../flow/SideDrawer';
 import { useAddNodeActions } from '../flow/useAddNodeActions';
 import { usePersistedGraph } from '../flow/usePersistedGraph';
 import { usePipelineCallbacks } from '../flow/usePipelineCallbacks';
+import { useStylesLibrary } from '../flow/useStylesLibrary';
 
 const nodeTypes = {
   agent: AgentNode,
@@ -37,11 +40,12 @@ const nodeTypes = {
   frame: FrameNode,
   video: VideoNode,
   style: StyleNode,
+  'text-viewer': TextViewerNode,
   'scratch-image': ScratchImageNode,
   'scratch-music': ScratchMusicNode,
 };
 
-const PIPELINE_TYPES = new Set(['sim', 'treatment', 'frame', 'video', 'style']);
+const PIPELINE_TYPES = new Set(['sim', 'treatment', 'frame', 'video', 'style', 'text-viewer']);
 const SCRATCH_TYPES = new Set(['scratch-image', 'scratch-music']);
 
 // A Scratch board still has the full node palette (Agent/Location/
@@ -50,7 +54,7 @@ const SCRATCH_TYPES = new Set(['scratch-image', 'scratch-music']);
 // still reference whichever city happens to be active, same as opening
 // any other tab would show. If nothing's ever been generated, the
 // Agents/Locations sections are just honestly empty.
-function ScratchCanvasInner({ boardId, cityData }: { boardId: string; cityData: HistoryData | null }) {
+function ScratchCanvasInner({ boardId, cityData, onCityDataRefresh }: { boardId: string; cityData: HistoryData | null; onCityDataRefresh?: () => void }) {
   const { doc, save } = usePersistedGraph(`scratch:${boardId}`);
   const { screenToFlowPosition } = useReactFlow();
   const [nodes, setNodes] = useState<Node[] | null>(null);
@@ -72,13 +76,18 @@ function ScratchCanvasInner({ boardId, cityData }: { boardId: string; cityData: 
     setEdges((prev) => prev.filter((e) => e.source !== nodeId && e.target !== nodeId));
   }, []);
 
-  const pipeline = usePipelineCallbacks(setNodes, setEdges);
-  const { addToCanvas, addPipelineNode, addStyleNode, addNewAgent, addScratchNode } = useAddNodeActions({
+  const pipeline = usePipelineCallbacks(setNodes, setEdges, onCityDataRefresh);
+  const { styles, refresh: refreshStyles, remove: removeStyle } = useStylesLibrary();
+  const [newAgentModal, setNewAgentModal] = useState<{ position?: XYPosition } | null>(null);
+  const { addToCanvas, addPipelineNode, addStyleNode, addNewAgent, placeAgentNode, addScratchNode } = useAddNodeActions({
     data: cityData,
     setNodes,
     onExpandAgent: noExpand,
     onExpandPlace: noExpand,
     onRemoveMissing,
+    onDataRefresh: onCityDataRefresh,
+    onStyleCreated: refreshStyles,
+    onOpenNewAgentModal: (position) => setNewAgentModal({ position }),
     pipeline,
     onImageUpdate,
     onMusicUpdate,
@@ -177,13 +186,14 @@ function ScratchCanvasInner({ boardId, cityData }: { boardId: string; cityData: 
       const position = screenToFlowPosition({ x: e.clientX, y: e.clientY });
       const [kind, ...rest] = payload.split(':');
       if (kind === 'scratch') addScratchNode(rest[0] as 'scratch-image' | 'scratch-music', position);
-      else if (kind === 'style') addStyleNode(position);
-      else if (kind === 'pipeline') addPipelineNode(rest[0] as 'sim' | 'treatment' | 'video', position);
+      else if (kind === 'style' && rest[0] === 'new') addStyleNode(position);
+      else if (kind === 'style') addStyleNode(position, styles.find((s) => s.id === rest[0]));
+      else if (kind === 'pipeline') addPipelineNode(rest[0] as 'sim' | 'treatment' | 'video' | 'text-viewer', position);
       else if (kind === 'agent' && rest[0] === 'new') addNewAgent(position);
       else if (kind === 'agent') addToCanvas({ id: rest[0], kind: 'agent' }, position);
       else if (kind === 'location') addToCanvas({ id: rest[0], kind: 'location' }, position);
     },
-    [screenToFlowPosition, addScratchNode, addStyleNode, addPipelineNode, addNewAgent, addToCanvas],
+    [screenToFlowPosition, addScratchNode, addStyleNode, addPipelineNode, addNewAgent, addToCanvas, styles],
   );
 
   if (!nodes) return <div className="canvas-empty">Loading canvas…</div>;
@@ -197,10 +207,25 @@ function ScratchCanvasInner({ boardId, cityData }: { boardId: string; cityData: 
       items: [
         { id: 'image', label: '+ Image', dragPayload: 'scratch:scratch-image', onAdd: () => addScratchNode('scratch-image') },
         { id: 'music', label: '+ Music', dragPayload: 'scratch:scratch-music', onAdd: () => addScratchNode('scratch-music') },
-        { id: 'style', label: '+ Style', dragPayload: 'style:new', onAdd: () => addStyleNode() },
         { id: 'sim', label: 'Simulation', dragPayload: 'pipeline:sim', onAdd: () => addPipelineNode('sim') },
         { id: 'treatment', label: 'Treatment', dragPayload: 'pipeline:treatment', onAdd: () => addPipelineNode('treatment') },
         { id: 'video', label: 'Video', dragPayload: 'pipeline:video', onAdd: () => addPipelineNode('video') },
+        { id: 'text-viewer', label: 'Text', sublabel: 'view a Treatment\'s text', dragPayload: 'pipeline:text-viewer', onAdd: () => addPipelineNode('text-viewer') },
+      ],
+    },
+    {
+      id: 'styles',
+      label: 'Styles',
+      items: [
+        { id: 'new-style', label: '+ New style', dragPayload: 'style:new', onAdd: () => addStyleNode() },
+        ...styles.map((s) => ({
+          id: s.id,
+          label: s.name,
+          sublabel: s.style_prompt || undefined,
+          dragPayload: `style:${s.id}`,
+          onAdd: () => addStyleNode(undefined, s),
+          onDelete: () => window.confirm(`Delete style "${s.name}"?`) && removeStyle(s.id).catch((e) => console.error('failed to delete style', e)),
+        })),
       ],
     },
     {
@@ -240,6 +265,16 @@ function ScratchCanvasInner({ boardId, cityData }: { boardId: string; cityData: 
           <MiniMap nodeColor={miniMapNodeColor} pannable zoomable />
         </ReactFlow>
       </div>
+      {newAgentModal && cityData && (
+        <NewAgentModal
+          places={cityData.places}
+          onClose={() => setNewAgentModal(null)}
+          onCreated={(character) => {
+            placeAgentNode(character, newAgentModal.position);
+            setNewAgentModal(null);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -247,13 +282,15 @@ function ScratchCanvasInner({ boardId, cityData }: { boardId: string; cityData: 
 export function ScratchScreen({ boardId }: { boardId: string }) {
   const [cityData, setCityData] = useState<HistoryData | null>(null);
 
-  useEffect(() => {
+  const refreshCityData = useCallback(() => {
     history.data().then(setCityData).catch(() => setCityData(null));
   }, []);
 
+  useEffect(refreshCityData, [refreshCityData]);
+
   return (
     <ReactFlowProvider>
-      <ScratchCanvasInner boardId={boardId} cityData={cityData} />
+      <ScratchCanvasInner boardId={boardId} cityData={cityData} onCityDataRefresh={refreshCityData} />
     </ReactFlowProvider>
   );
 }

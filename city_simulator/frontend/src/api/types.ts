@@ -253,6 +253,12 @@ export interface GraphNode {
   id: string;
   type: string;
   position: { x: number; y: number };
+  // Set once a node has been drag-resized (NodeShell's <NodeResizer/>) --
+  // undefined until then, so an un-resized node keeps its CSS default
+  // size rather than being pinned to whatever width/height a first render
+  // happened to measure.
+  width?: number;
+  height?: number;
   data: Record<string, unknown>;
 }
 

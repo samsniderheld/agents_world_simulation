@@ -4,11 +4,22 @@
    which only holds if nothing in between introduces a new one. */
 
 .node-shell.is-wide {
-  width: 300px;
+  min-width: 300px;
 }
 
+/* width/height: 100% so a drag-resize (NodeShell's <NodeResizer/>, which
+   sets React Flow's own node.width/node.height) actually has something to
+   fill -- min-width/min-height hold the pre-resize default size, matching
+   what used to be a fixed px width, since React Flow leaves the node
+   wrapper unsized (shrink-to-fit) until it's been resized at least once. */
 .node-shell {
-  width: 240px;
+  width: 100%;
+  height: 100%;
+  min-width: 240px;
+  min-height: 60px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
   background: var(--node-body);
   border: 1px solid var(--node-border);
   border-radius: var(--node-radius);
@@ -33,6 +44,7 @@
   align-items: center;
   justify-content: space-between;
   height: var(--node-header-h);
+  flex: none;
   padding: 0 10px;
   border-bottom: 1px solid var(--node-border);
   font-family: var(--mono);
@@ -66,6 +78,21 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.node-resize-handle {
+  width: 8px !important;
+  height: 8px !important;
+  border: 1px solid var(--node-selected) !important;
+  background: var(--node-body) !important;
+  border-radius: 1px !important;
+}
+
+.node-resize-line {
+  border-color: var(--node-selected) !important;
 }
 
 .node-thumb-row {
@@ -95,6 +122,51 @@
   height: 100%;
   object-fit: cover;
   display: block;
+}
+
+.node-thumb.is-expandable {
+  cursor: zoom-in;
+}
+
+/* Frame/Image/Video/ScratchImage's generated media -- unlike .node-thumb
+   (a small fixed-size crop used where the image is secondary to prompt/
+   controls), these nodes exist to show a picture, so the preview fills
+   the node's current width. Fixed at 16:9 via aspect-ratio rather than
+   the media's own natural ratio -- that's what makes it a stable "default
+   space": resizing the node changes the box's size, never its shape, so
+   it can't get squished into something narrower/taller than 16:9. */
+.node-media-box {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  min-width: 512px;
+  min-height: 288px;
+  border-radius: 3px;
+  border: 1px solid var(--node-border);
+  background: var(--panel);
+  overflow: hidden;
+  display: flex;
+}
+
+.node-media-box img,
+.node-media-box video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.node-media-box.is-expandable {
+  cursor: zoom-in;
+}
+
+.node-media-box-empty {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  color: var(--node-text-dim);
 }
 
 .node-title {
@@ -179,6 +251,14 @@
   margin-top: 4px;
 }
 
+.node-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  cursor: pointer;
+}
+
 .node-ticks-input {
   width: 44px;
   background: var(--panel);
@@ -214,6 +294,70 @@
   cursor: default;
 }
 
+.node-delete-btn {
+  flex: none;
+}
+
+.node-delete-btn:hover:not(:disabled) {
+  border-color: var(--node-error);
+  color: var(--node-error);
+}
+
+.style-ref-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(48px, 1fr));
+  gap: 6px;
+}
+
+.style-ref-item {
+  position: relative;
+  aspect-ratio: 1;
+  border: 1px solid var(--node-border);
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--panel);
+}
+
+.style-ref-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  cursor: zoom-in;
+}
+
+.style-ref-remove {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 16px;
+  height: 16px;
+  line-height: 14px;
+  padding: 0;
+  border: 1px solid var(--node-border);
+  border-radius: 2px;
+  background: rgba(0, 0, 0, 0.55);
+  color: var(--node-text);
+  font-size: 9px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+
+.style-ref-item:hover .style-ref-remove {
+  opacity: 1;
+}
+
+.style-ref-remove:hover {
+  border-color: var(--node-error);
+  color: var(--node-error);
+}
+
+.style-ref-remove:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .node-select {
   width: 100%;
   background: var(--panel);
@@ -233,6 +377,20 @@
   border-top: 1px dashed var(--node-border);
 }
 
+.text-viewer-body {
+  flex: 1;
+  min-height: 120px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--node-text);
+  background: var(--panel);
+  border: 1px solid var(--node-border);
+  border-radius: 2px;
+  padding: 8px 10px;
+}
+
 .node-log {
   margin-top: 4px;
   padding-top: 6px;
@@ -240,8 +398,33 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  max-height: 100px;
-  overflow-y: auto;
+  flex: 1 1 auto;
+  min-height: 60px;
+  overflow-y: scroll;
+  /* Explicit, always-rendered scrollbar -- relying on the OS/browser
+     default (macOS in particular hides overlay scrollbars until you're
+     actively scrolling) meant there was no visible sign this box even
+     scrolls. `scroll` instead of `auto` keeps the track reserved and
+     visible at all times, not just while scrolling. */
+  scrollbar-width: thin;
+  scrollbar-color: var(--node-border) transparent;
+}
+
+.node-log::-webkit-scrollbar {
+  width: 7px;
+}
+
+.node-log::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.node-log::-webkit-scrollbar-thumb {
+  background: var(--node-border);
+  border-radius: 4px;
+}
+
+.node-log::-webkit-scrollbar-thumb:hover {
+  background: var(--node-text-dim);
 }
 
 .node-log-row {

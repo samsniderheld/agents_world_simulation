@@ -4,7 +4,11 @@ import { MediaGrid } from './MediaGrid';
 
 type Tab = 'architecture' | 'history' | 'ownership' | 'media';
 
-export function PlaceDetail({ placeId, data }: { placeId: string; data: HistoryData }) {
+// Unlike AgentDetail, this component owns no fetch of its own -- `data`
+// is entirely the caller's -- so deleting media has nothing local to
+// update; `onRefresh` (the caller's own HistoryData refetch) is the only
+// way this ever sees the media list change.
+export function PlaceDetail({ placeId, data, onRefresh }: { placeId: string; data: HistoryData; onRefresh?: () => void }) {
   const [tab, setTab] = useState<Tab>('architecture');
   const place = data.places.find((p) => p.id === placeId);
   if (!place) return <div className="inspector-body inspector-empty">Place not found.</div>;
@@ -68,7 +72,7 @@ export function PlaceDetail({ placeId, data }: { placeId: string; data: HistoryD
             </div>
           </div>
         )}
-        {tab === 'media' && <MediaGrid items={media} />}
+        {tab === 'media' && <MediaGrid items={media} entityId={place.id} onDeleted={onRefresh} />}
       </div>
     </>
   );

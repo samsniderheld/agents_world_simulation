@@ -48,6 +48,23 @@ def cast_constraint(agent_name: str, known_names: list) -> str:
     )
 
 
+def directive_block(directive: str) -> str:
+    """A prompt fragment carrying the node UI's free-text Simulation
+    directive ("guide how the characters are interacting") -- a run-scoped
+    nudge, not a permanent trait of any one agent, so it's threaded through
+    as an explicit argument to whichever call is generating right now
+    (plan/decompose/react/dialogue) rather than folded into
+    Agent.identity_summary(). Returns "" when there's no directive, so
+    every caller can unconditionally splice this into its prompt.
+    """
+    if not directive or not directive.strip():
+        return ""
+    return (
+        f"\n\nDirection for this scene (follow this where it's relevant, "
+        f"without ignoring who the character actually is): {directive.strip()}\n"
+    )
+
+
 def extract_tagged_line(text: str, tag: str) -> tuple:
     """Pull one '<TAG>: value' line out of a multi-line LLM reply (e.g. a
     destination tacked onto a list of substeps -- see planning.decompose)

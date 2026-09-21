@@ -8,6 +8,7 @@ import type { Character, GraphNode, HistoryData, MediaItem, Place } from '../api
 import './canvas.css';
 import { isValidConnection as checkValidConnection } from './edgeRules';
 import { entityToGraphNode, toEntityRenderNode } from './entityNodeKit';
+import { NewAgentModal } from './NewAgentModal';
 import { AgentNode } from './nodes/AgentNode';
 import { FrameNode } from './nodes/FrameNode';
 import { ImageNode, type ImageNodeData } from './nodes/ImageNode';
@@ -17,6 +18,7 @@ import { ScratchImageNode, type ScratchImageNodeData } from './nodes/ScratchImag
 import { ScratchMusicNode, type ScratchMusicNodeData } from './nodes/ScratchMusicNode';
 import { SimulationNode } from './nodes/SimulationNode';
 import { StyleNode } from './nodes/StyleNode';
+import { TextViewerNode } from './nodes/TextViewerNode';
 import { TreatmentNode } from './nodes/TreatmentNode';
 import { VideoNode } from './nodes/VideoNode';
 import { DRAG_MIME, SideDrawer, type DrawerSection } from './SideDrawer';
@@ -29,6 +31,7 @@ import { scratchToGraphNode, toScratchRenderNode } from './scratchNodeKit';
 import { useAddNodeActions } from './useAddNodeActions';
 import { usePersistedGraph } from './usePersistedGraph';
 import { usePipelineCallbacks } from './usePipelineCallbacks';
+import { useStylesLibrary } from './useStylesLibrary';
 
 const nodeTypes = {
   agent: AgentNode,
@@ -39,12 +42,13 @@ const nodeTypes = {
   frame: FrameNode,
   video: VideoNode,
   style: StyleNode,
+  'text-viewer': TextViewerNode,
   image: ImageNode,
   'scratch-image': ScratchImageNode,
   'scratch-music': ScratchMusicNode,
 };
 
-const PIPELINE_TYPES = new Set(['sim', 'treatment', 'frame', 'video', 'style']);
+const PIPELINE_TYPES = new Set(['sim', 'treatment', 'frame', 'video', 'style', 'text-viewer']);
 const SCRATCH_TYPES = new Set(['scratch-image', 'scratch-music']);
 
 function toImageRenderNode(gn: GraphNode, entityId: string, mediaById: Map<string, MediaItem>, onUpdate: ImageNodeData['onUpdate']): Node | null {
@@ -56,6 +60,8 @@ function toImageRenderNode(gn: GraphNode, entityId: string, mediaById: Map<strin
     id: gn.id,
     type: 'image',
     position: gn.position,
+    width: gn.width,
+    height: gn.height,
     data: { entityId, prompt: (gn.data.prompt as string) ?? media?.prompt ?? '', mediaId, mediaUrl: media ? city.fileUrl(media.url) : undefined, onUpdate },
   };
 }
@@ -63,7 +69,7 @@ function toImageRenderNode(gn: GraphNode, entityId: string, mediaById: Map<strin
 function imageToGraphNode(n: Node): GraphNode | null {
   if (n.type !== 'image') return null;
   const d = n.data as ImageNodeData;
-  return { id: n.id, type: 'image', position: n.position, data: { prompt: d.prompt, mediaId: d.mediaId } };
+  return { id: n.id, type: 'image', position: n.position, width: n.width, height: n.height, data: { prompt: d.prompt, mediaId: d.mediaId } };
 }
 
 // This entity's own drill-in canvas, with the *same* full node palette
@@ -95,9 +101,19 @@ function CanvasInner({
   const [edges, setEdges] = useState<Edge[]>([]);
   const initializedFor = useRef<string | null>(null);
 
-  const onImageUpdate = useCallback((nodeId: string, patch: Partial<ImageNodeData>) => {
-    setNodes((prev) => (prev ? prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, ...patch } } : n)) : prev));
-  }, []);
+  // Same "refresh after a real generation" rule usePipelineCallbacks
+  // applies to Frame/Video -- this canvas's standalone `image` node type
+  // isn't part of that shared hook, so it needs its own copy of the same
+  // fix: without it, any OTHER node whose agent:in/place:in reference
+  // images come from *this* entity's media would keep working off a
+  // stale snapshot that doesn't yet include what was just generated.
+  const onImageUpdate = useCallback(
+    (nodeId: string, patch: Partial<ImageNodeData>) => {
+      setNodes((prev) => (prev ? prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, ...patch } } : n)) : prev));
+      if (patch.mediaId) onCityDataRefresh?.();
+    },
+    [onCityDataRefresh],
+  );
   const onScratchImageUpdate = useCallback((nodeId: string, patch: Partial<ScratchImageNodeData>) => {
     setNodes((prev) => (prev ? prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, ...patch } } : n)) : prev));
   }, []);
@@ -113,14 +129,18 @@ function CanvasInner({
     setEdges((prev) => prev.filter((e) => e.source !== nodeId && e.target !== nodeId));
   }, []);
 
-  const pipeline = usePipelineCallbacks(setNodes, setEdges);
-  const { addToCanvas, addPipelineNode, addStyleNode, addNewAgent, addScratchNode } = useAddNodeActions({
+  const pipeline = usePipelineCallbacks(setNodes, setEdges, onCityDataRefresh);
+  const { styles, refresh: refreshStyles, remove: removeStyle } = useStylesLibrary();
+  const [newAgentModal, setNewAgentModal] = useState<{ position?: XYPosition } | null>(null);
+  const { addToCanvas, addPipelineNode, addStyleNode, addNewAgent, placeAgentNode, addScratchNode } = useAddNodeActions({
     data: cityData,
     setNodes,
     onExpandAgent: noExpand,
     onExpandPlace: noExpand,
     onRemoveMissing,
     onDataRefresh: onCityDataRefresh,
+    onStyleCreated: refreshStyles,
+    onOpenNewAgentModal: (position) => setNewAgentModal({ position }),
     pipeline,
     onImageUpdate: onScratchImageUpdate,
     onMusicUpdate,
@@ -265,14 +285,15 @@ function CanvasInner({
       const [kind, ...rest] = payload.split(':');
       if (kind === 'image' && rest[0] === 'new') addImageNode(position);
       else if (kind === 'media') addExistingMedia(rest[0], position);
-      else if (kind === 'pipeline') addPipelineNode(rest[0] as 'sim' | 'treatment' | 'video', position);
-      else if (kind === 'style') addStyleNode(position);
+      else if (kind === 'pipeline') addPipelineNode(rest[0] as 'sim' | 'treatment' | 'video' | 'text-viewer', position);
+      else if (kind === 'style' && rest[0] === 'new') addStyleNode(position);
+      else if (kind === 'style') addStyleNode(position, styles.find((s) => s.id === rest[0]));
       else if (kind === 'scratch') addScratchNode(rest[0] as 'scratch-image' | 'scratch-music', position);
       else if (kind === 'agent' && rest[0] === 'new') addNewAgent(position);
       else if (kind === 'agent') addToCanvas({ id: rest[0], kind: 'agent' }, position);
       else if (kind === 'location') addToCanvas({ id: rest[0], kind: 'location' }, position);
     },
-    [screenToFlowPosition, addImageNode, addExistingMedia, addPipelineNode, addStyleNode, addScratchNode, addNewAgent, addToCanvas],
+    [screenToFlowPosition, addImageNode, addExistingMedia, addPipelineNode, addStyleNode, addScratchNode, addNewAgent, addToCanvas, styles],
   );
 
   if (!nodes) return <div className="canvas-empty">Loading canvas…</div>;
@@ -288,9 +309,24 @@ function CanvasInner({
         { id: 'sim', label: 'Simulation', dragPayload: 'pipeline:sim', onAdd: () => addPipelineNode('sim') },
         { id: 'treatment', label: 'Treatment', dragPayload: 'pipeline:treatment', onAdd: () => addPipelineNode('treatment') },
         { id: 'video', label: 'Video', dragPayload: 'pipeline:video', onAdd: () => addPipelineNode('video') },
-        { id: 'style', label: 'Style', dragPayload: 'style:new', onAdd: () => addStyleNode() },
+        { id: 'text-viewer', label: 'Text', sublabel: 'view a Treatment\'s text', dragPayload: 'pipeline:text-viewer', onAdd: () => addPipelineNode('text-viewer') },
         { id: 'scratch-image', label: 'Freeform image', dragPayload: 'scratch:scratch-image', onAdd: () => addScratchNode('scratch-image') },
         { id: 'music', label: 'Music', dragPayload: 'scratch:scratch-music', onAdd: () => addScratchNode('scratch-music') },
+      ],
+    },
+    {
+      id: 'styles',
+      label: 'Styles',
+      items: [
+        { id: 'new-style', label: '+ New style', dragPayload: 'style:new', onAdd: () => addStyleNode() },
+        ...styles.map((s) => ({
+          id: s.id,
+          label: s.name,
+          sublabel: s.style_prompt || undefined,
+          dragPayload: `style:${s.id}`,
+          onAdd: () => addStyleNode(undefined, s),
+          onDelete: () => window.confirm(`Delete style "${s.name}"?`) && removeStyle(s.id).catch((e) => console.error('failed to delete style', e)),
+        })),
       ],
     },
     {
@@ -341,6 +377,16 @@ function CanvasInner({
           <MiniMap nodeColor={miniMapNodeColor} pannable zoomable />
         </ReactFlow>
       </div>
+      {newAgentModal && cityData && (
+        <NewAgentModal
+          places={cityData.places}
+          onClose={() => setNewAgentModal(null)}
+          onCreated={(character) => {
+            placeAgentNode(character, newAgentModal.position);
+            setNewAgentModal(null);
+          }}
+        />
+      )}
     </Fragment>
   );
 }

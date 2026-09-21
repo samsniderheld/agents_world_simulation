@@ -28,6 +28,8 @@ export function toEntityRenderNode(
       id: gn.id,
       type: 'agent',
       position: gn.position,
+      width: gn.width,
+      height: gn.height,
       data: { character, thumbUrl: firstImageUrl(data.media[characterId]), onExpand: onExpandAgent },
     };
   }
@@ -40,11 +42,13 @@ export function toEntityRenderNode(
       id: gn.id,
       type: 'location',
       position: gn.position,
+      width: gn.width,
+      height: gn.height,
       data: { place, thumbUrl: firstImageUrl(data.media[placeId]), residentCount, onExpand: onExpandPlace },
     };
   }
   if (gn.type === 'missing') {
-    return { id: gn.id, type: 'missing', position: gn.position, data: { entityId: gn.data.entityId as string, onRemove: onRemoveMissing } };
+    return { id: gn.id, type: 'missing', position: gn.position, width: gn.width, height: gn.height, data: { entityId: gn.data.entityId as string, onRemove: onRemoveMissing } };
   }
   return null;
 }
@@ -52,14 +56,14 @@ export function toEntityRenderNode(
 export function entityToGraphNode(n: Node): GraphNode | null {
   if (n.type === 'agent') {
     const character = (n.data as { character: Character }).character;
-    return { id: n.id, type: 'agent', position: n.position, data: { characterId: character.id } };
+    return { id: n.id, type: 'agent', position: n.position, width: n.width, height: n.height, data: { characterId: character.id } };
   }
   if (n.type === 'location') {
     const place = (n.data as { place: Place }).place;
-    return { id: n.id, type: 'location', position: n.position, data: { placeId: place.id } };
+    return { id: n.id, type: 'location', position: n.position, width: n.width, height: n.height, data: { placeId: place.id } };
   }
   if (n.type === 'missing') {
-    return { id: n.id, type: 'missing', position: n.position, data: { entityId: (n.data as { entityId: string }).entityId } };
+    return { id: n.id, type: 'missing', position: n.position, width: n.width, height: n.height, data: { entityId: (n.data as { entityId: string }).entityId } };
   }
   return null;
 }

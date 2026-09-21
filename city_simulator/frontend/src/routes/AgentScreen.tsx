@@ -37,6 +37,15 @@ export function AgentScreen({ cityId, characterId }: { cityId: string; character
     history.activateCity(cityId).then((res) => setCityData(res.city)).catch(() => {});
   }, [cityId]);
 
+  // Same idea, but for `record` -- AgentDetail (in the aside) keeps its
+  // own independent copy of this same agent's record, so deleting media
+  // there doesn't touch *this* one; without this, EntityCanvas's `media`
+  // prop (sourced from `record.media`) would keep showing a deleted item
+  // until the next full page load.
+  const refreshRecord = useCallback(() => {
+    city.getAgent(characterId).then(setRecord).catch(() => {});
+  }, [characterId]);
+
   if (record === undefined) return <div className="canvas-empty">Loading…</div>;
   if (record === null) return <div className="canvas-empty">No such agent.</div>;
 
@@ -44,7 +53,7 @@ export function AgentScreen({ cityId, characterId }: { cityId: string; character
     <div className="city-canvas-layout">
       <EntityCanvas cityId={cityId} entityId={characterId} scope={`agent:${characterId}`} media={record.media} cityData={cityData} onCityDataRefresh={refreshCityData} />
       <CollapsibleAside>
-        <AgentDetail characterId={characterId} />
+        <AgentDetail characterId={characterId} onMediaChanged={refreshRecord} />
       </CollapsibleAside>
     </div>
   );
