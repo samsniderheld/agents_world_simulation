@@ -76,7 +76,7 @@ function ScratchCanvasInner({ boardId, cityData, onCityDataRefresh }: { boardId:
     setEdges((prev) => prev.filter((e) => e.source !== nodeId && e.target !== nodeId));
   }, []);
 
-  const pipeline = usePipelineCallbacks(setNodes, setEdges, onCityDataRefresh);
+  const pipeline = usePipelineCallbacks(setNodes, setEdges);
   const { styles, refresh: refreshStyles, remove: removeStyle } = useStylesLibrary();
   const [newAgentModal, setNewAgentModal] = useState<{ position?: XYPosition } | null>(null);
   const { addToCanvas, addPipelineNode, addStyleNode, addNewAgent, placeAgentNode, addScratchNode } = useAddNodeActions({
@@ -121,7 +121,7 @@ function ScratchCanvasInner({ boardId, cityData, onCityDataRefresh }: { boardId:
       : [];
 
     const pipelineGraphNodes = doc.nodes.filter((n) => PIPELINE_TYPES.has(n.type));
-    const builtPipeline = cityData ? pipelineGraphNodes.map((gn) => toPipelineRenderNode(gn, cityData, pipeline)).filter((n): n is Node => n !== null) : [];
+    const builtPipeline = cityData ? pipelineGraphNodes.map((gn) => toPipelineRenderNode(gn, pipeline)).filter((n): n is Node => n !== null) : [];
 
     const scratchGraphNodes = doc.nodes.filter((n) => SCRATCH_TYPES.has(n.type));
     const builtScratch = scratchGraphNodes.map((gn) => toScratchRenderNode(gn, onImageUpdate, onMusicUpdate)).filter((n): n is Node => n !== null);

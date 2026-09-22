@@ -1,17 +1,15 @@
-// Mirrors useImageGeneration.ts but for video -- kept separate rather
-// than a shared generic, since the request shape (image_path is required
-// here, sourced from an upstream Frame node, not a free-form list) and
-// result shape (`video`, not `images[]`) genuinely differ.
+// Self-contained, like ScratchImageNode/FrameNode -- a generated clip
+// belongs to the Video node/treatment it's part of, not to any one
+// entity's media history, so this no longer attaches via city.addMedia().
 import { useState } from 'react';
-import { city, visuals } from '../../api/client';
+import { visuals } from '../../api/client';
 import { pollVisualsUntilDone } from '../../api/pollVisuals';
-import type { MediaItem } from '../../api/types';
 
-export function useVideoGeneration(entityId: string) {
+export function useVideoGeneration() {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function generate(prompt: string, imagePath: string, stylePrompt?: string): Promise<MediaItem | null> {
+  async function generate(prompt: string, imagePath: string, stylePrompt?: string): Promise<{ url: string; localPath: string } | null> {
     setError(null);
     setPending(true);
     try {
@@ -25,15 +23,7 @@ export function useVideoGeneration(entityId: string) {
         setError('generation finished with no video');
         return null;
       }
-      const video = result.video;
-      const saved = await city.addMedia({
-        entityId,
-        kind: 'video',
-        url: video.url,
-        localPath: video.local_path,
-        prompt,
-      });
-      return saved.media[saved.media.length - 1];
+      return { url: result.video.url, localPath: result.video.local_path };
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       return null;

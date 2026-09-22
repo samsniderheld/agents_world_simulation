@@ -129,7 +129,7 @@ function CanvasInner({
     setEdges((prev) => prev.filter((e) => e.source !== nodeId && e.target !== nodeId));
   }, []);
 
-  const pipeline = usePipelineCallbacks(setNodes, setEdges, onCityDataRefresh);
+  const pipeline = usePipelineCallbacks(setNodes, setEdges);
   const { styles, refresh: refreshStyles, remove: removeStyle } = useStylesLibrary();
   const [newAgentModal, setNewAgentModal] = useState<{ position?: XYPosition } | null>(null);
   const { addToCanvas, addPipelineNode, addStyleNode, addNewAgent, placeAgentNode, addScratchNode } = useAddNodeActions({
@@ -165,7 +165,20 @@ function CanvasInner({
     const mediaById = new Map(images.map((m) => [m.id, m]));
     const agentIds = cityData.characters.map((c) => c.id);
     const placeIds = cityData.places.map((p) => p.id);
-    const key = `${doc.rev}:${mediaIds.join(',')}:${cityData.generated_at}`;
+    // Deliberately NOT keyed on mediaIds -- usePersistedGraph's `doc` is
+    // frozen at whatever it was on mount/scope-change (it's never updated
+    // after an autosave, see that hook's own comment on why), so any node
+    // added or resized *after* mount is already missing from doc.nodes.
+    // Rebuilding from `doc` every time `media` changes (which
+    // onCityDataRefresh does after every completed generation, per
+    // ImageNode/FrameNode/VideoNode's onUpdate) would silently wipe every
+    // such node back out on the very first image a user generates here --
+    // confirmed live: a Style node + an Image node, added this session,
+    // both vanished the moment the image finished. The one-time initial
+    // reconciliation this effect exists for still happens (doc/cityData
+    // change on real mount or a rev conflict), just not on every media
+    // refresh in between.
+    const key = `${doc.rev}:${cityData.generated_at}`;
     if (initializedFor.current === key && nodes) return;
     initializedFor.current = key;
 
@@ -196,7 +209,7 @@ function CanvasInner({
       .filter((n): n is Node => n !== null);
 
     const pipelineGraphNodes = doc.nodes.filter((n) => PIPELINE_TYPES.has(n.type));
-    const builtPipeline = pipelineGraphNodes.map((gn) => toPipelineRenderNode(gn, cityData, pipeline)).filter((n): n is Node => n !== null);
+    const builtPipeline = pipelineGraphNodes.map((gn) => toPipelineRenderNode(gn, pipeline)).filter((n): n is Node => n !== null);
 
     const scratchGraphNodes = doc.nodes.filter((n) => SCRATCH_TYPES.has(n.type));
     const builtScratch = scratchGraphNodes.map((gn) => toScratchRenderNode(gn, onScratchImageUpdate, onMusicUpdate)).filter((n): n is Node => n !== null);

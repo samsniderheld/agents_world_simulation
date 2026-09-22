@@ -5,7 +5,7 @@
 // output -- reading raw source data directly means there's no dependency
 // on which node happens to be processed first in a .map() pass.
 import type { Edge, Node } from '@xyflow/react';
-import { city } from '../api/client';
+import { visuals } from '../api/client';
 import type { GraphNode, HistoryData, Style } from '../api/types';
 import type { AgentNodeData } from './nodes/AgentNode';
 import type { FrameNodeData } from './nodes/FrameNode';
@@ -33,7 +33,7 @@ export interface PipelineCallbacks {
   onStyleDelete: (nodeId: string) => void;
 }
 
-export function toPipelineRenderNode(gn: GraphNode, data: HistoryData, cb: PipelineCallbacks): Node | null {
+export function toPipelineRenderNode(gn: GraphNode, cb: PipelineCallbacks): Node | null {
   if (gn.type === 'sim') {
     return {
       id: gn.id,
@@ -88,9 +88,6 @@ export function toPipelineRenderNode(gn: GraphNode, data: HistoryData, cb: Pipel
     };
   }
   if (gn.type === 'frame') {
-    const entityId = gn.data.entityId as string | undefined;
-    const mediaId = gn.data.mediaId as string | undefined;
-    const media = mediaId && entityId ? data.media[entityId]?.find((m) => m.id === mediaId) : undefined;
     return {
       id: gn.id,
       type: 'frame',
@@ -98,29 +95,27 @@ export function toPipelineRenderNode(gn: GraphNode, data: HistoryData, cb: Pipel
       width: gn.width,
       height: gn.height,
       data: {
-        entityId,
         shotIndex: gn.data.shotIndex as number,
         prompt: (gn.data.prompt as string) ?? '',
-        mediaId,
-        mediaUrl: media ? city.fileUrl(media.url) : undefined,
-        localPath: media?.local_path,
+        url: gn.data.url as string | undefined,
+        localPath: gn.data.localPath as string | undefined,
         onUpdate: cb.onFrameUpdate,
       },
     };
   }
   if (gn.type === 'video') {
-    // entityId isn't persisted for video nodes -- it's derived below in
-    // enrichPipelineNodes() from whichever Frame is connected, since a
-    // Video node has no entity of its own. Media resolution therefore
-    // also happens there, not here (this function has no edges to look
-    // the connection up with).
     return {
       id: gn.id,
       type: 'video',
       position: gn.position,
       width: gn.width,
       height: gn.height,
-      data: { prompt: (gn.data.prompt as string) ?? '', mediaId: gn.data.mediaId as string | undefined, onUpdate: cb.onVideoUpdate },
+      data: {
+        prompt: (gn.data.prompt as string) ?? '',
+        url: gn.data.url as string | undefined,
+        localPath: gn.data.localPath as string | undefined,
+        onUpdate: cb.onVideoUpdate,
+      },
     };
   }
   if (gn.type === 'style') {
@@ -167,11 +162,18 @@ export function pipelineToGraphNode(n: Node): GraphNode | null {
   }
   if (n.type === 'frame') {
     const d = n.data as FrameNodeData;
-    return { id: n.id, type: 'frame', position: n.position, width: n.width, height: n.height, data: { entityId: d.entityId, shotIndex: d.shotIndex, prompt: d.prompt, mediaId: d.mediaId } };
+    return {
+      id: n.id,
+      type: 'frame',
+      position: n.position,
+      width: n.width,
+      height: n.height,
+      data: { shotIndex: d.shotIndex, prompt: d.prompt, url: d.url, localPath: d.localPath },
+    };
   }
   if (n.type === 'video') {
     const d = n.data as VideoNodeData;
-    return { id: n.id, type: 'video', position: n.position, width: n.width, height: n.height, data: { prompt: d.prompt, mediaId: d.mediaId } };
+    return { id: n.id, type: 'video', position: n.position, width: n.width, height: n.height, data: { prompt: d.prompt, url: d.url, localPath: d.localPath } };
   }
   if (n.type === 'style') {
     const d = n.data as StyleNodeData;
@@ -245,6 +247,17 @@ function connectedAgents(nodeId: string, handle: string, edges: Edge[], byId: Ma
     });
 }
 
+function connectedPlaces(nodeId: string, handle: string, edges: Edge[], byId: Map<string, Node>): { id: string; name: string }[] {
+  return edges
+    .filter((e) => e.target === nodeId && e.targetHandle === handle)
+    .map((e) => byId.get(e.source))
+    .filter((n): n is Node => Boolean(n && n.type === 'location'))
+    .map((n) => {
+      const p = (n.data as LocationNodeData).place;
+      return { id: p.id, name: p.name };
+    });
+}
+
 export function enrichPipelineNodes(nodes: Node[], edges: Edge[], historyData: HistoryData): Node[] {
   const byId = new Map(nodes.map((n) => [n.id, n]));
 
@@ -267,7 +280,27 @@ export function enrichPipelineNodes(nodes: Node[], edges: Edge[], historyData: H
       } else if (source?.type === 'sim') {
         candidates = connectedAgents(source.id, 'agents:in', edges, byId);
       }
-      return { ...n, data: { ...n.data, candidates } };
+      // Extra cast/setting context from the Treatment's own agent:in/
+      // place:in ports -- independent of `candidates` (who the run:in
+      // transcript says was involved) or `run:in` itself; a character or
+      // place explicitly wired in here still gets described even if they
+      // never appear in the recorded run at all (see agents/routes.py's
+      // POST /treatment docstring).
+      const contextAgents = connectedAgents(n.id, 'agent:in', edges, byId);
+      const contextPlaces = connectedPlaces(n.id, 'place:in', edges, byId);
+      return {
+        ...n,
+        data: {
+          ...n.data,
+          candidates,
+          agentIds: contextAgents.map((a) => a.id),
+          placeIds: contextPlaces.map((p) => p.id),
+          contextAgentNames: contextAgents.map((a) => a.name),
+          contextPlaceNames: contextPlaces.map((p) => p.name),
+          hasAgentRef: hasEdge(n.id, 'agent:in', edges),
+          hasPlaceRef: hasEdge(n.id, 'place:in', edges),
+        },
+      };
     }
 
     if (n.type === 'video') {
@@ -275,54 +308,22 @@ export function enrichPipelineNodes(nodes: Node[], edges: Edge[], historyData: H
       const source = imgEdge && byId.get(imgEdge.source);
       let sourceImagePath: string | undefined;
       let sourceImageUrl: string | undefined;
-      let entityId: string | undefined;
       if (source?.type === 'frame') {
         const d = source.data as FrameNodeData;
         sourceImagePath = d.localPath;
-        sourceImageUrl = d.mediaUrl;
-        entityId = d.entityId;
+        sourceImageUrl = d.url ? visuals.fileUrl(d.url) : undefined;
       }
-      // The video's own generated media (once it has a mediaId) also
-      // needs the entity to look it up under -- only known now, from the
-      // connected Frame above, hence resolved here rather than in
-      // toPipelineRenderNode (which has no edges to trace the connection
-      // with).
-      const existingMediaId = (n.data as VideoNodeData).mediaId;
-      const existingMedia = entityId && existingMediaId ? historyData.media[entityId]?.find((m) => m.id === existingMediaId) : undefined;
       const merged = mergeStyles(connectedStyles(n.id, edges, byId));
-      return {
-        ...n,
-        data: {
-          ...n.data,
-          entityId,
-          sourceImagePath,
-          sourceImageUrl,
-          mediaUrl: existingMedia ? city.fileUrl(existingMedia.url) : (n.data as VideoNodeData).mediaUrl,
-          mergedStylePrompt: merged.stylePrompt,
-        },
-      };
+      return { ...n, data: { ...n.data, sourceImagePath, sourceImageUrl, mergedStylePrompt: merged.stylePrompt } };
     }
 
     if (n.type === 'frame') {
       const merged = mergeStyles(connectedStyles(n.id, edges, byId));
-      // A Frame from "emit frames" already has entityId baked in at
-      // creation. One dropped manually (per the requirement that every
-      // node type be placeable anywhere, not just spawned by another
-      // node) starts without one -- if it's wired to a Treatment's
-      // shots:out, borrow that treatment's chosen subject rather than
-      // leaving the Frame permanently non-functional.
-      let entityId = (n.data as FrameNodeData).entityId;
-      if (!entityId) {
-        const shotEdge = edges.find((e) => e.target === n.id && e.targetHandle === 'shot:in');
-        const source = shotEdge && byId.get(shotEdge.source);
-        if (source?.type === 'treatment') entityId = (source.data as TreatmentNodeData).subjectId;
-      }
       const entityRefs = connectedEntityReferenceImages(n.id, edges, byId, historyData);
       return {
         ...n,
         data: {
           ...n.data,
-          entityId,
           mergedStylePrompt: merged.stylePrompt,
           mergedStyleReferenceImages: merged.styleReferenceImages,
           mergedEntityReferenceImages: entityRefs,

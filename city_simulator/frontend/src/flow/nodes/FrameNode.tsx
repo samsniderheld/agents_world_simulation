@@ -1,23 +1,22 @@
 import { useState } from 'react';
 import type { Node, NodeProps } from '@xyflow/react';
-import { city } from '../../api/client';
-import type { MediaItem } from '../../api/types';
+import { visuals } from '../../api/client';
+import { pollVisualsUntilDone } from '../../api/pollVisuals';
 import { useLightboxStore } from '../../state/lightboxStore';
 import { NodeShell } from './NodeShell';
 import { Port } from './Port';
-import { useImageGeneration } from './useImageGeneration';
 
 export interface FrameNodeData extends Record<string, unknown> {
-  // The treatment's subject agent -- storyboard images attach to them,
-  // same as the old Director tab. Set at creation by "emit frames"; a
-  // manually-dropped Frame starts without one and gets it resolved by
-  // pipeline.ts's enrichPipelineNodes() once wired to a Treatment's
-  // shots:out (see that function's 'frame' case).
-  entityId?: string;
   shotIndex: number;
   prompt: string;
-  mediaId?: string;
-  mediaUrl?: string;
+  // Self-contained, like ScratchImageNode -- a storyboard shot's image
+  // belongs to this node/the treatment it's part of, not to any one
+  // character's or place's own media history. Entity-attaching it (the
+  // original design, ported from the old Director tab) meant a two-agent
+  // scene's shots only ever got filed under whichever one agent happened
+  // to be the Treatment's chosen subject, and a place-only scene had
+  // nowhere to attach to at all.
+  url?: string;
   localPath?: string;
   // Resolved by pipeline.ts's enrichPipelineNodes() from any connected
   // Style node(s) -- merged (per the design's rule: prompts joined with
@@ -36,28 +35,46 @@ export interface FrameNodeData extends Record<string, unknown> {
   // when the linked Agent/Location has no photos yet.
   hasAgentRef?: boolean;
   hasPlaceRef?: boolean;
-  onUpdate: (nodeId: string, patch: { prompt?: string; mediaId?: string; mediaUrl?: string; localPath?: string }) => void;
+  onUpdate: (nodeId: string, patch: { prompt?: string; url?: string; localPath?: string }) => void;
 }
 
 export type FrameNodeType = Node<FrameNodeData, 'frame'>;
 
 // A storyboard shot -- spawned by a Treatment node's "emit frames" action
 // (pre-filled with that shot's parsed prompt and already wired via a
-// shot:in edge), sharing ImageNode's generation logic but requiring the
-// upstream connection rather than being free-standing.
+// shot:in edge), or dropped freely on any canvas like every other node
+// type. No entity of its own to require or gate on.
 export function FrameNode({ id, data, selected }: NodeProps<FrameNodeType>) {
   const [prompt, setPrompt] = useState(data.prompt);
-  const { pending, error, generate } = useImageGeneration(data.entityId ?? '');
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const openLightbox = useLightboxStore((s) => s.open);
-  const noSubject = !data.entityId;
 
   async function onGenerate() {
-    if (!data.entityId) return;
-    const media: MediaItem | null = await generate(prompt, `storyboard_${data.shotIndex}`, {
-      stylePrompt: data.mergedStylePrompt,
-      styleReferenceImages: [...(data.mergedStyleReferenceImages ?? []), ...(data.mergedEntityReferenceImages ?? [])],
-    });
-    if (media) data.onUpdate(id, { prompt, mediaId: media.id, mediaUrl: city.fileUrl(media.url), localPath: media.local_path });
+    setError(null);
+    setPending(true);
+    try {
+      const start = await visuals.generateImage({
+        prompt,
+        stylePrompt: data.mergedStylePrompt,
+        styleReferenceImages: [...(data.mergedStyleReferenceImages ?? []), ...(data.mergedEntityReferenceImages ?? [])],
+      });
+      if (!start.ok) {
+        setError(start.error ?? 'failed to start');
+        return;
+      }
+      const result = await pollVisualsUntilDone();
+      if (result.kind !== 'image' || !result.images[0]) {
+        setError('generation finished with no image');
+        return;
+      }
+      const image = result.images[0];
+      data.onUpdate(id, { prompt, url: image.url, localPath: image.local_path });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setPending(false);
+    }
   }
 
   return (
@@ -70,14 +87,14 @@ export function FrameNode({ id, data, selected }: NodeProps<FrameNodeType>) {
       minHeight={430}
     >
       <div
-        className={`node-media-box ${data.mediaUrl ? 'is-expandable' : ''}`}
+        className={`node-media-box ${data.url ? 'is-expandable' : ''}`}
         onClick={(e) => {
-          if (!data.mediaUrl) return;
+          if (!data.url) return;
           e.stopPropagation();
-          openLightbox(data.mediaUrl);
+          openLightbox(visuals.fileUrl(data.url));
         }}
       >
-        {data.mediaUrl ? <img src={data.mediaUrl} alt="" /> : <div className="node-media-box-empty">🎬</div>}
+        {data.url ? <img src={visuals.fileUrl(data.url)} alt="" /> : <div className="node-media-box-empty">🎬</div>}
       </div>
       <textarea
         className="node-prompt-input"
@@ -87,17 +104,16 @@ export function FrameNode({ id, data, selected }: NodeProps<FrameNodeType>) {
         onBlur={() => prompt !== data.prompt && data.onUpdate(id, { prompt })}
       />
       {data.mergedStylePrompt && <div className="node-subtitle">style: {data.mergedStylePrompt}</div>}
-      {noSubject && <div className="node-subtitle">connect a Treatment's shots to pick who this belongs to</div>}
       {error && <div className="node-error-text">{error}</div>}
       <div className="node-controls">
-        <button className="node-run-btn" disabled={pending || noSubject || !prompt.trim()} onClick={onGenerate}>
-          {pending ? 'generating…' : data.mediaId ? '↻ regenerate' : '▶ generate'}
+        <button className="node-run-btn" disabled={pending || !prompt.trim()} onClick={onGenerate}>
+          {pending ? 'generating…' : data.url ? '↻ regenerate' : '▶ generate'}
         </button>
       </div>
 
       <Port id="agent:in" type="agent" direction="in" label="agent" optional={!data.hasAgentRef} top="calc(100% - 74px)" />
       <Port id="place:in" type="place" direction="in" label="place" optional={!data.hasPlaceRef} top="calc(100% - 54px)" />
-      <Port id="shot:in" type="shot" direction="in" label="shot" top="calc(100% - 34px)" />
+      <Port id="shot:in" type="shot" direction="in" label="shot" optional top="calc(100% - 34px)" />
       <Port id="style:in" type="style" direction="in" label="style" optional={!data.mergedStylePrompt} top="calc(100% - 14px)" />
       <Port id="image:out" type="image" direction="out" label="image" top="calc(100% - 14px)" />
     </NodeShell>

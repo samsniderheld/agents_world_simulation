@@ -90,7 +90,7 @@ function CanvasInner({ cityId, data, onDataRefresh }: { cityId: string; data: Hi
     setNodes((prev) => (prev ? prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, ...patch } } : n)) : prev));
   }, []);
 
-  const pipeline = usePipelineCallbacks(setNodes, setEdges, onDataRefresh);
+  const pipeline = usePipelineCallbacks(setNodes, setEdges);
   const { styles, refresh: refreshStyles, remove: removeStyle } = useStylesLibrary();
   const [newAgentModal, setNewAgentModal] = useState<{ position?: XYPosition } | null>(null);
   const { addToCanvas, addPipelineNode, addStyleNode, addNewAgent, placeAgentNode, addScratchNode } = useAddNodeActions({
@@ -135,7 +135,7 @@ function CanvasInner({ cityId, data, onDataRefresh }: { cityId: string; data: Hi
     const builtEntity = [...persisted, ...danglingAsMissing]
       .map((gn) => toEntityRenderNode(gn, data, onExpandAgent, onExpandPlace, onRemoveMissing))
       .filter((n): n is Node => n !== null);
-    const builtPipeline = pipelineGraphNodes.map((gn) => toPipelineRenderNode(gn, data, pipeline)).filter((n): n is Node => n !== null);
+    const builtPipeline = pipelineGraphNodes.map((gn) => toPipelineRenderNode(gn, pipeline)).filter((n): n is Node => n !== null);
     const builtScratch = scratchGraphNodes.map((gn) => toScratchRenderNode(gn, onImageUpdate, onMusicUpdate)).filter((n): n is Node => n !== null);
     const allBuilt = [...builtEntity, ...builtPipeline, ...builtScratch];
 

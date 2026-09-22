@@ -121,3 +121,25 @@ bio_templates:
     - "{name} has never quite trusted whatever replaced {place} on that corner."
     - "{name} can tell you exactly what {place} smelled like, if you ask."
     - "{name} still marks the anniversary of the day {place} closed."
+
+# Fallback (no-LLM) physical appearance + wardrobe sentences -- appended
+# to the bio (see characters.py's _fallback_character()) so a resident
+# always has SOME concrete visual description a costume/production
+# designer (or a Treatment's storyboard prompt, see treatment.py's
+# _cast_block) could actually use, not just personality/relationship
+# facts. Deliberately gender-neutral (names.yaml's word lists aren't
+# split by gender either, see _fallback_character's docstring) and noir-
+# appropriate, one self-contained sentence with a {name} slot.
+appearance_templates:
+  - "{name} has a weathered face and the kind of build that comes from years of honest work, and is rarely seen without a battered felt hat."
+  - "{name} dresses plainly but neatly -- a worn wool coat, always buttoned, no matter the weather."
+  - "{name} has sharp, watchful eyes and keeps their hair slicked back out of old habit."
+  - "{name} favors a single good suit, pressed within an inch of its life, over an otherwise threadbare wardrobe."
+  - "{name} has calloused hands and rolled-up sleeves that say more about a day's work than any words would."
+  - "{name} wears a long dark overcoat like armor, collar up, rain or shine."
+  - "{name} has a lean, wiry frame and the restless energy of someone who never quite sits still."
+  - "{name} keeps a cigarette perpetually at hand and a tie perpetually loosened."
+  - "{name} has soft, ink-stained fingers and wire-rimmed spectacles pushed low on the nose."
+  - "{name} carries themselves with an old-fashioned formality, right down to the polished shoes and the pocket watch."
+  - "{name} has a broad, sturdy build and sleeves that never quite stay rolled down."
+  - "{name} favors muted, practical colors -- greys and browns -- and a hat pulled low."

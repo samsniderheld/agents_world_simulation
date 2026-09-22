@@ -118,8 +118,36 @@ def _setting_block(location_details: list) -> str:
     )
 
 
+def _cast_block(cast_details: list) -> str:
+    """Turns each participating character's real `bio` (which now includes
+    a physical description and wardrobe -- see history/characters.py's
+    _llm_character()/_fallback_character()) into an explicit CAST
+    appearance block, the same idea as _setting_block above but for who's
+    in the scene rather than where it's set. Without this, the model only
+    ever sees bare names (the "Cast available" line below) and invents
+    what everyone looks like from scratch, with nothing to keep repeat
+    treatments of the same character consistent. Falls back to just the
+    name when a character has no bio on file."""
+    if not cast_details:
+        return ""
+    lines = []
+    for c in cast_details:
+        name = c.get("name")
+        if not name:
+            continue
+        bio = (c.get("bio") or "").strip()
+        lines.append(f"- {name}: {bio}" if bio else f"- {name} (no recorded description)")
+    body = "\n".join(lines)
+    return (
+        "Cast appearance reference -- use these real descriptions for how each character "
+        "looks and what they wear, do not invent conflicting physical details:\n"
+        f"{body}\n\n"
+    )
+
+
 def generate_treatment(log: list[str], agent_names: list[str], model: str = None,
-                        provider: str = None, location_details: list = None) -> str:
+                        provider: str = None, location_details: list = None,
+                        cast_details: list = None) -> str:
     """Ask the LLM to read a finished simulation's transcript and write a
     short video-vignette treatment: the characters involved, a description
     of what happens, and 6 storyboard image prompts, each with art
@@ -136,9 +164,12 @@ def generate_treatment(log: list[str], agent_names: list[str], model: str = None
     convene_at) still routinely drifted into storyboard shots set in each
     character's own separate, habitual haunt -- or, once the name alone
     was surfaced, into scenery invented from the name rather than the
-    place's actual recorded appearance."""
+    place's actual recorded appearance. `cast_details` is
+    [{"name": str, "bio": str}, ...] -- see _cast_block above -- the same
+    idea applied to who's in the scene."""
     transcript = "\n".join(log) or "(nothing happened)"
     setting_line = _setting_block(location_details)
+    cast_line = _cast_block(cast_details)
 
     prompt = (
         "You are a film treatment writer adapting a scene transcript into a "
@@ -146,6 +177,7 @@ def generate_treatment(log: list[str], agent_names: list[str], model: str = None
         f"Cast available in this scene: {', '.join(agent_names)}. Only write "
         "about characters who actually appear in the transcript below; do "
         "not invent any other named characters.\n\n"
+        f"{cast_line}"
         f"{setting_line}"
         f"Transcript:\n{transcript}\n\n"
         "Write the treatment in exactly this format, with no extra "
@@ -157,11 +189,18 @@ def generate_treatment(log: list[str], agent_names: list[str], model: str = None
         "<a tight paragraph, 4-8 sentences, describing what happens in this "
         "vignette, written as noir prose>\n\n"
         "STORYBOARD:\n"
-        "1. <shot description> | Art direction: <set/production design "
-        "notes> | Lighting: <lighting setup> | DOP: <camera angle, lens, "
-        "and movement>\n"
+        "1. <shot description> | Character: <physical description of "
+        "whoever appears in this shot -- their build, face, and wardrobe, "
+        "drawn from the cast appearance reference above, not invented -- "
+        "or \"none\" for a shot with no one in frame> | Art direction: "
+        "<set/production design notes> | Lighting: <lighting setup> | "
+        "DOP: <camera angle, lens, and movement>\n"
         "(exactly 6 numbered shots in this format, each a different beat of "
-        f"the story, all consistent with a {NOIR_LOOK}.)"
+        f"the story, all consistent with a {NOIR_LOOK}. Each shot line is used "
+        "on its own, standalone, to generate that shot's actual image later -- "
+        "the Character field must repeat enough of their real appearance that "
+        "the shot still reads correctly by itself, without needing the rest "
+        "of this treatment for context.)"
         "the direction should take into account the japanese concept of MA, focusing on"
         "individual moments, the characters within them, and how those characters experience"
         "their environment"

@@ -25,6 +25,17 @@ export interface TreatmentNodeData extends Record<string, unknown> {
   // overrides (blank = server default), same shape as SimulationNode's.
   provider: string;
   model: string;
+  // Resolved by pipeline.ts's enrichPipelineNodes() from the Treatment's
+  // own agent:in/place:in ports -- extra cast/setting context sent
+  // alongside generation, independent of run:in's candidates (who the
+  // recorded transcript says was involved). Lets a character or place be
+  // described even if they never appear in the run at all.
+  agentIds?: string[];
+  placeIds?: string[];
+  contextAgentNames?: string[];
+  contextPlaceNames?: string[];
+  hasAgentRef?: boolean;
+  hasPlaceRef?: boolean;
   onSubjectChange: (nodeId: string, subjectId: string) => void;
   onGenerated: (nodeId: string, text: string, shots: string[]) => void;
   onEmitFrames: (nodeId: string, shots: string[]) => void;
@@ -85,6 +96,8 @@ export function TreatmentNode({ id, data, selected }: NodeProps<TreatmentNodeTyp
       const res = await agentsApi.generateTreatment(subjectId, {
         provider: data.provider || undefined,
         model: model.trim() || undefined,
+        agentIds: data.agentIds,
+        placeIds: data.placeIds,
       });
       const shotsRes = await agentsApi.treatmentShots(res.treatment.text);
       onGenerated(id, res.treatment.text, shotsRes.shots);
@@ -102,6 +115,11 @@ export function TreatmentNode({ id, data, selected }: NodeProps<TreatmentNodeTyp
       {candidates.length > 1 && (
         <div className="node-grounding">based on the run: {candidates.map((c) => c.name).join(', ')}</div>
       )}
+      {(data.contextAgentNames?.length || data.contextPlaceNames?.length) ? (
+        <div className="node-grounding">
+          context: {[...(data.contextAgentNames ?? []), ...(data.contextPlaceNames ?? [])].join(', ')}
+        </div>
+      ) : null}
 
       {text && (
         <div className="node-treatment-preview">
@@ -148,6 +166,8 @@ export function TreatmentNode({ id, data, selected }: NodeProps<TreatmentNodeTyp
         </div>
       )}
 
+      <Port id="agent:in" type="agent" direction="in" label="agent" optional={!data.hasAgentRef} top="calc(100% - 84px)" />
+      <Port id="place:in" type="place" direction="in" label="place" optional={!data.hasPlaceRef} top="calc(100% - 64px)" />
       <Port id="run:in" type="run" direction="in" label="run" top="calc(100% - 44px)" />
       <Port id="treatment:out" type="treatment" direction="out" label="treatment" top="calc(100% - 24px)" />
       <Port id="shots:out" type="shot" direction="out" label="shots" top="calc(100% - 4px)" />

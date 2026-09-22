@@ -164,10 +164,23 @@ export const agentsApi = {
 
   stop: () => request<{ ok: boolean }>('/api/agents/stop', { method: 'POST' }),
 
-  generateTreatment: (agentId: string, params?: { provider?: string; model?: string }) =>
+  generateTreatment: (
+    agentId: string,
+    params?: { provider?: string; model?: string; agentIds?: string[]; placeIds?: string[] },
+  ) =>
     request<{ treatment: Treatment }>('/api/agents/treatment', {
       method: 'POST',
-      body: json({ agent_id: agentId, provider: params?.provider, model: params?.model }),
+      body: json({
+        agent_id: agentId,
+        provider: params?.provider,
+        model: params?.model,
+        // Treatment node's own agent:in/place:in ports -- context the
+        // user explicitly wired in, independent of who/where the run's
+        // own transcript says was involved (see agents/routes.py's
+        // POST /treatment docstring).
+        agent_ids: params?.agentIds,
+        place_ids: params?.placeIds,
+      }),
     }),
 
   treatmentShots: (text: string) =>

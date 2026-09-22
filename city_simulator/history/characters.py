@@ -34,6 +34,7 @@ with open(_YAML_PATH) as _f:
 _RELATIONSHIP_HINTS = _RAW["relationship_hints"]  # {"active": [...], "gone": [...]}
 _BIO_TEMPLATES = _RAW["bio_templates"]             # {"active_with_founder": [...], ...}
 _LIFE_EVENT_TEMPLATES = _RAW["life_event_templates"]  # {"early": [...], "arrival": [...], "recent": [...]}
+_APPEARANCE_TEMPLATES = _RAW["appearance_templates"]  # [...] -- see characters.yaml's own comment
 
 
 def _pick_grounding(places: list, figures: list, rng: random.Random, exclude: set,
@@ -92,8 +93,11 @@ def _llm_character(grounding: dict, occupation: str = None, sex: str = None):
         "AGE: <integer between 20 and 75>\n"
         "OCCUPATION: <short phrase>\n"
         "QUIRK: <one distinctive habit or trait, a few words>\n"
-        "BIO: <3-4 sentences, third person, naturally weaving in the place name, its domain, "
-        "and the historical detail above -- specific to this history, not generic>"
+        "BIO: <4-6 sentences, third person, naturally weaving in the place name, its domain, "
+        "and the historical detail above -- specific to this history, not generic. Within "
+        "this, include a vivid PHYSICAL DESCRIPTION -- build, face, notable features -- and "
+        "their WARDROBE, what they typically wear -- concrete visual details a costume and "
+        "production designer could actually use, not just personality or backstory.>"
     )
     reply = llm.complete(prompt, temperature=0.95)
 
@@ -149,9 +153,11 @@ def _fallback_character(grounding: dict, rng: random.Random,
     )
 
     place_noun = entities.PLACE_TYPE_NOUN.get(place.place_type, place.place_type.lower())
+    appearance = rng.choice(_APPEARANCE_TEMPLATES).format(name=name)
     bio = (
         f"{relationship_sentence} {place.name} is the old {place_noun} "
-        f"steeped in {place.domain}. Ask {name.split()[0]} about it and they will talk your ear off."
+        f"steeped in {place.domain}. Ask {name.split()[0]} about it and they will talk your ear off. "
+        f"{appearance}"
     )
     return {
         "id": entities.new_id("char_"),

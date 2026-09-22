@@ -30,16 +30,15 @@ function nodeFootprint(n: Node): { width: number; height: number } {
   return { width: 240, height: 160 };
 }
 
+// Frame/Video generations no longer attach to any entity (self-contained,
+// like ScratchImage -- see FrameNode.tsx/VideoNode.tsx), so this hook no
+// longer needs an onDataRefresh callback: nothing it produces changes
+// HistoryData/cityData anymore. Image/Style still do their own
+// onDataRefresh calls where they're wired (useAddNodeActions.ts /
+// EntityCanvas.tsx's onImageUpdate), unrelated to this hook.
 export function usePipelineCallbacks(
   setNodes: (fn: (prev: Node[] | null) => Node[] | null) => void,
   setEdges: (fn: (prev: Edge[]) => Edge[]) => void,
-  // Called whenever a Frame/Video generation actually attaches new media
-  // (patch.mediaId set), not on every prompt edit -- without this, the
-  // canvas's own HistoryData/cityData snapshot (which agent:in/place:in
-  // reference-image lookups read from) never learns the new media exists
-  // until the whole screen is reloaded, so a node generated right after
-  // wiring up a reference silently sends an empty reference list.
-  onDataRefresh?: () => void,
 ): PipelineCallbacks {
   const onTicksChange = useCallback((nodeId: string, ticks: number) => {
     setNodes((prev) => (prev ? prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, ticks } } : n)) : prev));
@@ -77,21 +76,18 @@ export function usePipelineCallbacks(
     setNodes((prev) => (prev ? prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, model } } : n)) : prev));
   }, [setNodes]);
 
-  const onFrameUpdate = useCallback(
-    (nodeId: string, patch: Partial<FrameNodeData>) => {
-      setNodes((prev) => (prev ? prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, ...patch } } : n)) : prev));
-      if (patch.mediaId) onDataRefresh?.();
-    },
-    [setNodes, onDataRefresh],
-  );
+  // Frame/Video no longer attach their generated media to any entity (see
+  // FrameNode.tsx/VideoNode.tsx -- self-contained now, like ScratchImage),
+  // so their own generations have nothing left to refresh onDataRefresh
+  // for; only Image (still entity-attached, per-agent/per-place) and
+  // Style still trigger it, elsewhere.
+  const onFrameUpdate = useCallback((nodeId: string, patch: Partial<FrameNodeData>) => {
+    setNodes((prev) => (prev ? prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, ...patch } } : n)) : prev));
+  }, [setNodes]);
 
-  const onVideoUpdate = useCallback(
-    (nodeId: string, patch: Partial<VideoNodeData>) => {
-      setNodes((prev) => (prev ? prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, ...patch } } : n)) : prev));
-      if (patch.mediaId) onDataRefresh?.();
-    },
-    [setNodes, onDataRefresh],
-  );
+  const onVideoUpdate = useCallback((nodeId: string, patch: Partial<VideoNodeData>) => {
+    setNodes((prev) => (prev ? prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, ...patch } } : n)) : prev));
+  }, [setNodes]);
 
   const onStyleLoaded = useCallback((nodeId: string, style: Style) => {
     setNodes((prev) => (prev ? prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, style } } : n)) : prev));
@@ -154,7 +150,7 @@ export function usePipelineCallbacks(
         id: newNodeId('frame'),
         type: 'frame',
         position: positions[i],
-        data: { entityId: subjectId, shotIndex: i, prompt: shotText, onUpdate: onFrameUpdate },
+        data: { shotIndex: i, prompt: shotText, onUpdate: onFrameUpdate },
       }));
 
       setEdges((prevEdges) => [

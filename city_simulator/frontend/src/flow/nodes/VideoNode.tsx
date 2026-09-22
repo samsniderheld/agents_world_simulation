@@ -1,26 +1,24 @@
 import { useState } from 'react';
 import type { Node, NodeProps } from '@xyflow/react';
-import { city } from '../../api/client';
+import { visuals } from '../../api/client';
 import { NodeShell } from './NodeShell';
 import { Port } from './Port';
 import { useVideoGeneration } from './useVideoGeneration';
 
 export interface VideoNodeData extends Record<string, unknown> {
-  // Both resolved by the parent from the connected Frame node -- a Video
-  // node has no entity of its own; it attaches its result to whichever
-  // agent/place the upstream Frame belongs to. sourceImagePath is the
-  // Frame's real local_path (generate-video needs a filesystem path, not
-  // just a URL); both stay undefined until that Frame has generated
-  // something to connect.
-  entityId?: string;
+  // Resolved by the parent from the connected Frame node -- both stay
+  // undefined until that Frame has generated something to connect.
   sourceImagePath?: string;
   sourceImageUrl?: string;
   // Resolved from a connected Style node the same way FrameNodeData's is.
   mergedStylePrompt?: string;
   prompt: string;
-  mediaId?: string;
-  mediaUrl?: string;
-  onUpdate: (nodeId: string, patch: { prompt?: string; mediaId?: string; mediaUrl?: string }) => void;
+  // Self-contained, like FrameNode/ScratchImageNode -- a generated clip
+  // belongs to this node/the treatment it's part of, not to any one
+  // entity's media history.
+  url?: string;
+  localPath?: string;
+  onUpdate: (nodeId: string, patch: { prompt?: string; url?: string; localPath?: string }) => void;
 }
 
 export type VideoNodeType = Node<VideoNodeData, 'video'>;
@@ -30,21 +28,27 @@ export type VideoNodeType = Node<VideoNodeData, 'video'>;
 // providers/base.py), so image:in is a required connection, not optional.
 export function VideoNode({ id, data, selected }: NodeProps<VideoNodeType>) {
   const [prompt, setPrompt] = useState(data.prompt);
-  const { pending, error, generate } = useVideoGeneration(data.entityId ?? '');
+  const { pending, error, generate } = useVideoGeneration();
 
   async function onGenerate() {
-    if (!data.sourceImagePath || !data.entityId) return;
-    const media = await generate(prompt, data.sourceImagePath, data.mergedStylePrompt);
-    if (media) data.onUpdate(id, { prompt, mediaId: media.id, mediaUrl: city.fileUrl(media.url) });
+    if (!data.sourceImagePath) return;
+    const result = await generate(prompt, data.sourceImagePath, data.mergedStylePrompt);
+    if (result) data.onUpdate(id, { prompt, url: result.url, localPath: result.localPath });
   }
 
-  const noSource = !data.sourceImagePath || !data.entityId;
+  const noSource = !data.sourceImagePath;
 
   return (
     <NodeShell typeLabel="Video" selected={selected} running={pending} error={Boolean(error)} minWidth={540} minHeight={430}>
       <div className="node-media-box">
-        {data.mediaUrl ? (
-          <video src={data.mediaUrl} muted loop onMouseEnter={(e) => e.currentTarget.play()} onMouseLeave={(e) => e.currentTarget.pause()} />
+        {data.url ? (
+          <video
+            src={visuals.fileUrl(data.url)}
+            muted
+            loop
+            onMouseEnter={(e) => e.currentTarget.play()}
+            onMouseLeave={(e) => e.currentTarget.pause()}
+          />
         ) : data.sourceImageUrl ? (
           <img src={data.sourceImageUrl} alt="" />
         ) : (
@@ -63,7 +67,7 @@ export function VideoNode({ id, data, selected }: NodeProps<VideoNodeType>) {
       {error && <div className="node-error-text">{error}</div>}
       <div className="node-controls">
         <button className="node-run-btn" disabled={pending || noSource || !prompt.trim()} onClick={onGenerate}>
-          {pending ? 'generating…' : data.mediaId ? '↻ regenerate' : '▶ generate'}
+          {pending ? 'generating…' : data.url ? '↻ regenerate' : '▶ generate'}
         </button>
       </div>
 
