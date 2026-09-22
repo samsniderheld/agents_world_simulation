@@ -36,9 +36,30 @@ export interface TreatmentNodeData extends Record<string, unknown> {
   contextPlaceNames?: string[];
   hasAgentRef?: boolean;
   hasPlaceRef?: boolean;
+  // Resolved the same way as agentIds/placeIds, from the Treatment's own
+  // style:in port -- doesn't feed text generation at all (a style is
+  // purely visual), it exists only to carry through into the Storyboard's
+  // seeded Frame nodes, same as agent/place.
+  styleIds?: string[];
+  contextStyleNames?: string[];
+  hasStyleRef?: boolean;
   onSubjectChange: (nodeId: string, subjectId: string) => void;
   onGenerated: (nodeId: string, text: string, shots: string[]) => void;
-  onEmitFrames: (nodeId: string, shots: string[]) => void;
+  // Creates one Storyboard node (its own drill-in canvas holds the actual
+  // Frame nodes, one per shot, plus whatever Agent/Location/Style context
+  // this Treatment's own agent:in/place:in/style:in ports carry -- see
+  // usePipelineCallbacks.ts's onCreateStoryboard). Names are passed
+  // alongside ids purely for the Storyboard node's own display snapshot.
+  onCreateStoryboard: (
+    nodeId: string,
+    shots: string[],
+    agentIds: string[],
+    placeIds: string[],
+    styleIds: string[],
+    agentNames: string[],
+    placeNames: string[],
+    styleNames: string[],
+  ) => void;
   onProviderChange: (nodeId: string, provider: string) => void;
   onModelChange: (nodeId: string, model: string) => void;
 }
@@ -50,7 +71,7 @@ export function TreatmentNode({ id, data, selected }: NodeProps<TreatmentNodeTyp
   const [error, setError] = useState<string | null>(null);
   const [model, setModel] = useState(data.model);
   const [models, setModels] = useState<string[]>([]);
-  const { candidates, subjectId, text, shots, onSubjectChange, onGenerated, onEmitFrames } = data;
+  const { candidates, subjectId, text, shots, onSubjectChange, onGenerated, onCreateStoryboard } = data;
 
   // Ollama/Claude have entirely different model lists -- re-fetches
   // whenever the provider changes, same as SimulationNode's.
@@ -115,9 +136,9 @@ export function TreatmentNode({ id, data, selected }: NodeProps<TreatmentNodeTyp
       {candidates.length > 1 && (
         <div className="node-grounding">based on the run: {candidates.map((c) => c.name).join(', ')}</div>
       )}
-      {(data.contextAgentNames?.length || data.contextPlaceNames?.length) ? (
+      {(data.contextAgentNames?.length || data.contextPlaceNames?.length || data.contextStyleNames?.length) ? (
         <div className="node-grounding">
-          context: {[...(data.contextAgentNames ?? []), ...(data.contextPlaceNames ?? [])].join(', ')}
+          context: {[...(data.contextAgentNames ?? []), ...(data.contextPlaceNames ?? []), ...(data.contextStyleNames ?? [])].join(', ')}
         </div>
       ) : null}
 
@@ -160,14 +181,29 @@ export function TreatmentNode({ id, data, selected }: NodeProps<TreatmentNodeTyp
       </div>
       {shots && shots.length > 0 && (
         <div className="node-controls">
-          <button className="node-run-btn" onClick={() => onEmitFrames(id, shots)}>
-            emit {shots.length} frames
+          <button
+            className="node-run-btn"
+            onClick={() =>
+              onCreateStoryboard(
+                id,
+                shots,
+                data.agentIds ?? [],
+                data.placeIds ?? [],
+                data.styleIds ?? [],
+                data.contextAgentNames ?? [],
+                data.contextPlaceNames ?? [],
+                data.contextStyleNames ?? [],
+              )
+            }
+          >
+            ▶ create storyboard ({shots.length} shots)
           </button>
         </div>
       )}
 
-      <Port id="agent:in" type="agent" direction="in" label="agent" optional={!data.hasAgentRef} top="calc(100% - 84px)" />
-      <Port id="place:in" type="place" direction="in" label="place" optional={!data.hasPlaceRef} top="calc(100% - 64px)" />
+      <Port id="agent:in" type="agent" direction="in" label="agent" optional={!data.hasAgentRef} top="calc(100% - 104px)" />
+      <Port id="place:in" type="place" direction="in" label="place" optional={!data.hasPlaceRef} top="calc(100% - 84px)" />
+      <Port id="style:in" type="style" direction="in" label="style" optional={!data.hasStyleRef} top="calc(100% - 64px)" />
       <Port id="run:in" type="run" direction="in" label="run" top="calc(100% - 44px)" />
       <Port id="treatment:out" type="treatment" direction="out" label="treatment" top="calc(100% - 24px)" />
       <Port id="shots:out" type="shot" direction="out" label="shots" top="calc(100% - 4px)" />

@@ -17,8 +17,11 @@ export function toScratchRenderNode(
       id: gn.id,
       type: 'scratch-image',
       position: gn.position,
-      width: gn.width,
-      height: gn.height,
+      // Same explicit floor as Frame/Video/Image's own render-node
+      // builders (see pipeline.ts) -- without it a never-resized node
+      // shrink-to-fits its own content independently of its siblings.
+      width: gn.width ?? 540,
+      height: gn.height ?? 430,
       data: { prompt: (gn.data.prompt as string) ?? '', url: gn.data.url as string | undefined, localPath: gn.data.localPath as string | undefined, onUpdate: onImageUpdate },
     };
   }

@@ -15,6 +15,10 @@ export interface ScratchImageNodeData extends Record<string, unknown> {
   // scratch boards (it has no entity of its own either).
   mergedStylePrompt?: string;
   mergedStyleReferenceImages?: string[];
+  // Whether style:in actually has an edge -- independent of
+  // mergedStylePrompt, so the port still shows "connected" even when the
+  // linked Style has no prompt text (reference images only, or blank).
+  hasStyleRef?: boolean;
   onUpdate: (nodeId: string, patch: { prompt?: string; url?: string; localPath?: string }) => void;
 }
 
@@ -83,7 +87,7 @@ export function ScratchImageNode({ id, data, selected }: NodeProps<ScratchImageN
         </button>
       </div>
 
-      <Port id="style:in" type="style" direction="in" label="style" optional={!data.mergedStylePrompt} top="calc(100% - 14px)" />
+      <Port id="style:in" type="style" direction="in" label="style" optional={!data.hasStyleRef} top="calc(100% - 14px)" />
       <Port id="image:out" type="image" direction="out" label="image" top="calc(100% - 14px)" />
     </NodeShell>
   );

@@ -4,13 +4,12 @@
 // node palette shares this one implementation rather than re-deriving it.
 import { useCallback } from 'react';
 import type { Node, Edge } from '@xyflow/react';
-import { stylesApi } from '../api/client';
-import type { Style } from '../api/types';
+import { graph, stylesApi } from '../api/client';
+import type { GraphEdge, GraphNode, Style } from '../api/types';
 import { newNodeId } from './graphIds';
 import { nonOverlappingGridPositions, type Rect } from './layout';
 import type { FrameNodeData } from './nodes/FrameNode';
 import type { StyleNodeData } from './nodes/StyleNode';
-import type { TreatmentNodeData } from './nodes/TreatmentNode';
 import type { VideoNodeData } from './nodes/VideoNode';
 import type { PipelineCallbacks } from './pipeline';
 
@@ -39,6 +38,11 @@ function nodeFootprint(n: Node): { width: number; height: number } {
 export function usePipelineCallbacks(
   setNodes: (fn: (prev: Node[] | null) => Node[] | null) => void,
   setEdges: (fn: (prev: Edge[]) => Edge[]) => void,
+  // Navigates to the Storyboard's own drill-in route -- unlike every
+  // other callback here, this one leaves the canvas, so it has to come
+  // from the caller (each canvas already owns its own onExpandAgent/
+  // onExpandPlace the same way, see entityNodeKit.ts's callers).
+  onExpandStoryboard: (storyboardId: string) => void,
 ): PipelineCallbacks {
   const onTicksChange = useCallback((nodeId: string, ticks: number) => {
     setNodes((prev) => (prev ? prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, ticks } } : n)) : prev));
@@ -120,53 +124,129 @@ export function usePipelineCallbacks(
     [setNodes, setEdges],
   );
 
-  // Emit frames: the subject is read from the treatment node's own
-  // current state (not re-derived from candidates) since by the time you
-  // click this, a subject has already been chosen -- one Frame per shot,
-  // fanned out to the right of the Treatment node in a grid, each
-  // pre-wired with a shots:out -> shot:in edge so the pipeline reads as
-  // connected the instant it appears, not as orphaned nodes you'd have to
-  // wire by hand. Item size is Frame's own resize floor (540x430, see
-  // FrameNode.tsx's NodeShell minWidth/minHeight) with a 60px gutter, and
-  // every EXISTING node on the canvas (not just the other new frames) is
-  // treated as an obstacle, so a batch dropped into an already-busy
-  // canvas lands in genuinely free space instead of stacking on top of
-  // whatever happened to already be there.
-  const onEmitFrames = useCallback((treatmentNodeId: string, shots: string[]) => {
-    setNodes((prev) => {
-      if (!prev) return prev;
-      const treatmentNode = prev.find((n) => n.id === treatmentNodeId);
-      const subjectId = treatmentNode && (treatmentNode.data as TreatmentNodeData).subjectId;
-      if (!treatmentNode || !subjectId) return prev;
+  // Creates one Storyboard node and seeds its own drill-in canvas
+  // directly via a PUT to `storyboard:<id>` -- confirmed safe for a
+  // brand-new scope (citystate/graph_store.py's _empty() already defaults
+  // to version:1/rev:0, exactly what a first save needs, no prior GET
+  // required). The seed is Agent/Location/Style reference GraphNodes for
+  // whatever's connected to the Treatment's own agent:in/place:in/
+  // style:in ports, plus one Frame GraphNode per shot, with edges wiring
+  // every reference to every Frame's own agent:in/place:in/style:in --
+  // mirrors what the user would have dragged in by hand, so Frame's
+  // existing reference-image/style feed just works the instant the
+  // Storyboard is opened.
+  const onCreateStoryboard = useCallback(
+    (
+      treatmentNodeId: string,
+      shots: string[],
+      agentIds: string[],
+      placeIds: string[],
+      styleIds: string[],
+      agentNames: string[],
+      placeNames: string[],
+      styleNames: string[],
+    ) => {
+      const storyboardId = newNodeId('storyboard');
 
-      const obstacles: Rect[] = prev.map((n) => ({ x: n.position.x, y: n.position.y, ...nodeFootprint(n) }));
-      const positions = nonOverlappingGridPositions(
-        shots.length,
-        { itemWidth: 540, itemHeight: 430, columns: 3, gutter: 60, originX: treatmentNode.position.x + 380, originY: treatmentNode.position.y },
-        obstacles,
-      );
-
-      const newNodes: Node[] = shots.map((shotText, i) => ({
+      const agentRefNodes: GraphNode[] = agentIds.map((characterId, i) => ({
+        id: `agent:${characterId}`,
+        type: 'agent',
+        position: { x: i * 280, y: 0 },
+        data: { characterId },
+      }));
+      const placeRefNodes: GraphNode[] = placeIds.map((placeId, i) => ({
+        id: `place:${placeId}`,
+        type: 'location',
+        position: { x: i * 280, y: 220 },
+        data: { placeId },
+      }));
+      // Style is a library reference, not a citystate entity (see
+      // StyleNode.tsx) -- the seeded node still just needs `{styleId}`,
+      // same shape a manually-dropped Style node uses.
+      const styleRefNodes: GraphNode[] = styleIds.map((styleId, i) => ({
+        id: `style:${styleId}`,
+        type: 'style',
+        position: { x: i * 280, y: 440 },
+        data: { styleId },
+      }));
+      // A single horizontal row, not a wrapping grid -- storyboard shots
+      // read left-to-right in sequence, so wrapping them into rows (the
+      // original 3-column layout) broke that reading order and, since
+      // this layout assumes a uniform cell size while a never-resized
+      // node actually shrink-to-fits its own content (see the width/
+      // height fallback below), let same-row neighbors overlap. Width is
+      // baked in explicitly for the same reason: 540 matches FrameNode's
+      // own NodeResizer floor, so every shot renders at the identical
+      // size from the moment it's created, and FRAME_GUTTER (60px) is
+      // guaranteed clear space between them regardless.
+      const FRAME_WIDTH = 540;
+      const FRAME_HEIGHT = 430;
+      const FRAME_GUTTER = 60;
+      const frameNodes: GraphNode[] = shots.map((shotText, i) => ({
         id: newNodeId('frame'),
         type: 'frame',
-        position: positions[i],
-        data: { shotIndex: i, prompt: shotText, onUpdate: onFrameUpdate },
+        position: { x: i * (FRAME_WIDTH + FRAME_GUTTER), y: 660 },
+        width: FRAME_WIDTH,
+        height: FRAME_HEIGHT,
+        data: { shotIndex: i, prompt: shotText },
       }));
+
+      const seedEdges: GraphEdge[] = [];
+      for (const frame of frameNodes) {
+        for (const ref of agentRefNodes) {
+          seedEdges.push({ id: `e:${ref.id}->${frame.id}:agent`, source: ref.id, sourceHandle: 'agent:out', target: frame.id, targetHandle: 'agent:in' });
+        }
+        for (const ref of placeRefNodes) {
+          seedEdges.push({ id: `e:${ref.id}->${frame.id}:place`, source: ref.id, sourceHandle: 'place:out', target: frame.id, targetHandle: 'place:in' });
+        }
+        for (const ref of styleRefNodes) {
+          seedEdges.push({ id: `e:${ref.id}->${frame.id}:style`, source: ref.id, sourceHandle: 'style:out', target: frame.id, targetHandle: 'style:in' });
+        }
+      }
+
+      graph
+        .put(storyboardId, {
+          version: 1,
+          rev: 0,
+          viewport: { x: 0, y: 0, zoom: 1 },
+          nodes: [...agentRefNodes, ...placeRefNodes, ...styleRefNodes, ...frameNodes],
+          edges: seedEdges,
+        })
+        .catch((e) => console.error('failed to seed storyboard', e));
+
+      setNodes((prev) => {
+        const list = prev ?? [];
+        const treatmentNode = list.find((n) => n.id === treatmentNodeId);
+        const obstacles: Rect[] = list.map((n) => ({ x: n.position.x, y: n.position.y, ...nodeFootprint(n) }));
+        const [position] = nonOverlappingGridPositions(
+          1,
+          {
+            itemWidth: 300,
+            itemHeight: 220,
+            columns: 1,
+            gutter: 60,
+            originX: (treatmentNode?.position.x ?? 0) + 380,
+            originY: treatmentNode?.position.y ?? 0,
+          },
+          obstacles,
+        );
+
+        const storyboardNode: Node = {
+          id: storyboardId,
+          type: 'storyboard',
+          position,
+          data: { shotCount: shots.length, contextAgentNames: agentNames, contextPlaceNames: placeNames, contextStyleNames: styleNames, onExpand: onExpandStoryboard },
+        };
+        return [...list, storyboardNode];
+      });
 
       setEdges((prevEdges) => [
         ...prevEdges,
-        ...newNodes.map((fn) => ({
-          id: `e:${treatmentNodeId}->${fn.id}`,
-          source: treatmentNodeId,
-          sourceHandle: 'shots:out',
-          target: fn.id,
-          targetHandle: 'shot:in',
-        })),
+        { id: `e:${treatmentNodeId}->${storyboardId}`, source: treatmentNodeId, sourceHandle: 'shots:out', target: storyboardId, targetHandle: 'shots:in' },
       ]);
-
-      return [...prev, ...newNodes];
-    });
-  }, [setNodes, setEdges, onFrameUpdate]);
+    },
+    [setNodes, setEdges, onExpandStoryboard],
+  );
 
   return {
     onTicksChange,
@@ -178,7 +258,8 @@ export function usePipelineCallbacks(
     onTreatmentGenerated,
     onTreatmentProviderChange,
     onTreatmentModelChange,
-    onEmitFrames,
+    onCreateStoryboard,
+    onExpandStoryboard,
     onFrameUpdate,
     onVideoUpdate,
     onStyleLoaded,

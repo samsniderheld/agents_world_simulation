@@ -12,6 +12,10 @@ export interface VideoNodeData extends Record<string, unknown> {
   sourceImageUrl?: string;
   // Resolved from a connected Style node the same way FrameNodeData's is.
   mergedStylePrompt?: string;
+  // Whether style:in actually has an edge -- independent of
+  // mergedStylePrompt, so the port still shows "connected" even when the
+  // linked Style has no prompt text (reference images only, or blank).
+  hasStyleRef?: boolean;
   prompt: string;
   // Self-contained, like FrameNode/ScratchImageNode -- a generated clip
   // belongs to this node/the treatment it's part of, not to any one
@@ -72,7 +76,7 @@ export function VideoNode({ id, data, selected }: NodeProps<VideoNodeType>) {
       </div>
 
       <Port id="image:in" type="image" direction="in" label="image" top="calc(100% - 34px)" />
-      <Port id="style:in" type="style" direction="in" label="style" optional={!data.mergedStylePrompt} top="calc(100% - 14px)" />
+      <Port id="style:in" type="style" direction="in" label="style" optional={!data.hasStyleRef} top="calc(100% - 14px)" />
       <Port id="video:out" type="video" direction="out" label="video" top="calc(100% - 14px)" />
     </NodeShell>
   );

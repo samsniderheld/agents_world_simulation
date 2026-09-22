@@ -17,6 +17,7 @@ import { MissingNode } from './nodes/MissingNode';
 import { ScratchImageNode, type ScratchImageNodeData } from './nodes/ScratchImageNode';
 import { ScratchMusicNode, type ScratchMusicNodeData } from './nodes/ScratchMusicNode';
 import { SimulationNode } from './nodes/SimulationNode';
+import { StoryboardNode } from './nodes/StoryboardNode';
 import { StyleNode } from './nodes/StyleNode';
 import { TextViewerNode } from './nodes/TextViewerNode';
 import { TreatmentNode } from './nodes/TreatmentNode';
@@ -27,6 +28,7 @@ import { miniMapNodeColor } from './miniMapColor';
 import { enrichPipelineNodes, pipelineToGraphNode, toPipelineRenderNode } from './pipeline';
 import { toFlowEdge, toGraphEdge } from './graphIds';
 import { reconcile } from './reconcile';
+import { navigate, type Scope } from '../routes/router';
 import { scratchToGraphNode, toScratchRenderNode } from './scratchNodeKit';
 import { useAddNodeActions } from './useAddNodeActions';
 import { usePersistedGraph } from './usePersistedGraph';
@@ -42,13 +44,14 @@ const nodeTypes = {
   frame: FrameNode,
   video: VideoNode,
   style: StyleNode,
+  storyboard: StoryboardNode,
   'text-viewer': TextViewerNode,
   image: ImageNode,
   'scratch-image': ScratchImageNode,
   'scratch-music': ScratchMusicNode,
 };
 
-const PIPELINE_TYPES = new Set(['sim', 'treatment', 'frame', 'video', 'style', 'text-viewer']);
+const PIPELINE_TYPES = new Set(['sim', 'treatment', 'frame', 'video', 'style', 'storyboard', 'text-viewer']);
 const SCRATCH_TYPES = new Set(['scratch-image', 'scratch-music']);
 
 function toImageRenderNode(gn: GraphNode, entityId: string, mediaById: Map<string, MediaItem>, onUpdate: ImageNodeData['onUpdate']): Node | null {
@@ -60,8 +63,11 @@ function toImageRenderNode(gn: GraphNode, entityId: string, mediaById: Map<strin
     id: gn.id,
     type: 'image',
     position: gn.position,
-    width: gn.width,
-    height: gn.height,
+    // Same explicit floor as Frame/Video's own render-node builders (see
+    // pipeline.ts) -- without it a never-resized Image node shrink-to-
+    // fits its own content independently of its siblings.
+    width: gn.width ?? 540,
+    height: gn.height ?? 430,
     data: { entityId, prompt: (gn.data.prompt as string) ?? media?.prompt ?? '', mediaId, mediaUrl: media ? city.fileUrl(media.url) : undefined, onUpdate },
   };
 }
@@ -129,7 +135,24 @@ function CanvasInner({
     setEdges((prev) => prev.filter((e) => e.source !== nodeId && e.target !== nodeId));
   }, []);
 
-  const pipeline = usePipelineCallbacks(setNodes, setEdges);
+  // Both AgentScreen and PlaceScreen route through this same canvas,
+  // distinguished only by their own `scope` string's prefix (see how
+  // AgentScreen/PlaceScreen call EntityCanvas) -- reused here to rebuild
+  // which one this entity's own screen actually is, so "up one level"
+  // goes back to it rather than the root Cities list.
+  const onExpandStoryboard = useCallback(
+    (storyboardId: string) => {
+      const from: Scope | undefined =
+        cityId && scope.startsWith('agent:')
+          ? { kind: 'agent', cityId, agentId: entityId }
+          : cityId && scope.startsWith('place:')
+            ? { kind: 'place', cityId, placeId: entityId }
+            : undefined;
+      navigate({ kind: 'storyboard', storyboardId, from });
+    },
+    [cityId, entityId, scope],
+  );
+  const pipeline = usePipelineCallbacks(setNodes, setEdges, onExpandStoryboard);
   const { styles, refresh: refreshStyles, remove: removeStyle } = useStylesLibrary();
   const [newAgentModal, setNewAgentModal] = useState<{ position?: XYPosition } | null>(null);
   const { addToCanvas, addPipelineNode, addStyleNode, addNewAgent, placeAgentNode, addScratchNode } = useAddNodeActions({
@@ -298,7 +321,7 @@ function CanvasInner({
       const [kind, ...rest] = payload.split(':');
       if (kind === 'image' && rest[0] === 'new') addImageNode(position);
       else if (kind === 'media') addExistingMedia(rest[0], position);
-      else if (kind === 'pipeline') addPipelineNode(rest[0] as 'sim' | 'treatment' | 'video' | 'text-viewer', position);
+      else if (kind === 'pipeline') addPipelineNode(rest[0] as 'sim' | 'treatment' | 'video' | 'text-viewer' | 'frame' | 'storyboard', position);
       else if (kind === 'style' && rest[0] === 'new') addStyleNode(position);
       else if (kind === 'style') addStyleNode(position, styles.find((s) => s.id === rest[0]));
       else if (kind === 'scratch') addScratchNode(rest[0] as 'scratch-image' | 'scratch-music', position);
@@ -321,6 +344,8 @@ function CanvasInner({
         { id: 'new-image', label: '+ Image', dragPayload: 'image:new', onAdd: () => addImageNode() },
         { id: 'sim', label: 'Simulation', dragPayload: 'pipeline:sim', onAdd: () => addPipelineNode('sim') },
         { id: 'treatment', label: 'Treatment', dragPayload: 'pipeline:treatment', onAdd: () => addPipelineNode('treatment') },
+        { id: 'frame', label: 'Frame', dragPayload: 'pipeline:frame', onAdd: () => addPipelineNode('frame') },
+        { id: 'storyboard', label: 'Storyboard', dragPayload: 'pipeline:storyboard', onAdd: () => addPipelineNode('storyboard') },
         { id: 'video', label: 'Video', dragPayload: 'pipeline:video', onAdd: () => addPipelineNode('video') },
         { id: 'text-viewer', label: 'Text', sublabel: 'view a Treatment\'s text', dragPayload: 'pipeline:text-viewer', onAdd: () => addPipelineNode('text-viewer') },
         { id: 'scratch-image', label: 'Freeform image', dragPayload: 'scratch:scratch-image', onAdd: () => addScratchNode('scratch-image') },

@@ -35,7 +35,7 @@ export interface AddNodeActionsOptions {
   onMusicUpdate: (nodeId: string, patch: { prompt?: string; negativePrompt?: string; url?: string }) => void;
 }
 
-const PIPELINE_TYPES = new Set(['sim', 'treatment', 'frame', 'video', 'style']);
+const PIPELINE_TYPES = new Set(['sim', 'treatment', 'frame', 'video', 'style', 'storyboard']);
 
 export function useAddNodeActions({
   data,
@@ -67,7 +67,7 @@ export function useAddNodeActions({
   );
 
   const addPipelineNode = useCallback(
-    (type: 'sim' | 'treatment' | 'video' | 'text-viewer', position?: XYPosition) => {
+    (type: 'sim' | 'treatment' | 'video' | 'text-viewer' | 'frame' | 'storyboard', position?: XYPosition) => {
       setNodes((prev) => {
         const list = prev ?? [];
         const pos =
@@ -108,13 +108,26 @@ export function useAddNodeActions({
                 model: '',
                 onSubjectChange: pipeline.onSubjectChange,
                 onGenerated: pipeline.onTreatmentGenerated,
-                onEmitFrames: pipeline.onEmitFrames,
+                onCreateStoryboard: pipeline.onCreateStoryboard,
                 onProviderChange: pipeline.onTreatmentProviderChange,
                 onModelChange: pipeline.onTreatmentModelChange,
               },
             },
           ];
         if (type === 'text-viewer') return [...list, { ...base, type, data: {} }];
+        if (type === 'frame') {
+          // Numbering continues from however many Frame nodes are
+          // already on canvas, so a manually-added shot doesn't collide
+          // with (or precede) whatever a Storyboard already created.
+          const shotIndex = list.filter((n) => n.type === 'frame').length;
+          return [...list, { ...base, type, data: { shotIndex, prompt: '', onUpdate: pipeline.onFrameUpdate } }];
+        }
+        if (type === 'storyboard') {
+          return [
+            ...list,
+            { ...base, type, data: { shotCount: 0, contextAgentNames: [], contextPlaceNames: [], contextStyleNames: [], onExpand: pipeline.onExpandStoryboard } },
+          ];
+        }
         return [...list, { ...base, type, data: { prompt: '', onUpdate: pipeline.onVideoUpdate } }];
       });
     },

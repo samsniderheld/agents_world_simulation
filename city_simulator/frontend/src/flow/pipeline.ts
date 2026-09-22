@@ -11,6 +11,7 @@ import type { AgentNodeData } from './nodes/AgentNode';
 import type { FrameNodeData } from './nodes/FrameNode';
 import type { LocationNodeData } from './nodes/LocationNode';
 import type { SimulationNodeData } from './nodes/SimulationNode';
+import type { StoryboardNodeData } from './nodes/StoryboardNode';
 import type { StyleNodeData } from './nodes/StyleNode';
 import type { TreatmentCandidate, TreatmentNodeData } from './nodes/TreatmentNode';
 import type { VideoNodeData } from './nodes/VideoNode';
@@ -25,7 +26,17 @@ export interface PipelineCallbacks {
   onTreatmentGenerated: (nodeId: string, text: string, shots: string[]) => void;
   onTreatmentProviderChange: (nodeId: string, provider: string) => void;
   onTreatmentModelChange: (nodeId: string, model: string) => void;
-  onEmitFrames: (nodeId: string, shots: string[]) => void;
+  onCreateStoryboard: (
+    treatmentNodeId: string,
+    shots: string[],
+    agentIds: string[],
+    placeIds: string[],
+    styleIds: string[],
+    agentNames: string[],
+    placeNames: string[],
+    styleNames: string[],
+  ) => void;
+  onExpandStoryboard: (storyboardId: string) => void;
   onFrameUpdate: (nodeId: string, patch: Partial<FrameNodeData>) => void;
   onVideoUpdate: (nodeId: string, patch: Partial<VideoNodeData>) => void;
   onStyleLoaded: (nodeId: string, style: Style) => void;
@@ -81,7 +92,7 @@ export function toPipelineRenderNode(gn: GraphNode, cb: PipelineCallbacks): Node
         candidates: [],
         onSubjectChange: cb.onSubjectChange,
         onGenerated: cb.onTreatmentGenerated,
-        onEmitFrames: cb.onEmitFrames,
+        onCreateStoryboard: cb.onCreateStoryboard,
         onProviderChange: cb.onTreatmentProviderChange,
         onModelChange: cb.onTreatmentModelChange,
       },
@@ -92,8 +103,16 @@ export function toPipelineRenderNode(gn: GraphNode, cb: PipelineCallbacks): Node
       id: gn.id,
       type: 'frame',
       position: gn.position,
-      width: gn.width,
-      height: gn.height,
+      // Falls back to the same 540x430 floor NodeShell already enforces
+      // as a resize minimum (see FrameNode.tsx's minWidth/minHeight) --
+      // without an explicit size here, React Flow leaves the node
+      // wrapper unsized until the user's first manual resize, so every
+      // never-touched Frame shrink-to-fits its own content independently
+      // and ends up a different size from its neighbors (the "why are
+      // these all different sizes" bug a freshly-seeded Storyboard hits
+      // immediately, before anyone's dragged a single handle).
+      width: gn.width ?? 540,
+      height: gn.height ?? 430,
       data: {
         shotIndex: gn.data.shotIndex as number,
         prompt: (gn.data.prompt as string) ?? '',
@@ -108,8 +127,8 @@ export function toPipelineRenderNode(gn: GraphNode, cb: PipelineCallbacks): Node
       id: gn.id,
       type: 'video',
       position: gn.position,
-      width: gn.width,
-      height: gn.height,
+      width: gn.width ?? 540,
+      height: gn.height ?? 430,
       data: {
         prompt: (gn.data.prompt as string) ?? '',
         url: gn.data.url as string | undefined,
@@ -133,6 +152,22 @@ export function toPipelineRenderNode(gn: GraphNode, cb: PipelineCallbacks): Node
     // enrichPipelineNodes() from whatever's connected to text:in, the
     // same way Video's sourceImagePath has no state here either.
     return { id: gn.id, type: 'text-viewer', position: gn.position, width: gn.width, height: gn.height, data: {} };
+  }
+  if (gn.type === 'storyboard') {
+    return {
+      id: gn.id,
+      type: 'storyboard',
+      position: gn.position,
+      width: gn.width,
+      height: gn.height,
+      data: {
+        shotCount: (gn.data.shotCount as number) ?? 0,
+        contextAgentNames: (gn.data.contextAgentNames as string[]) ?? [],
+        contextPlaceNames: (gn.data.contextPlaceNames as string[]) ?? [],
+        contextStyleNames: (gn.data.contextStyleNames as string[]) ?? [],
+        onExpand: cb.onExpandStoryboard,
+      },
+    };
   }
   return null;
 }
@@ -181,6 +216,17 @@ export function pipelineToGraphNode(n: Node): GraphNode | null {
   }
   if (n.type === 'text-viewer') {
     return { id: n.id, type: 'text-viewer', position: n.position, width: n.width, height: n.height, data: {} };
+  }
+  if (n.type === 'storyboard') {
+    const d = n.data as StoryboardNodeData;
+    return {
+      id: n.id,
+      type: 'storyboard',
+      position: n.position,
+      width: n.width,
+      height: n.height,
+      data: { shotCount: d.shotCount, contextAgentNames: d.contextAgentNames, contextPlaceNames: d.contextPlaceNames, contextStyleNames: d.contextStyleNames },
+    };
   }
   return null;
 }
@@ -288,6 +334,11 @@ export function enrichPipelineNodes(nodes: Node[], edges: Edge[], historyData: H
       // POST /treatment docstring).
       const contextAgents = connectedAgents(n.id, 'agent:in', edges, byId);
       const contextPlaces = connectedPlaces(n.id, 'place:in', edges, byId);
+      // Doesn't feed generation at all (unlike agent/place, which build
+      // the CAST:/SETTING: prompt blocks) -- resolved purely so "create
+      // storyboard" can carry it through to the seeded Frame nodes' own
+      // style:in ports, same as agent/place.
+      const contextStyles = connectedStyles(n.id, edges, byId);
       return {
         ...n,
         data: {
@@ -295,10 +346,13 @@ export function enrichPipelineNodes(nodes: Node[], edges: Edge[], historyData: H
           candidates,
           agentIds: contextAgents.map((a) => a.id),
           placeIds: contextPlaces.map((p) => p.id),
+          styleIds: contextStyles.map((s) => s.id),
           contextAgentNames: contextAgents.map((a) => a.name),
           contextPlaceNames: contextPlaces.map((p) => p.name),
+          contextStyleNames: contextStyles.map((s) => s.name),
           hasAgentRef: hasEdge(n.id, 'agent:in', edges),
           hasPlaceRef: hasEdge(n.id, 'place:in', edges),
+          hasStyleRef: hasEdge(n.id, 'style:in', edges),
         },
       };
     }
@@ -314,7 +368,10 @@ export function enrichPipelineNodes(nodes: Node[], edges: Edge[], historyData: H
         sourceImageUrl = d.url ? visuals.fileUrl(d.url) : undefined;
       }
       const merged = mergeStyles(connectedStyles(n.id, edges, byId));
-      return { ...n, data: { ...n.data, sourceImagePath, sourceImageUrl, mergedStylePrompt: merged.stylePrompt } };
+      return {
+        ...n,
+        data: { ...n.data, sourceImagePath, sourceImageUrl, mergedStylePrompt: merged.stylePrompt, hasStyleRef: hasEdge(n.id, 'style:in', edges) },
+      };
     }
 
     if (n.type === 'frame') {
@@ -329,6 +386,7 @@ export function enrichPipelineNodes(nodes: Node[], edges: Edge[], historyData: H
           mergedEntityReferenceImages: entityRefs,
           hasAgentRef: hasEdge(n.id, 'agent:in', edges),
           hasPlaceRef: hasEdge(n.id, 'place:in', edges),
+          hasStyleRef: hasEdge(n.id, 'style:in', edges),
         },
       };
     }
@@ -349,12 +407,16 @@ export function enrichPipelineNodes(nodes: Node[], edges: Edge[], historyData: H
           mergedEntityReferenceImages: entityRefs,
           hasAgentRef: hasEdge(n.id, 'agent:in', edges),
           hasPlaceRef: hasEdge(n.id, 'place:in', edges),
+          hasStyleRef: hasEdge(n.id, 'style:in', edges),
         },
       };
     }
     if (n.type === 'scratch-image') {
       const merged = mergeStyles(connectedStyles(n.id, edges, byId));
-      return { ...n, data: { ...n.data, mergedStylePrompt: merged.stylePrompt, mergedStyleReferenceImages: merged.styleReferenceImages } };
+      return {
+        ...n,
+        data: { ...n.data, mergedStylePrompt: merged.stylePrompt, mergedStyleReferenceImages: merged.styleReferenceImages, hasStyleRef: hasEdge(n.id, 'style:in', edges) },
+      };
     }
 
     if (n.type === 'text-viewer') {
@@ -362,6 +424,21 @@ export function enrichPipelineNodes(nodes: Node[], edges: Edge[], historyData: H
       const source = textEdge && byId.get(textEdge.source);
       const text = source?.type === 'treatment' ? (source.data as TreatmentNodeData).text : undefined;
       return { ...n, data: { ...n.data, text } };
+    }
+
+    // Only drives the port fill/hollow styling here -- the seeded content
+    // itself is a one-time snapshot baked in at creation (see
+    // usePipelineCallbacks.ts's onCreateStoryboard), not kept live.
+    if (n.type === 'storyboard') {
+      return {
+        ...n,
+        data: {
+          ...n.data,
+          hasAgentRef: hasEdge(n.id, 'agent:in', edges),
+          hasPlaceRef: hasEdge(n.id, 'place:in', edges),
+          hasStyleRef: hasEdge(n.id, 'style:in', edges),
+        },
+      };
     }
 
     return n;

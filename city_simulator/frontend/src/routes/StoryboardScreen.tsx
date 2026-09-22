@@ -51,14 +51,14 @@ const nodeTypes = {
 const PIPELINE_TYPES = new Set(['sim', 'treatment', 'frame', 'video', 'style', 'storyboard', 'text-viewer']);
 const SCRATCH_TYPES = new Set(['scratch-image', 'scratch-music']);
 
-// A Scratch board still has the full node palette (Agent/Location/
-// Simulation/Treatment/Frame/Video), not just Style/Image/Music -- it's
-// "ungrounded" in that it doesn't belong to any one city, but it can
-// still reference whichever city happens to be active, same as opening
-// any other tab would show. If nothing's ever been generated, the
-// Agents/Locations sections are just honestly empty.
-function ScratchCanvasInner({ boardId, cityData, onCityDataRefresh }: { boardId: string; cityData: HistoryData | null; onCityDataRefresh?: () => void }) {
-  const { doc, save } = usePersistedGraph(`scratch:${boardId}`);
+// A Storyboard's own inner canvas -- ungrounded like a Scratch board (no
+// owning agent/place), but seeded at creation with Agent/Location
+// reference nodes and one Frame per shot (see usePipelineCallbacks.ts's
+// onCreateStoryboard). Modeled directly on ScratchScreen.tsx: same
+// best-effort active-city fetch (for Agent/Location context beyond
+// whatever got carried through), same full palette.
+function StoryboardCanvasInner({ storyboardId, cityData, onCityDataRefresh }: { storyboardId: string; cityData: HistoryData | null; onCityDataRefresh?: () => void }) {
+  const { doc, save } = usePersistedGraph(storyboardId);
   const { screenToFlowPosition } = useReactFlow();
   const [nodes, setNodes] = useState<Node[] | null>(null);
   const [edges, setEdges] = useState<Edge[]>([]);
@@ -70,19 +70,16 @@ function ScratchCanvasInner({ boardId, cityData, onCityDataRefresh }: { boardId:
   const onMusicUpdate = useCallback((nodeId: string, patch: Partial<ScratchMusicNodeData>) => {
     setNodes((prev) => (prev ? prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, ...patch } } : n)) : prev));
   }, []);
-  // No navigation from a scratch board -- Agent/Location nodes here are
-  // reference/context for wiring into a Simulation, not a way to drill
-  // into that entity's own screen.
   const noExpand = useCallback(() => {}, []);
   const onRemoveMissing = useCallback((nodeId: string) => {
     setNodes((prev) => (prev ? prev.filter((n) => n.id !== nodeId) : prev));
     setEdges((prev) => prev.filter((e) => e.source !== nodeId && e.target !== nodeId));
   }, []);
-
   const onExpandStoryboard = useCallback(
-    (storyboardId: string) => navigate({ kind: 'storyboard', storyboardId, from: { kind: 'scratch', boardId } }),
-    [boardId],
+    (id: string) => navigate({ kind: 'storyboard', storyboardId: id, from: { kind: 'storyboard', storyboardId } }),
+    [storyboardId],
   );
+
   const pipeline = usePipelineCallbacks(setNodes, setEdges, onExpandStoryboard);
   const { styles, refresh: refreshStyles, remove: removeStyle } = useStylesLibrary();
   const [newAgentModal, setNewAgentModal] = useState<{ position?: XYPosition } | null>(null);
@@ -100,10 +97,6 @@ function ScratchCanvasInner({ boardId, cityData, onCityDataRefresh }: { boardId:
     onMusicUpdate,
   });
 
-  // No media/entity reconciliation the way CityCanvas/EntityCanvas need
-  // (scratch-image/scratch-music's own data IS their entire state), but
-  // Agent/Location nodes dropped here DO reference real ids and need the
-  // same reconciliation as everywhere else once cityData is known.
   useEffect(() => {
     if (!doc) return;
     const agentIds = cityData?.characters.map((c) => c.id) ?? [];
@@ -128,7 +121,7 @@ function ScratchCanvasInner({ boardId, cityData, onCityDataRefresh }: { boardId:
       : [];
 
     const pipelineGraphNodes = doc.nodes.filter((n) => PIPELINE_TYPES.has(n.type));
-    const builtPipeline = cityData ? pipelineGraphNodes.map((gn) => toPipelineRenderNode(gn, pipeline)).filter((n): n is Node => n !== null) : [];
+    const builtPipeline = pipelineGraphNodes.map((gn) => toPipelineRenderNode(gn, pipeline)).filter((n): n is Node => n !== null);
 
     const scratchGraphNodes = doc.nodes.filter((n) => SCRATCH_TYPES.has(n.type));
     const builtScratch = scratchGraphNodes.map((gn) => toScratchRenderNode(gn, onImageUpdate, onMusicUpdate)).filter((n): n is Node => n !== null);
@@ -140,9 +133,6 @@ function ScratchCanvasInner({ boardId, cityData, onCityDataRefresh }: { boardId:
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [doc, cityData]);
 
-  // Prune edges whenever a node disappears (delete key on a selected
-  // node) -- without this, an edge could keep pointing at a removed
-  // node's id forever.
   useEffect(() => {
     if (!nodes) return;
     const ids = new Set(nodes.map((n) => n.id));
@@ -288,7 +278,7 @@ function ScratchCanvasInner({ boardId, cityData, onCityDataRefresh }: { boardId:
   );
 }
 
-export function ScratchScreen({ boardId }: { boardId: string }) {
+export function StoryboardScreen({ storyboardId }: { storyboardId: string }) {
   const [cityData, setCityData] = useState<HistoryData | null>(null);
 
   const refreshCityData = useCallback(() => {
@@ -299,7 +289,7 @@ export function ScratchScreen({ boardId }: { boardId: string }) {
 
   return (
     <ReactFlowProvider>
-      <ScratchCanvasInner boardId={boardId} cityData={cityData} onCityDataRefresh={refreshCityData} />
+      <StoryboardCanvasInner storyboardId={storyboardId} cityData={cityData} onCityDataRefresh={refreshCityData} />
     </ReactFlowProvider>
   );
 }

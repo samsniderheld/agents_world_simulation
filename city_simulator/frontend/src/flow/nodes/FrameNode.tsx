@@ -30,11 +30,14 @@ export interface FrameNodeData extends Record<string, unknown> {
   // Style's reference_images are (both end up in the same image_paths
   // list server-side, per visuals/routes.py's _style_reference_images()).
   mergedEntityReferenceImages?: string[];
-  // Whether agent:in/place:in each actually have an edge -- independent of
-  // mergedEntityReferenceImages, so the port still shows "connected" even
-  // when the linked Agent/Location has no photos yet.
+  // Whether agent:in/place:in/style:in each actually have an edge --
+  // independent of mergedEntityReferenceImages/mergedStylePrompt, so the
+  // port still shows "connected" even when the linked Agent/Location has
+  // no photos yet, or the linked Style has no prompt text (reference
+  // images only, or just created and still blank).
   hasAgentRef?: boolean;
   hasPlaceRef?: boolean;
+  hasStyleRef?: boolean;
   onUpdate: (nodeId: string, patch: { prompt?: string; url?: string; localPath?: string }) => void;
 }
 
@@ -114,7 +117,7 @@ export function FrameNode({ id, data, selected }: NodeProps<FrameNodeType>) {
       <Port id="agent:in" type="agent" direction="in" label="agent" optional={!data.hasAgentRef} top="calc(100% - 74px)" />
       <Port id="place:in" type="place" direction="in" label="place" optional={!data.hasPlaceRef} top="calc(100% - 54px)" />
       <Port id="shot:in" type="shot" direction="in" label="shot" optional top="calc(100% - 34px)" />
-      <Port id="style:in" type="style" direction="in" label="style" optional={!data.mergedStylePrompt} top="calc(100% - 14px)" />
+      <Port id="style:in" type="style" direction="in" label="style" optional={!data.hasStyleRef} top="calc(100% - 14px)" />
       <Port id="image:out" type="image" direction="out" label="image" top="calc(100% - 14px)" />
     </NodeShell>
   );
