@@ -3,6 +3,7 @@ import { Lightbox } from './components/Lightbox';
 import { CityCanvas } from './flow/CityCanvas';
 import { AgentScreen } from './routes/AgentScreen';
 import { CitiesScreen } from './routes/CitiesScreen';
+import { GalleryScreen } from './routes/GalleryScreen';
 import { PlaceScreen } from './routes/PlaceScreen';
 import { ScratchScreen } from './routes/ScratchScreen';
 import { StoryboardScreen } from './routes/StoryboardScreen';
@@ -23,16 +24,40 @@ function breadcrumbFor(scope: Scope): { label: string; scope: Scope }[] {
       return [root];
     case 'city':
       return [root, { label: scope.cityId, scope }];
-    case 'agent':
-      return [root, { label: scope.cityId, scope: { kind: 'city', cityId: scope.cityId } }, { label: scope.agentId, scope }];
-    case 'place':
-      return [root, { label: scope.cityId, scope: { kind: 'city', cityId: scope.cityId } }, { label: scope.placeId, scope }];
-    case 'scratch':
-      return [root, { label: `SCRATCH · ${scope.boardId}`, scope }];
+    case 'agent': {
+      const originCrumbs = scope.from ? breadcrumbFor(scope.from) : [root, { label: scope.cityId, scope: { kind: 'city', cityId: scope.cityId } as Scope }];
+      return [...originCrumbs, { label: scope.agentId, scope }];
+    }
+    case 'place': {
+      const originCrumbs = scope.from ? breadcrumbFor(scope.from) : [root, { label: scope.cityId, scope: { kind: 'city', cityId: scope.cityId } as Scope }];
+      return [...originCrumbs, { label: scope.placeId, scope }];
+    }
+    case 'gallery':
+      return [root, { label: scope.cityId, scope: { kind: 'city', cityId: scope.cityId } }, { label: 'GALLERY', scope }];
+    case 'scratch': {
+      const originCrumbs = scope.from ? breadcrumbFor(scope.from) : [root];
+      return [...originCrumbs, { label: `SCRATCH · ${scope.boardId}`, scope }];
+    }
     case 'storyboard': {
       const originCrumbs = scope.from ? breadcrumbFor(scope.from) : [root];
       return [...originCrumbs, { label: `STORYBOARD · ${scope.storyboardId}`, scope }];
     }
+  }
+}
+
+// Which city (if any) the current scope belongs to -- drives the
+// header's "Gallery" button (enabled/target) below. `from` chains aren't
+// consulted here: the Gallery button always means "this screen's own
+// city," not wherever an agent/place happened to be opened from.
+function cityIdFor(scope: Scope): string | undefined {
+  switch (scope.kind) {
+    case 'city':
+    case 'agent':
+    case 'place':
+    case 'gallery':
+      return scope.cityId;
+    default:
+      return undefined;
   }
 }
 
@@ -96,10 +121,22 @@ function App() {
           </span>
         ))}
         <span className="breadcrumb-spacer" />
+        {(() => {
+          const cityId = cityIdFor(scope);
+          return (
+            <button
+              className="breadcrumb-btn"
+              disabled={!cityId || scope.kind === 'gallery'}
+              onClick={() => cityId && navigate({ kind: 'gallery', cityId })}
+            >
+              Gallery
+            </button>
+          );
+        })()}
         <button
           className="breadcrumb-btn"
           disabled={scope.kind === 'scratch'}
-          onClick={() => navigate({ kind: 'scratch', boardId: DEFAULT_SCRATCH_BOARD })}
+          onClick={() => navigate({ kind: 'scratch', boardId: DEFAULT_SCRATCH_BOARD, from: scope })}
         >
           Scratch
         </button>
@@ -110,8 +147,9 @@ function App() {
         {scope.kind === 'city' && <CityCanvas cityId={scope.cityId} />}
         {scope.kind === 'agent' && <AgentScreen cityId={scope.cityId} characterId={scope.agentId} />}
         {scope.kind === 'place' && <PlaceScreen cityId={scope.cityId} placeId={scope.placeId} />}
-        {scope.kind === 'scratch' && <ScratchScreen boardId={scope.boardId} />}
-        {scope.kind === 'storyboard' && <StoryboardScreen storyboardId={scope.storyboardId} />}
+        {scope.kind === 'gallery' && <GalleryScreen cityId={scope.cityId} />}
+        {scope.kind === 'scratch' && <ScratchScreen boardId={scope.boardId} from={scope.from} />}
+        {scope.kind === 'storyboard' && <StoryboardScreen storyboardId={scope.storyboardId} from={scope.from} />}
       </main>
 
       <JobStrip />

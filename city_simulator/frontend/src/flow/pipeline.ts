@@ -142,7 +142,15 @@ export function toPipelineRenderNode(gn: GraphNode, cb: PipelineCallbacks): Node
       id: gn.id,
       type: 'style',
       position: gn.position,
-      width: gn.width,
+      // A fixed width floor, unlike height (left to grow naturally with
+      // content) -- without this, a never-resized Style node shrink-to-
+      // fits its own content, and .style-ref-grid's `auto-fill` columns
+      // compute their "natural" width as if every reference-image
+      // thumbnail sat in one unbroken row (a CSS grid quirk: auto-fill
+      // inside a shrink-to-fit ancestor doesn't wrap), ballooning the
+      // whole node wider with every reference image added. A fixed width
+      // gives the grid something real to wrap columns within.
+      width: gn.width ?? 340,
       height: gn.height,
       data: { styleId: gn.data.styleId as string, onLoaded: cb.onStyleLoaded, onUpdate: cb.onStyleUpdate, onDelete: cb.onStyleDelete },
     };
@@ -158,7 +166,12 @@ export function toPipelineRenderNode(gn: GraphNode, cb: PipelineCallbacks): Node
       id: gn.id,
       type: 'storyboard',
       position: gn.position,
-      width: gn.width,
+      // Same fixed-width-floor fix as Style just above, and for the same
+      // reason -- this node can render a thumbnail grid of its own
+      // generated Frame images (StoryboardNode.tsx), which would balloon
+      // the node under shrink-to-fit exactly like Style's reference-image
+      // grid did.
+      width: gn.width ?? 340,
       height: gn.height,
       data: {
         shotCount: (gn.data.shotCount as number) ?? 0,

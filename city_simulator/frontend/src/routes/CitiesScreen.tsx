@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { history } from '../api/client';
 import type { CitySummary } from '../api/types';
+import { NewCityModal } from './NewCityModal';
 import { navigate } from './router';
 import { useJobStore } from '../state/jobStore';
 import './cities.css';
@@ -11,8 +12,8 @@ import './cities.css';
 // are index tiles: pick one to open, generate a new one, or delete one.
 export function CitiesScreen() {
   const [cities, setCities] = useState<CitySummary[] | null>(null);
-  const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [newCityModalOpen, setNewCityModalOpen] = useState(false);
   const historyStatus = useJobStore((s) => s.historyStatus);
 
   const load = useCallback(() => {
@@ -27,19 +28,6 @@ export function CitiesScreen() {
     prevPhase.current = historyStatus?.phase;
   }, [historyStatus?.phase, load]);
 
-  async function createCity() {
-    setPending(true);
-    setError(null);
-    try {
-      const res = await history.generate({});
-      if (!res.ok) setError(res.error ?? 'failed to start');
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setPending(false);
-    }
-  }
-
   async function removeCity(cityId: string) {
     try {
       const res = await history.deleteCityById(cityId);
@@ -50,18 +38,30 @@ export function CitiesScreen() {
     }
   }
 
-  const generating = pending || historyStatus?.phase === 'running';
+  const generating = historyStatus?.phase === 'running';
 
   if (cities === null) return <div className="canvas-empty">Loading…</div>;
 
   return (
     <div className="cities-screen">
       <div className="cities-toolbar">
-        <button className="node-run-btn" style={{ flex: 'none', padding: '8px 16px' }} disabled={generating} onClick={createCity}>
+        <button
+          className="node-run-btn"
+          style={{ flex: 'none', padding: '8px 16px' }}
+          disabled={generating}
+          onClick={() => setNewCityModalOpen(true)}
+        >
           {generating ? 'generating…' : '+ New City'}
         </button>
         {error && <span className="node-error-text">{error}</span>}
       </div>
+
+      {newCityModalOpen && (
+        <NewCityModal
+          onClose={() => setNewCityModalOpen(false)}
+          onStarted={() => setNewCityModalOpen(false)}
+        />
+      )}
 
       {cities.length === 0 ? (
         <div className="canvas-empty">No cities yet -- hit "+ New City" to generate one.</div>
@@ -83,7 +83,13 @@ export function CitiesScreen() {
                 <button className="node-run-btn" onClick={() => navigate({ kind: 'city', cityId: c.id })}>
                   open
                 </button>
-                <button className="node-run-btn" onClick={() => removeCity(c.id)}>
+                <button
+                  className="node-run-btn node-delete-btn"
+                  onClick={() =>
+                    window.confirm(`Permanently delete "${c.id}"? This removes every figure, place, agent, and generated media in it -- there is no undo.`) &&
+                    removeCity(c.id)
+                  }
+                >
                   delete
                 </button>
               </div>

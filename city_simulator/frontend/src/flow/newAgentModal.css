@@ -95,6 +95,20 @@
   gap: 10px;
 }
 
+.modal-checkbox-field {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.modal-checkbox-field input {
+  flex: none;
+}
+
+.modal-checkbox-field > span {
+  color: var(--text);
+}
+
 .modal-field-narrow {
   flex: 0 0 90px;
 }

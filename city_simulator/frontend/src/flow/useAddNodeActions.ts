@@ -125,7 +125,9 @@ export function useAddNodeActions({
         if (type === 'storyboard') {
           return [
             ...list,
-            { ...base, type, data: { shotCount: 0, contextAgentNames: [], contextPlaceNames: [], contextStyleNames: [], onExpand: pipeline.onExpandStoryboard } },
+            // width: 340 matches pipeline.ts's toPipelineRenderNode
+            // fallback -- see the comment there (same fix Style needed).
+            { ...base, type, width: 340, data: { shotCount: 0, contextAgentNames: [], contextPlaceNames: [], contextStyleNames: [], onExpand: pipeline.onExpandStoryboard } },
           ];
         }
         return [...list, { ...base, type, data: { prompt: '', onUpdate: pipeline.onVideoUpdate } }];
@@ -163,6 +165,11 @@ export function useAddNodeActions({
             id: newNodeId('style'),
             type: 'style',
             position: pos,
+            // Matches pipeline.ts's toPipelineRenderNode fallback -- a
+            // fixed width floor so .style-ref-grid's auto-fill columns
+            // have something to wrap within from the moment the node
+            // exists, not just after the next reload.
+            width: 340,
             data: { styleId: resolvedStyle.id, style: resolvedStyle, onLoaded: pipeline.onStyleLoaded, onUpdate: pipeline.onStyleUpdate, onDelete: pipeline.onStyleDelete },
           },
         ];

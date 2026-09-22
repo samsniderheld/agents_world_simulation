@@ -42,6 +42,7 @@ import { toFlowEdge, toGraphEdge } from './graphIds';
 import { reconcile } from './reconcile';
 import { scratchToGraphNode, toScratchRenderNode } from './scratchNodeKit';
 import { useAddNodeActions } from './useAddNodeActions';
+import { useHiddenEntities } from './useHiddenEntities';
 import { usePersistedGraph } from './usePersistedGraph';
 import { usePipelineCallbacks } from './usePipelineCallbacks';
 import { useStylesLibrary } from './useStylesLibrary';
@@ -97,6 +98,7 @@ function CanvasInner({ cityId, data, onDataRefresh }: { cityId: string; data: Hi
     [cityId],
   );
   const pipeline = usePipelineCallbacks(setNodes, setEdges, onExpandStoryboard);
+  const { isHidden } = useHiddenEntities(cityId);
   const { styles, refresh: refreshStyles, remove: removeStyle } = useStylesLibrary();
   const [newAgentModal, setNewAgentModal] = useState<{ position?: XYPosition } | null>(null);
   const { addToCanvas, addPipelineNode, addStyleNode, addNewAgent, placeAgentNode, addScratchNode } = useAddNodeActions({
@@ -202,12 +204,12 @@ function CanvasInner({ cityId, data, onDataRefresh }: { cityId: string; data: Hi
   const notOnCanvasAgents = (() => {
     if (!nodes) return [];
     const onCanvasIds = new Set(nodes.filter((n) => n.type === 'agent').map((n) => (n.data as { character: Character }).character.id));
-    return data.characters.filter((c) => !onCanvasIds.has(c.id));
+    return data.characters.filter((c) => !onCanvasIds.has(c.id) && !isHidden(c.id));
   })();
   const notOnCanvasLocations = (() => {
     if (!nodes) return [];
     const onCanvasIds = new Set(nodes.filter((n) => n.type === 'location').map((n) => (n.data as { place: Place }).place.id));
-    return data.places.filter((p) => !onCanvasIds.has(p.id));
+    return data.places.filter((p) => !onCanvasIds.has(p.id) && !isHidden(p.id));
   })();
 
   const onDragOver = useCallback((e: DragEvent) => {

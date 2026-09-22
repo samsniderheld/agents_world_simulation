@@ -31,6 +31,7 @@ import { reconcile } from './reconcile';
 import { navigate, type Scope } from '../routes/router';
 import { scratchToGraphNode, toScratchRenderNode } from './scratchNodeKit';
 import { useAddNodeActions } from './useAddNodeActions';
+import { useHiddenEntities } from './useHiddenEntities';
 import { usePersistedGraph } from './usePersistedGraph';
 import { usePipelineCallbacks } from './usePipelineCallbacks';
 import { useStylesLibrary } from './useStylesLibrary';
@@ -153,6 +154,7 @@ function CanvasInner({
     [cityId, entityId, scope],
   );
   const pipeline = usePipelineCallbacks(setNodes, setEdges, onExpandStoryboard);
+  const { isHidden } = useHiddenEntities(cityId);
   const { styles, refresh: refreshStyles, remove: removeStyle } = useStylesLibrary();
   const [newAgentModal, setNewAgentModal] = useState<{ position?: XYPosition } | null>(null);
   const { addToCanvas, addPipelineNode, addStyleNode, addNewAgent, placeAgentNode, addScratchNode } = useAddNodeActions({
@@ -284,12 +286,12 @@ function CanvasInner({
   const notOnCanvasAgents = (() => {
     if (!nodes || !cityData) return [];
     const onCanvasIds = new Set(nodes.filter((n) => n.type === 'agent').map((n) => (n.data as { character: Character }).character.id));
-    return cityData.characters.filter((c) => !onCanvasIds.has(c.id));
+    return cityData.characters.filter((c) => !onCanvasIds.has(c.id) && !isHidden(c.id));
   })();
   const notOnCanvasLocations = (() => {
     if (!nodes || !cityData) return [];
     const onCanvasIds = new Set(nodes.filter((n) => n.type === 'location').map((n) => (n.data as { place: Place }).place.id));
-    return cityData.places.filter((p) => !onCanvasIds.has(p.id));
+    return cityData.places.filter((p) => !onCanvasIds.has(p.id) && !isHidden(p.id));
   })();
 
   const addExistingMedia = useCallback(

@@ -27,8 +27,9 @@ import { enrichPipelineNodes, pipelineToGraphNode, toPipelineRenderNode } from '
 import { reconcile } from '../flow/reconcile';
 import { scratchToGraphNode, toScratchRenderNode } from '../flow/scratchNodeKit';
 import { DRAG_MIME, SideDrawer, type DrawerSection } from '../flow/SideDrawer';
-import { navigate } from './router';
+import { navigate, type Scope } from './router';
 import { useAddNodeActions } from '../flow/useAddNodeActions';
+import { useHiddenEntities } from '../flow/useHiddenEntities';
 import { usePersistedGraph } from '../flow/usePersistedGraph';
 import { usePipelineCallbacks } from '../flow/usePipelineCallbacks';
 import { useStylesLibrary } from '../flow/useStylesLibrary';
@@ -57,7 +58,19 @@ const SCRATCH_TYPES = new Set(['scratch-image', 'scratch-music']);
 // still reference whichever city happens to be active, same as opening
 // any other tab would show. If nothing's ever been generated, the
 // Agents/Locations sections are just honestly empty.
-function ScratchCanvasInner({ boardId, cityData, onCityDataRefresh }: { boardId: string; cityData: HistoryData | null; onCityDataRefresh?: () => void }) {
+function ScratchCanvasInner({
+  boardId,
+  from,
+  cityData,
+  activeCityId,
+  onCityDataRefresh,
+}: {
+  boardId: string;
+  from?: Scope;
+  cityData: HistoryData | null;
+  activeCityId?: string;
+  onCityDataRefresh?: () => void;
+}) {
   const { doc, save } = usePersistedGraph(`scratch:${boardId}`);
   const { screenToFlowPosition } = useReactFlow();
   const [nodes, setNodes] = useState<Node[] | null>(null);
@@ -80,10 +93,11 @@ function ScratchCanvasInner({ boardId, cityData, onCityDataRefresh }: { boardId:
   }, []);
 
   const onExpandStoryboard = useCallback(
-    (storyboardId: string) => navigate({ kind: 'storyboard', storyboardId, from: { kind: 'scratch', boardId } }),
-    [boardId],
+    (storyboardId: string) => navigate({ kind: 'storyboard', storyboardId, from: { kind: 'scratch', boardId, from } }),
+    [boardId, from],
   );
   const pipeline = usePipelineCallbacks(setNodes, setEdges, onExpandStoryboard);
+  const { isHidden } = useHiddenEntities(activeCityId);
   const { styles, refresh: refreshStyles, remove: removeStyle } = useStylesLibrary();
   const [newAgentModal, setNewAgentModal] = useState<{ position?: XYPosition } | null>(null);
   const { addToCanvas, addPipelineNode, addStyleNode, addNewAgent, placeAgentNode, addScratchNode } = useAddNodeActions({
@@ -171,12 +185,12 @@ function ScratchCanvasInner({ boardId, cityData, onCityDataRefresh }: { boardId:
   const notOnCanvasAgents = (() => {
     if (!nodes || !cityData) return [];
     const onCanvasIds = new Set(nodes.filter((n) => n.type === 'agent').map((n) => (n.data as { character: Character }).character.id));
-    return cityData.characters.filter((c) => !onCanvasIds.has(c.id));
+    return cityData.characters.filter((c) => !onCanvasIds.has(c.id) && !isHidden(c.id));
   })();
   const notOnCanvasLocations = (() => {
     if (!nodes || !cityData) return [];
     const onCanvasIds = new Set(nodes.filter((n) => n.type === 'location').map((n) => (n.data as { place: Place }).place.id));
-    return cityData.places.filter((p) => !onCanvasIds.has(p.id));
+    return cityData.places.filter((p) => !onCanvasIds.has(p.id) && !isHidden(p.id));
   })();
 
   const onDragOver = useCallback((e: DragEvent) => {
@@ -288,18 +302,27 @@ function ScratchCanvasInner({ boardId, cityData, onCityDataRefresh }: { boardId:
   );
 }
 
-export function ScratchScreen({ boardId }: { boardId: string }) {
+export function ScratchScreen({ boardId, from }: { boardId: string; from?: Scope }) {
   const [cityData, setCityData] = useState<HistoryData | null>(null);
+  // HistoryData itself carries no city id (confirmed against api/types.ts)
+  // -- resolved separately via the cities list's own `is_active` flag, so
+  // useHiddenEntities can key the same hidden-set the Gallery/CityCanvas/
+  // EntityCanvas use, rather than silently no-op'ing here.
+  const [activeCityId, setActiveCityId] = useState<string | undefined>(undefined);
 
   const refreshCityData = useCallback(() => {
     history.data().then(setCityData).catch(() => setCityData(null));
+    history
+      .listCities()
+      .then((res) => setActiveCityId(res.cities.find((c) => c.is_active)?.id))
+      .catch(() => setActiveCityId(undefined));
   }, []);
 
   useEffect(refreshCityData, [refreshCityData]);
 
   return (
     <ReactFlowProvider>
-      <ScratchCanvasInner boardId={boardId} cityData={cityData} onCityDataRefresh={refreshCityData} />
+      <ScratchCanvasInner boardId={boardId} from={from} cityData={cityData} activeCityId={activeCityId} onCityDataRefresh={refreshCityData} />
     </ReactFlowProvider>
   );
 }

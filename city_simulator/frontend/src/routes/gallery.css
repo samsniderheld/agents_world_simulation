@@ -1,0 +1,107 @@
+.gallery-screen {
+  height: 100%;
+  overflow-y: auto;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.gallery-section-title {
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--node-text-dim);
+  margin: 0 0 14px;
+}
+
+.gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+.gallery-card {
+  position: relative;
+  background: var(--node-body);
+  border: 1px solid var(--node-border);
+  border-radius: var(--node-radius);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.gallery-card:hover {
+  border-color: var(--node-running);
+}
+
+.gallery-card.is-hidden {
+  opacity: 0.45;
+}
+
+.gallery-card-thumb {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: 3px;
+  border: 1px solid var(--node-border);
+  background: var(--panel);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--mono);
+  font-size: 22px;
+  color: var(--node-text-dim);
+}
+
+.gallery-card-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.gallery-card-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--node-text);
+  line-height: 1.3;
+}
+
+.gallery-card-subtitle {
+  font-size: 11px;
+  color: var(--node-text-dim);
+}
+
+.gallery-card-grounding {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--node-text-dim);
+}
+
+.gallery-card-toggle {
+  align-self: flex-start;
+  background: transparent;
+  border: 1px solid var(--node-border);
+  color: var(--node-text-dim);
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 3px 7px;
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.gallery-card-toggle:hover {
+  border-color: var(--node-error);
+  color: var(--node-error);
+}
+
+.gallery-card.is-hidden .gallery-card-toggle {
+  border-color: var(--node-running);
+  color: var(--node-running);
+}

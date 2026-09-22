@@ -235,15 +235,38 @@ export function usePipelineCallbacks(
           id: storyboardId,
           type: 'storyboard',
           position,
+          // Matches pipeline.ts's toPipelineRenderNode fallback -- fixes
+          // the node's width from the moment it exists, not just after
+          // the next reload (same fix Style's own live-add path needed).
+          width: 340,
           data: { shotCount: shots.length, contextAgentNames: agentNames, contextPlaceNames: placeNames, contextStyleNames: styleNames, onExpand: onExpandStoryboard },
         };
         return [...list, storyboardNode];
       });
 
-      setEdges((prevEdges) => [
-        ...prevEdges,
-        { id: `e:${treatmentNodeId}->${storyboardId}`, source: treatmentNodeId, sourceHandle: 'shots:out', target: storyboardId, targetHandle: 'shots:in' },
-      ]);
+      // Carries the Treatment's own agent:in/place:in/style:in wiring
+      // through onto the *outer* canvas too, not just the seeded inner
+      // one -- whatever Agent/Location/Style node already feeds the
+      // Treatment gets the exact same edge redrawn straight to the new
+      // Storyboard node, so the carry-through is visible right where the
+      // Treatment lives, not just discoverable by drilling in.
+      setEdges((prevEdges) => {
+        const contextHandles = new Set(['agent:in', 'place:in', 'style:in']);
+        const carryEdges = prevEdges
+          .filter((e) => e.target === treatmentNodeId && e.targetHandle && contextHandles.has(e.targetHandle))
+          .map((e) => ({
+            id: `e:${e.source}->${storyboardId}:${e.targetHandle}`,
+            source: e.source,
+            sourceHandle: e.sourceHandle,
+            target: storyboardId,
+            targetHandle: e.targetHandle,
+          }));
+        return [
+          ...prevEdges,
+          { id: `e:${treatmentNodeId}->${storyboardId}`, source: treatmentNodeId, sourceHandle: 'shots:out', target: storyboardId, targetHandle: 'shots:in' },
+          ...carryEdges,
+        ];
+      });
     },
     [setNodes, setEdges, onExpandStoryboard],
   );
