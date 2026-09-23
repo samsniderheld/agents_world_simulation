@@ -2,7 +2,7 @@
 
 Procedurally generates a ~330-year history (1624 Dutch colonization → the
 late 1950s) for a single NYC-inspired city: a cast of historical figures,
-a catalog of places they found/destroy/rename/fight over, and a handful of
+a catalog of places they found/destroy/rename/fight over, and (optionally)
 present-day residents grounded in all of it. Entry point:
 `generate.run_history()` (called by `jobs.py`'s
 background thread; `python3 -m history.generate` runs the same thing as a
@@ -312,11 +312,14 @@ run_history()
   │
   ├─ generate()                    → figures, places, events (above)
   │
-  ├─ characters.generate_characters(places, figures, count=10)
-  │     for each of 10 residents: pick a place (weighted toward one with
-  │     more recorded history), then either ask the LLM to invent someone
+  ├─ characters.generate_characters(places, figures, count=characters_count)
+  │     for each resident: pick a place (weighted toward one with more
+  │     recorded history), then either ask the LLM to invent someone
   │     grounded in that place's founder + a real anecdote from its
-  │     history, or fall back to a template-driven bio from characters.yaml
+  │     history, or fall back to a template-driven bio from characters.yaml.
+  │     The web app passes characters_count=0 and adds residents on demand
+  │     instead (POST /api/history/characters/preview + /characters, the
+  │     "+ New agent" modal); the standalone CLI still defaults to 10.
   │
   └─ summary.generate_summary(figures, places, events, eras)
         one LLM call over the *entire* chronological event transcript,

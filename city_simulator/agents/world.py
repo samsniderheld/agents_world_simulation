@@ -37,7 +37,8 @@ _DIALOGUE_HINTS = ("talk", "chat", "greet", "ask", "convers", "say hi", "wave")
 class World:
     def __init__(self, agents: list[Agent], start_time: datetime.datetime = None,
                  tick_sleep: int = 0, verbose: bool = False,
-                 stop_flag: threading.Event = None, known_places: list = None):
+                 stop_flag: threading.Event = None, known_places: list = None,
+                 anchored_agents: set = None, directive: str = None):
         self.agents = agents
         self.start_time = start_time or datetime.datetime(2026, 8, 24, 6, 0)
         self.tick = 0
@@ -45,6 +46,17 @@ class World:
         self.verbose = verbose
         self.stop_flag = stop_flag or threading.Event()
         self.known_places = known_places or []
+        # Free-text scene guidance from the Simulation node's own text
+        # input -- passed straight through to every plan/decompose/react/
+        # dialogue call this run makes (see textutil.directive_block).
+        self.directive = directive
+        # Names of agents who must stay exactly where they were placed for
+        # the whole run (simulation.py's convene_at) -- decompose()'s WHERE
+        # prompt is only ever skipped by handing it an empty/single-item
+        # known_places (see planning._where_prompt_block's own early-out),
+        # so an anchored agent simply never gets offered anywhere else to
+        # be, rather than being asked and trusted to say no.
+        self.anchored_agents = anchored_agents or set()
         self.agent_colors = display.agent_colors([a.name for a in agents])
         self.log: list[str] = []
         self._log_lock = threading.Lock()
@@ -79,7 +91,7 @@ class World:
         history: list[str] = []
         speaker, listener = a, b
         for _ in range(max_turns):
-            line = speaker.converse_turn(listener, history, self.tick)
+            line = speaker.converse_turn(listener, history, self.tick, directive=self.directive)
             history.append(f"{speaker.name}: {line}")
             self._say(f"{speaker.name}: {line}")
             recorder.log("dialogue", self.tick, agent=speaker.name, text=line, listener=listener.name)
@@ -103,8 +115,9 @@ class World:
         thread alongside every other acting agent's, see class docstring."""
         other_names = [a.name for a in self.agents if a is not agent]
         color = self.agent_colors[agent.name]
-        planning.next_action(agent, self.tick, known_names=other_names, known_places=self.known_places,
-                              verbose=self.verbose, color=color)
+        known_places = [] if agent.name in self.anchored_agents else self.known_places
+        planning.next_action(agent, self.tick, known_names=other_names, known_places=known_places,
+                              verbose=self.verbose, color=color, directive=self.directive)
         self._say(f"{agent.name} ({agent.location}): {agent.current_action}")
         recorder.log("action", self.tick, agent=agent.name,
                      text=agent.current_action, location=agent.location,
@@ -142,7 +155,7 @@ class World:
             observation = f"{b.name} is nearby, currently: {b.current_action}."
             other_names = [x.name for x in self.agents if x is not a]
             reacted = a.react(observation, self.tick, known_names=other_names,
-                               verbose=self.verbose, color=self.agent_colors[a.name])
+                               verbose=self.verbose, color=self.agent_colors[a.name], directive=self.directive)
             if reacted and any(hint in a.current_action.lower() for hint in _DIALOGUE_HINTS):
                 self._run_conversation(a, b)
                 already_talked.add(a)

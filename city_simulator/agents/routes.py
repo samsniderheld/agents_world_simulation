@@ -53,6 +53,23 @@ def events():
 @bp.post("/run")
 def run():
     body = request.get_json(silent=True) or {}
+
+    # "convene" (the node-based UI's Location -> Simulation edge) makes
+    # every selected agent start this run at `place_id` instead of their
+    # own grounding place -- resolved to a place *name* here, since
+    # world.py's co-presence check is plain location-string equality
+    # (agents/world.py), not an id lookup. "grounded" (the default) leaves
+    # each agent's own location untouched.
+    place_id = body.get("place_id")
+    location_mode = body.get("location_mode") or "grounded"
+    convene_at = None
+    if place_id and location_mode == "convene":
+        city = citystate.get()
+        place = next((p for p in (city or {}).get("places") or [] if p["id"] == place_id), None)
+        if place is None:
+            return json_response({"ok": False, "error": f"no such place: {place_id!r}"}, status=400)
+        convene_at = place["name"]
+
     params = {
         "ticks": int(body.get("ticks", 8)),
         "provider": body.get("provider") or None,
@@ -62,6 +79,10 @@ def run():
         "context_tokens": body.get("context_tokens") or None,
         "agent_names": body.get("agent_names") or None,
         "verbose": bool(body.get("verbose", False)),
+        "convene_at": convene_at,
+        # Simulation node's free-text "guide how the characters are
+        # interacting" field -- see simulation.run()'s docstring.
+        "directive": (body.get("directive") or "").strip() or None,
     }
     ok, error = jobs.start(params)
     return json_response({"ok": ok, "error": error}, status=200 if ok else 409)
@@ -94,19 +115,62 @@ def generate_treatment_for_agent():
 
     latest = runs[-1]
     agent_records = {c["name"]: citystate.get_agent(c["id"]) for c in city.get("characters", [])}
-    log, agent_names = treatment.build_transcript(agent_records, latest.get("started_at"))
+    log, agent_names, locations = treatment.build_transcript(agent_records, latest.get("started_at"))
+
+    # Resolve each bare location name build_transcript() found in the
+    # transcript against its real place record, for its `architecture`
+    # text -- an event only ever stores the place *name* (see recorder.py's
+    # schema), so this is the one spot that can actually reach the visual
+    # description treatment.generate_treatment() needs to stop inventing
+    # scenery from the name alone. `place_ids` -- the Treatment node's own
+    # place:in port (frontend/src/flow/nodes/TreatmentNode.tsx) -- adds any
+    # place the user explicitly pointed at, even one the transcript itself
+    # never visited, without duplicating one already found in the log.
+    places_by_name = {p["name"]: p for p in city.get("places", []) if p.get("name")}
+    places_by_id = {p["id"]: p for p in city.get("places", []) if p.get("id")}
+    location_details = [
+        {"name": name, "architecture": places_by_name[name].get("architecture", "")}
+        for name in locations if name in places_by_name
+    ]
+    seen_place_names = {loc["name"] for loc in location_details}
+    for place_id in body.get("place_ids") or []:
+        place = places_by_id.get(place_id)
+        if place and place.get("name") and place["name"] not in seen_place_names:
+            location_details.append({"name": place["name"], "architecture": place.get("architecture", "")})
+            seen_place_names.add(place["name"])
+
+    # Same idea for cast -- every transcript participant's real bio (which
+    # includes physical description/wardrobe, see history/characters.py),
+    # plus `agent_ids` for any character the user explicitly wired in via
+    # the Treatment node's agent:in port even if they don't appear in the
+    # transcript at all (e.g. someone being described but not present).
+    characters_by_name = {c["name"]: c for c in city.get("characters", []) if c.get("name")}
+    characters_by_id = {c["id"]: c for c in city.get("characters", []) if c.get("id")}
+    cast_details = [
+        {"name": name, "bio": characters_by_name[name].get("bio", "")}
+        for name in agent_names if name in characters_by_name
+    ]
+    seen_cast_names = {c["name"] for c in cast_details}
+    for extra_agent_id in body.get("agent_ids") or []:
+        character = characters_by_id.get(extra_agent_id)
+        if character and character.get("name") and character["name"] not in seen_cast_names:
+            cast_details.append({"name": character["name"], "bio": character.get("bio", "")})
+            seen_cast_names.add(character["name"])
 
     provider = body.get("provider") or None
     model = body.get("model") or None
-    text = treatment.generate_treatment(log, agent_names, model=model, provider=provider)
+    text = treatment.generate_treatment(
+        log, agent_names, model=model, provider=provider,
+        location_details=location_details, cast_details=cast_details,
+    )
     entry = citystate.add_treatment(agent_id, text, run_started_at=latest.get("started_at"))
     return json_response({"treatment": entry})
 
 
 @bp.get("/treatment/shots")
 def treatment_shots():
-    """Parses whichever treatment text the Director tab currently has
-    selected into its individual storyboard shots -- a query param, not
+    """Parses the treatment text a Treatment node currently holds into its
+    individual storyboard shots -- a query param, not
     tied to a stored treatment id, since treatment entries don't have one
     (see citystate.store.add_treatment's schema) and this needs to work
     for a just-generated treatment too, before any re-fetch from disk."""

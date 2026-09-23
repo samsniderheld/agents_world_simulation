@@ -4,7 +4,7 @@ from . import display
 from . import llm
 from . import recorder
 from .memory import MemoryStream
-from .textutil import cast_constraint, first_spoken_line
+from .textutil import cast_constraint, directive_block, first_spoken_line
 
 
 class Agent:
@@ -25,10 +25,22 @@ class Agent:
         self.chatting_with: "Agent | None" = None
 
     def identity_summary(self) -> str:
+        # self.location matters here, not just as event metadata -- this
+        # string feeds every LLM call an agent makes (daily plan, decompose,
+        # react, dialogue), and until now none of them ever mentioned where
+        # the agent currently is. That was invisible for an ordinary run
+        # (an agent's bio-grounded `currently` and `location` already imply
+        # the same place), but a convened run intentionally puts an agent
+        # somewhere their bio has nothing to say about -- without this line,
+        # the model had zero signal of that and just narrated `currently`'s
+        # habitual routine as if they were still wherever that normally
+        # happens, producing text totally disconnected from the tagged
+        # location.
         return (
             f"{self.name} is a {self.age}-year-old. "
             f"Personality: {self.traits}. "
-            f"Currently: {self.currently}."
+            f"Currently: {self.currently}. "
+            f"Right now, {self.name} is at {self.location}."
         )
 
     def perceive(self, observation: str, tick: int):
@@ -36,7 +48,7 @@ class Agent:
         self.memory.add(observation, kind="observation", tick=tick)
 
     def react(self, observation: str, tick: int, known_names: list = None,
-              verbose: bool = False, color: str = "") -> bool:
+              verbose: bool = False, color: str = "", directive: str = None) -> bool:
         """Decide whether `observation` warrants deviating from the current
         plan. Returns True if the agent should react (and updates
         current_action accordingly); False if it just continues its plan.
@@ -44,7 +56,8 @@ class Agent:
         doesn't invent a new named character. When `verbose`, prints the
         observation and the resulting decision to the terminal right as
         each is generated (see display.py); `color` is this agent's
-        assigned display color.
+        assigned display color. `directive` is the Simulation node's
+        free-text scene guidance, if any (see textutil.directive_block).
         """
         if verbose:
             print(display.observation_line(self.name, color, observation))
@@ -55,7 +68,8 @@ class Agent:
 
         prompt = (
             f"{self.identity_summary()}\n\n"
-            f"{cast_constraint(self.name, known_names)}\n\n"
+            f"{cast_constraint(self.name, known_names)}\n"
+            f"{directive_block(directive)}\n"
             f"Relevant memories:\n{memory_text}\n\n"
             f"{self.name}'s current planned action: {self.current_action}\n"
             f"New observation: {observation}\n\n"
@@ -85,15 +99,20 @@ class Agent:
         recorder.log("continue", tick, agent=self.name)
         return False
 
-    def converse_turn(self, other: "Agent", history: list, tick: int) -> str:
-        """Generate this agent's next line in an ongoing conversation."""
+    def converse_turn(self, other: "Agent", history: list, tick: int, directive: str = None) -> str:
+        """Generate this agent's next line in an ongoing conversation.
+        `directive` is the Simulation node's free-text scene guidance, if
+        any (see textutil.directive_block) -- dialogue is the single
+        clearest place a user's "guide how they're interacting" note
+        should actually land."""
         focal = f"a conversation with {other.name}"
         memories = self.memory.retrieve(f"{other.name}: {focal}", tick, k=5)
         memory_text = "\n".join(f"- {m.description}" for m in memories) or "(none yet)"
         convo_text = "\n".join(history) or "(conversation just started)"
 
         prompt = (
-            f"{self.identity_summary()}\n\n"
+            f"{self.identity_summary()}\n"
+            f"{directive_block(directive)}\n"
             f"What {self.name} remembers about {other.name} and related things:\n{memory_text}\n\n"
             f"Conversation so far:\n{convo_text}\n\n"
             f"{self.name} is speaking directly to {other.name} right now, face to "

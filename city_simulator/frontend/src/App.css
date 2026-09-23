@@ -1,0 +1,118 @@
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.breadcrumb-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+  flex: none;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.breadcrumb-segment {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.breadcrumb-sep {
+  color: var(--text-faint);
+}
+
+.breadcrumb-spacer {
+  flex: 1;
+}
+
+.breadcrumb-btn {
+  background: transparent;
+  border: none;
+  padding: 2px 4px;
+  color: var(--text-dim);
+  cursor: pointer;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+}
+
+.breadcrumb-btn:hover:not(:disabled) {
+  color: var(--text);
+}
+
+.breadcrumb-btn:disabled {
+  color: var(--accent);
+  cursor: default;
+}
+
+.app-main {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+
+.scope-stub {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 8px;
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+.scope-stub-hint {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-faint);
+}
+
+.job-strip {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.job-strip-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: var(--node-body);
+  border: 1px solid var(--node-running);
+  border-radius: var(--node-radius);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--node-text);
+}
+
+.job-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--node-running);
+  animation: job-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes job-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}

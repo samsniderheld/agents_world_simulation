@@ -1,4 +1,4 @@
-"""Local file storage for the Visuals tab -- uploaded starting images and
+"""Local file storage for visuals/ -- uploaded starting images and
 downloaded generation results both end up here (under data/uploads/ and
 data/outputs/ respectively), named by uuid so concurrent/repeat requests
 never collide. Kept provider-agnostic on purpose: any Provider

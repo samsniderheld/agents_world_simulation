@@ -1,0 +1,316 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { DragEvent } from 'react';
+import type { Connection, Edge, Node, XYPosition } from '@xyflow/react';
+import { addEdge, applyEdgeChanges, applyNodeChanges, Background, BackgroundVariant, Controls, MiniMap, ReactFlow, ReactFlowProvider, useReactFlow } from '@xyflow/react';
+import '@xyflow/react/dist/style.css';
+import { history } from '../api/client';
+import type { Character, GraphNode, HistoryData, Place } from '../api/types';
+import '../flow/canvas.css';
+import { isValidConnection as checkValidConnection } from '../flow/edgeRules';
+import { entityToGraphNode, toEntityRenderNode } from '../flow/entityNodeKit';
+import { toFlowEdge, toGraphEdge } from '../flow/graphIds';
+import { NewAgentModal } from '../flow/NewAgentModal';
+import { miniMapNodeColor } from '../flow/miniMapColor';
+import { AgentNode } from '../flow/nodes/AgentNode';
+import { FrameNode } from '../flow/nodes/FrameNode';
+import { LocationNode } from '../flow/nodes/LocationNode';
+import { MissingNode } from '../flow/nodes/MissingNode';
+import { ScratchImageNode, type ScratchImageNodeData } from '../flow/nodes/ScratchImageNode';
+import { ScratchMusicNode, type ScratchMusicNodeData } from '../flow/nodes/ScratchMusicNode';
+import { SimulationNode } from '../flow/nodes/SimulationNode';
+import { StoryboardNode } from '../flow/nodes/StoryboardNode';
+import { StyleNode } from '../flow/nodes/StyleNode';
+import { TextViewerNode } from '../flow/nodes/TextViewerNode';
+import { TreatmentNode } from '../flow/nodes/TreatmentNode';
+import { VideoNode } from '../flow/nodes/VideoNode';
+import { enrichPipelineNodes, pipelineToGraphNode, toPipelineRenderNode } from '../flow/pipeline';
+import { reconcile } from '../flow/reconcile';
+import { scratchToGraphNode, toScratchRenderNode } from '../flow/scratchNodeKit';
+import { DRAG_MIME, SideDrawer, type DrawerSection } from '../flow/SideDrawer';
+import { navigate, type Scope } from './router';
+import { useAddNodeActions } from '../flow/useAddNodeActions';
+import { useHiddenEntities } from '../flow/useHiddenEntities';
+import { usePersistedGraph } from '../flow/usePersistedGraph';
+import { usePipelineCallbacks } from '../flow/usePipelineCallbacks';
+import { useStylesLibrary } from '../flow/useStylesLibrary';
+
+const nodeTypes = {
+  agent: AgentNode,
+  location: LocationNode,
+  missing: MissingNode,
+  sim: SimulationNode,
+  treatment: TreatmentNode,
+  frame: FrameNode,
+  video: VideoNode,
+  style: StyleNode,
+  storyboard: StoryboardNode,
+  'text-viewer': TextViewerNode,
+  'scratch-image': ScratchImageNode,
+  'scratch-music': ScratchMusicNode,
+};
+
+const PIPELINE_TYPES = new Set(['sim', 'treatment', 'frame', 'video', 'style', 'storyboard', 'text-viewer']);
+const SCRATCH_TYPES = new Set(['scratch-image', 'scratch-music']);
+
+// A Storyboard's own inner canvas -- ungrounded like a Scratch board (no
+// owning agent/place), but seeded at creation with Agent/Location
+// reference nodes and one Frame per shot (see usePipelineCallbacks.ts's
+// onCreateStoryboard). Modeled directly on ScratchScreen.tsx: same
+// best-effort active-city fetch (for Agent/Location context beyond
+// whatever got carried through), same full palette.
+function StoryboardCanvasInner({
+  storyboardId,
+  from,
+  cityData,
+  activeCityId,
+  onCityDataRefresh,
+}: {
+  storyboardId: string;
+  from?: Scope;
+  cityData: HistoryData | null;
+  activeCityId?: string;
+  onCityDataRefresh?: () => void;
+}) {
+  const { doc, save } = usePersistedGraph(storyboardId);
+  const { screenToFlowPosition } = useReactFlow();
+  const [nodes, setNodes] = useState<Node[] | null>(null);
+  const [edges, setEdges] = useState<Edge[]>([]);
+  const initializedFor = useRef<string | null>(null);
+
+  const onImageUpdate = useCallback((nodeId: string, patch: Partial<ScratchImageNodeData>) => {
+    setNodes((prev) => (prev ? prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, ...patch } } : n)) : prev));
+  }, []);
+  const onMusicUpdate = useCallback((nodeId: string, patch: Partial<ScratchMusicNodeData>) => {
+    setNodes((prev) => (prev ? prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, ...patch } } : n)) : prev));
+  }, []);
+  const noExpand = useCallback(() => {}, []);
+  const onRemoveMissing = useCallback((nodeId: string) => {
+    setNodes((prev) => (prev ? prev.filter((n) => n.id !== nodeId) : prev));
+    setEdges((prev) => prev.filter((e) => e.source !== nodeId && e.target !== nodeId));
+  }, []);
+  const onExpandStoryboard = useCallback(
+    (id: string) => navigate({ kind: 'storyboard', storyboardId: id, from: { kind: 'storyboard', storyboardId, from } }),
+    [storyboardId, from],
+  );
+
+  const pipeline = usePipelineCallbacks(setNodes, setEdges, onExpandStoryboard);
+  const { isHidden } = useHiddenEntities(activeCityId);
+  const { styles, refresh: refreshStyles, remove: removeStyle } = useStylesLibrary();
+  const [newAgentModal, setNewAgentModal] = useState<{ position?: XYPosition } | null>(null);
+  const { addToCanvas, addPipelineNode, addStyleNode, addNewAgent, placeAgentNode, addScratchNode } = useAddNodeActions({
+    data: cityData,
+    setNodes,
+    onExpandAgent: noExpand,
+    onExpandPlace: noExpand,
+    onRemoveMissing,
+    onDataRefresh: onCityDataRefresh,
+    onStyleCreated: refreshStyles,
+    onOpenNewAgentModal: (position) => setNewAgentModal({ position }),
+    pipeline,
+    onImageUpdate,
+    onMusicUpdate,
+  });
+
+  useEffect(() => {
+    if (!doc) return;
+    const agentIds = cityData?.characters.map((c) => c.id) ?? [];
+    const placeIds = cityData?.places.map((p) => p.id) ?? [];
+    const key = `${doc.rev}:${cityData?.generated_at ?? 'none'}`;
+    if (initializedFor.current === key && nodes) return;
+    initializedFor.current = key;
+
+    const agentRecon = reconcile(doc.nodes.filter((n) => n.type === 'agent'), agentIds, (n) => n.data.characterId as string);
+    const placeRecon = reconcile(doc.nodes.filter((n) => n.type === 'location'), placeIds, (n) => n.data.placeId as string);
+    const alreadyMissing = doc.nodes.filter((n) => n.type === 'missing');
+    const danglingAsMissing: GraphNode[] = [...agentRecon.missing, ...placeRecon.missing].map((n) => ({
+      id: n.id,
+      type: 'missing',
+      position: n.position,
+      data: { entityId: (n.data.characterId ?? n.data.placeId) as string },
+    }));
+    const builtEntity = cityData
+      ? [...agentRecon.present, ...placeRecon.present, ...alreadyMissing, ...danglingAsMissing]
+          .map((gn) => toEntityRenderNode(gn, cityData, noExpand, noExpand, onRemoveMissing))
+          .filter((n): n is Node => n !== null)
+      : [];
+
+    const pipelineGraphNodes = doc.nodes.filter((n) => PIPELINE_TYPES.has(n.type));
+    const builtPipeline = pipelineGraphNodes.map((gn) => toPipelineRenderNode(gn, pipeline)).filter((n): n is Node => n !== null);
+
+    const scratchGraphNodes = doc.nodes.filter((n) => SCRATCH_TYPES.has(n.type));
+    const builtScratch = scratchGraphNodes.map((gn) => toScratchRenderNode(gn, onImageUpdate, onMusicUpdate)).filter((n): n is Node => n !== null);
+
+    const allBuilt = [...builtEntity, ...builtPipeline, ...builtScratch];
+    const nodeIds = new Set(allBuilt.map((n) => n.id));
+    setNodes(allBuilt);
+    setEdges(doc.edges.filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target)).map(toFlowEdge));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [doc, cityData]);
+
+  useEffect(() => {
+    if (!nodes) return;
+    const ids = new Set(nodes.map((n) => n.id));
+    setEdges((prev) => prev.filter((e) => ids.has(e.source) && ids.has(e.target)));
+  }, [nodes]);
+
+  useEffect(() => {
+    if (nodes) {
+      const graphNodes = nodes.map((n) => entityToGraphNode(n) ?? pipelineToGraphNode(n) ?? scratchToGraphNode(n)).filter((gn): gn is GraphNode => gn !== null);
+      save(graphNodes, edges.map(toGraphEdge));
+    }
+  }, [nodes, edges, save]);
+
+  const onNodesChange = useCallback((changes: Parameters<typeof applyNodeChanges>[0]) => {
+    setNodes((nds) => (nds ? applyNodeChanges(changes, nds) : nds));
+  }, []);
+  const onEdgesChange = useCallback((changes: Parameters<typeof applyEdgeChanges>[0]) => {
+    setEdges((eds) => applyEdgeChanges(changes, eds));
+  }, []);
+  const isValidConnection = useCallback((c: Edge | Connection) => checkValidConnection(c.sourceHandle, c.targetHandle), []);
+  const onConnect = useCallback((c: Connection) => {
+    if (!checkValidConnection(c.sourceHandle, c.targetHandle)) return;
+    setEdges((eds) => addEdge(c, eds));
+  }, []);
+
+  const notOnCanvasAgents = (() => {
+    if (!nodes || !cityData) return [];
+    const onCanvasIds = new Set(nodes.filter((n) => n.type === 'agent').map((n) => (n.data as { character: Character }).character.id));
+    return cityData.characters.filter((c) => !onCanvasIds.has(c.id) && !isHidden(c.id));
+  })();
+  const notOnCanvasLocations = (() => {
+    if (!nodes || !cityData) return [];
+    const onCanvasIds = new Set(nodes.filter((n) => n.type === 'location').map((n) => (n.data as { place: Place }).place.id));
+    return cityData.places.filter((p) => !onCanvasIds.has(p.id) && !isHidden(p.id));
+  })();
+
+  const onDragOver = useCallback((e: DragEvent) => {
+    if (!e.dataTransfer.types.includes(DRAG_MIME)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  }, []);
+
+  const onDrop = useCallback(
+    (e: DragEvent) => {
+      const payload = e.dataTransfer.getData(DRAG_MIME);
+      if (!payload) return;
+      e.preventDefault();
+      const position = screenToFlowPosition({ x: e.clientX, y: e.clientY });
+      const [kind, ...rest] = payload.split(':');
+      if (kind === 'scratch') addScratchNode(rest[0] as 'scratch-image' | 'scratch-music', position);
+      else if (kind === 'style' && rest[0] === 'new') addStyleNode(position);
+      else if (kind === 'style') addStyleNode(position, styles.find((s) => s.id === rest[0]));
+      else if (kind === 'pipeline') addPipelineNode(rest[0] as 'sim' | 'treatment' | 'video' | 'text-viewer' | 'frame' | 'storyboard', position);
+      else if (kind === 'agent' && rest[0] === 'new') addNewAgent(position);
+      else if (kind === 'agent') addToCanvas({ id: rest[0], kind: 'agent' }, position);
+      else if (kind === 'location') addToCanvas({ id: rest[0], kind: 'location' }, position);
+    },
+    [screenToFlowPosition, addScratchNode, addStyleNode, addPipelineNode, addNewAgent, addToCanvas, styles],
+  );
+
+  if (!nodes) return <div className="canvas-empty">Loading canvas…</div>;
+
+  const renderNodes = cityData ? enrichPipelineNodes(nodes, edges, cityData) : nodes;
+
+  const sections: DrawerSection[] = [
+    {
+      id: 'nodes',
+      label: 'Nodes',
+      items: [
+        { id: 'image', label: '+ Image', dragPayload: 'scratch:scratch-image', onAdd: () => addScratchNode('scratch-image') },
+        { id: 'music', label: '+ Music', dragPayload: 'scratch:scratch-music', onAdd: () => addScratchNode('scratch-music') },
+        { id: 'sim', label: 'Simulation', dragPayload: 'pipeline:sim', onAdd: () => addPipelineNode('sim') },
+        { id: 'treatment', label: 'Treatment', dragPayload: 'pipeline:treatment', onAdd: () => addPipelineNode('treatment') },
+        { id: 'frame', label: 'Frame', dragPayload: 'pipeline:frame', onAdd: () => addPipelineNode('frame') },
+        { id: 'storyboard', label: 'Storyboard', dragPayload: 'pipeline:storyboard', onAdd: () => addPipelineNode('storyboard') },
+        { id: 'video', label: 'Video', dragPayload: 'pipeline:video', onAdd: () => addPipelineNode('video') },
+        { id: 'text-viewer', label: 'Text', sublabel: 'view a Treatment\'s text', dragPayload: 'pipeline:text-viewer', onAdd: () => addPipelineNode('text-viewer') },
+      ],
+    },
+    {
+      id: 'styles',
+      label: 'Styles',
+      items: [
+        { id: 'new-style', label: '+ New style', dragPayload: 'style:new', onAdd: () => addStyleNode() },
+        ...styles.map((s) => ({
+          id: s.id,
+          label: s.name,
+          sublabel: s.style_prompt || undefined,
+          dragPayload: `style:${s.id}`,
+          onAdd: () => addStyleNode(undefined, s),
+          onDelete: () => window.confirm(`Delete style "${s.name}"?`) && removeStyle(s.id).catch((e) => console.error('failed to delete style', e)),
+        })),
+      ],
+    },
+    {
+      id: 'agents',
+      label: 'Agents',
+      emptyLabel: cityData ? 'no other residents to add' : 'no active city',
+      items: [
+        { id: 'new-agent', label: '+ New agent', sublabel: 'generate a resident', dragPayload: 'agent:new', onAdd: () => addNewAgent() },
+        ...notOnCanvasAgents.map((c) => ({ id: c.id, label: c.name, sublabel: c.occupation, dragPayload: `agent:${c.id}`, onAdd: () => addToCanvas({ id: c.id, kind: 'agent' }) })),
+      ],
+    },
+    {
+      id: 'locations',
+      label: 'Locations',
+      emptyLabel: cityData ? 'every place is already on canvas' : 'no active city',
+      items: notOnCanvasLocations.map((p) => ({ id: p.id, label: p.name, sublabel: p.place_type, dragPayload: `location:${p.id}`, onAdd: () => addToCanvas({ id: p.id, kind: 'location' }) })),
+    },
+  ];
+
+  return (
+    <div className="city-canvas-layout">
+      <SideDrawer sections={sections} />
+      <div className="canvas-with-tray" onDragOver={onDragOver} onDrop={onDrop}>
+        <ReactFlow
+          nodes={renderNodes}
+          edges={edges}
+          nodeTypes={nodeTypes}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          onConnect={onConnect}
+          isValidConnection={isValidConnection}
+          fitView
+          proOptions={{ hideAttribution: true }}
+        >
+          <Background variant={BackgroundVariant.Dots} gap={24} size={1.5} color="var(--canvas-dot)" />
+          <Controls showInteractive={false} />
+          <MiniMap nodeColor={miniMapNodeColor} pannable zoomable />
+        </ReactFlow>
+      </div>
+      {newAgentModal && cityData && (
+        <NewAgentModal
+          places={cityData.places}
+          onClose={() => setNewAgentModal(null)}
+          onCreated={(character) => {
+            placeAgentNode(character, newAgentModal.position);
+            setNewAgentModal(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+export function StoryboardScreen({ storyboardId, from }: { storyboardId: string; from?: Scope }) {
+  const [cityData, setCityData] = useState<HistoryData | null>(null);
+  // Same resolution ScratchScreen needs and for the same reason --
+  // HistoryData carries no city id of its own.
+  const [activeCityId, setActiveCityId] = useState<string | undefined>(undefined);
+
+  const refreshCityData = useCallback(() => {
+    history.data().then(setCityData).catch(() => setCityData(null));
+    history
+      .listCities()
+      .then((res) => setActiveCityId(res.cities.find((c) => c.is_active)?.id))
+      .catch(() => setActiveCityId(undefined));
+  }, []);
+
+  useEffect(refreshCityData, [refreshCityData]);
+
+  return (
+    <ReactFlowProvider>
+      <StoryboardCanvasInner storyboardId={storyboardId} from={from} cityData={cityData} activeCityId={activeCityId} onCityDataRefresh={refreshCityData} />
+    </ReactFlowProvider>
+  );
+}

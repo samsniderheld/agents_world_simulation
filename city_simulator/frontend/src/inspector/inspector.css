@@ -1,0 +1,248 @@
+/* The one inversion from the canvas per the design spec: a slightly
+   lifted ground with comfortable prose, since long-form reading (an
+   event log, a treatment, a bio) is the one thing tracked uppercase mono
+   is bad at. */
+
+.inspector {
+  position: relative;
+  width: 320px;
+  flex: none;
+  background: var(--inspector-bg);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.inspector-close-btn {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  z-index: 2;
+  background: transparent;
+  border: none;
+  color: var(--text-faint);
+  font-size: 13px;
+  padding: 4px;
+  cursor: pointer;
+}
+
+.inspector-close-btn:hover {
+  color: var(--text);
+}
+
+.inspector-expand-tab {
+  flex: none;
+  width: 22px;
+  background: var(--node-body);
+  border: none;
+  border-left: 1px solid var(--border);
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.inspector-expand-tab:hover {
+  color: var(--accent);
+  background: var(--panel);
+}
+
+.inspector-header {
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.inspector-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.inspector-subtitle {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin-top: 2px;
+}
+
+.inspector-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 8px 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.inspector-tab {
+  background: transparent;
+  border: none;
+  padding: 6px 8px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+}
+
+.inspector-tab:hover {
+  color: var(--text-dim);
+}
+
+.inspector-tab.is-active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.inspector-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px 16px;
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--text);
+}
+
+.inspector-empty {
+  color: var(--text-faint);
+  font-style: italic;
+  font-size: 13px;
+}
+
+.inspector-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 14px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.inspector-stats b {
+  color: var(--text-dim);
+  font-weight: 600;
+}
+
+.inspector-entry {
+  padding-bottom: 10px;
+  margin-bottom: 10px;
+  border-bottom: 1px dashed var(--border);
+}
+
+.inspector-entry:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+}
+
+.inspector-entry-year {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-faint);
+  margin-right: 6px;
+}
+
+.inspector-kv {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-faint);
+  margin-bottom: 2px;
+}
+
+.inspector-kv b {
+  color: var(--text-dim);
+}
+
+.inspector-media-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.inspector-media-item {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--panel);
+}
+
+.inspector-media-item img,
+.inspector-media-item video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.inspector-media-item img.is-expandable {
+  cursor: zoom-in;
+}
+
+.inspector-media-delete {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 20px;
+  height: 20px;
+  line-height: 18px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.55);
+  color: var(--text);
+  font-size: 11px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+
+.inspector-media-item:hover .inspector-media-delete {
+  opacity: 1;
+}
+
+.inspector-media-delete:hover {
+  border-color: var(--bad, #d9534f);
+  color: var(--bad, #d9534f);
+}
+
+.inspector-media-delete:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.inspector-event-row {
+  display: flex;
+  gap: 8px;
+  padding: 5px 0;
+  font-size: 13px;
+  align-items: baseline;
+}
+
+.inspector-event-badge {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  flex: none;
+  width: 76px;
+}
+
+.inspector-run-header {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin: 14px 0 4px;
+}
+
+.inspector-run-header:first-child {
+  margin-top: 0;
+}

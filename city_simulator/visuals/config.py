@@ -1,4 +1,4 @@
-"""Central configuration for the Visuals tab -- provider selection, model
+"""Central configuration for visuals/ -- provider selection, model
 ids, and generation defaults live in config.yaml; the API key never does
 (it's a secret, read from the FAL_KEY environment variable instead so it
 never ends up committed to git). FAL_KEY can be exported normally or set
