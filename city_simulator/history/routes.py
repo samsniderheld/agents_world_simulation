@@ -1,4 +1,4 @@
-"""Flask blueprint for the History tab's API -- thin view functions that
+"""Flask blueprint for history generation (/api/history/*) -- thin view functions that
 parse the request and delegate to jobs.py; the actual generation logic
 lives in generate.py.
 """
@@ -28,18 +28,6 @@ def data():
     if payload is None:
         return json_response({"error": "no history generated yet"}, status=404)
     return json_response(payload)
-
-
-@bp.delete("/data")
-def delete_data():
-    if agents_jobs.get_status().get("phase") == "running":
-        return json_response({
-            "ok": False, "error": "agents are currently running against this city -- stop them first",
-        }, status=409)
-    ok, error = jobs.delete()
-    if ok:
-        agents_jobs.set_history_roster(None)
-    return json_response({"ok": ok, "error": error}, status=200 if ok else 409)
 
 
 @bp.get("/log")
@@ -157,7 +145,7 @@ def save_character():
         return json_response({"error": str(e)}, status=409)
     # _active_roster (agents/simulation.py) is a snapshot, not a live view
     # of citystate -- without this, a manually-added character would never
-    # show up in the Start Agents picker, only ones present the last time
+    # show up as addable Agent nodes, only ones present the last time
     # a full history finished generating (or the server started).
     agents_jobs.set_history_roster(citystate.get())
     return json_response({"character": saved})

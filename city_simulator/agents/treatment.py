@@ -213,8 +213,8 @@ def generate_treatment(log: list[str], agent_names: list[str], model: str = None
 
 def parse_storyboard_shots(text: str) -> list:
     """Pulls the numbered shot lines out of a treatment's STORYBOARD
-    section (agents/routes.py's GET /api/agents/treatment/shots, for the
-    Director tab) -- each returned line is the *whole* shot ("<shot
+    section (agents/routes.py's GET /api/agents/treatment/shots, which the
+    Treatment node calls) -- each returned line is the *whole* shot ("<shot
     description> | Art direction: ... | Lighting: ... | DOP: ..."), since
     that whole line is exactly what makes a good single-image prompt, not
     just the leading description. Returns however many shots were

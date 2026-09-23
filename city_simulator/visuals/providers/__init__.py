@@ -1,4 +1,4 @@
-"""get_provider() is the whole modularity story for the Visuals tab: it
+"""get_provider() is the whole modularity story for visuals/: it
 picks a Provider implementation based on which name is active --
 config.PROVIDER at startup (from config.yaml), or whatever routes.py's
 POST /api/visuals/provider last switched it to. jobs.py and routes.py only
@@ -7,7 +7,7 @@ here (backed by a new local.py implementing the same two methods) is the
 entire story for switching to a local model server later.
 
 Memoized per provider name, not just once: switching providers at runtime
-(the Visuals tab's provider selector) shouldn't discard and recreate the
+(POST /api/visuals/provider) shouldn't discard and recreate the
 one already built for a name you switch back to -- for LocalProvider in
 particular, that instance is what holds the loaded (multi-GB) pipeline in
 memory, and reconstructing it would mean reloading the model.

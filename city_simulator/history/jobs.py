@@ -62,25 +62,10 @@ def start(params: dict, city_id: str = None, on_done=None):
     return True, None
 
 
-def delete():
-    """Returns (ok, error_message). Refuses while a generation is already
-    running, to avoid deleting a city out from under the very job that's
-    about to overwrite it."""
-    with _lock:
-        if _thread and _thread.is_alive():
-            return False, "a history generation is already in progress"
-        citystate.delete()
-        history_log.reset()
-        _status["phase"] = "idle"
-        _status["error"] = None
-    return True, None
-
-
 def delete_city(city_id: str):
-    """Removes one city from the collection -- unlike delete() above,
-    doesn't require it to be the active one. Same job-lock refusal: a
-    generation in progress could be regenerating exactly this city_id in
-    place."""
+    """Removes one city from the collection (it need not be the active
+    one). Refuses while a generation is running: the job in progress could
+    be regenerating exactly this city_id in place."""
     with _lock:
         if _thread and _thread.is_alive():
             return False, "a history generation is already in progress"

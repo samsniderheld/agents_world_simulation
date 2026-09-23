@@ -1,6 +1,4 @@
-// Ports the old Jinja app's two-step "Generate Character" modal
-// (static/js/history.js's characterPlacePickerModalHtml/
-// characterDraftFormHtml) into the node UI: pick optional constraints,
+// A two-step "Generate Character" modal: pick optional constraints,
 // preview a draft (nothing persisted yet), edit any field, then Save
 // actually creates it -- Regenerate re-runs the preview with the same
 // constraints, Discard closes without saving anything.

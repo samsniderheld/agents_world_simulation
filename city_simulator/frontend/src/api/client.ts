@@ -42,9 +42,6 @@ export const history = {
 
   data: () => request<HistoryData>('/api/history/data'),
 
-  deleteCity: () =>
-    request<{ ok: boolean; error: string | null }>('/api/history/data', { method: 'DELETE' }),
-
   log: (since = 0) => request<{ lines: string[]; next: number }>(`/api/history/log?since=${since}`),
 
   // Without cityId: always creates a brand new city, no confirmation

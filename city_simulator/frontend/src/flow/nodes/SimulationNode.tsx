@@ -99,8 +99,7 @@ export function SimulationNode({ id, data, selected, height }: NodeProps<Simulat
   }, [visibleEvents]);
 
   // Ollama/Claude have entirely different model lists, so this re-fetches
-  // whenever the provider changes -- same trigger the old app's Provider
-  // <select> used for its model <datalist> (static/js/agents.js).
+  // whenever the provider changes.
   useEffect(() => {
     let cancelled = false;
     agentsApi
@@ -119,8 +118,7 @@ export function SimulationNode({ id, data, selected, height }: NodeProps<Simulat
   function onProviderChange(nextProvider: string) {
     data.onProviderChange(id, nextProvider);
     // A model name typed for one provider is meaningless for the other
-    // (e.g. an Ollama tag vs a Claude model id) -- cleared the same way
-    // the old app's provider <select> cleared its model field on change.
+    // (e.g. an Ollama tag vs a Claude model id), so it's cleared on change.
     setChatModel('');
     data.onChatModelChange(id, '');
   }

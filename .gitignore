@@ -11,7 +11,7 @@ characters.json
 city_simulator/frontend/node_modules/
 city_simulator/static/dist/
 
-# Visuals tab: uploaded/generated media, not source
+# visuals/: uploaded/generated media, not source
 city_simulator/visuals/data/uploads/*
 city_simulator/visuals/data/outputs/*
 !city_simulator/visuals/data/uploads/.gitkeep

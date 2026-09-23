@@ -12,10 +12,9 @@ export interface FrameNodeData extends Record<string, unknown> {
   // Self-contained, like ScratchImageNode -- a storyboard shot's image
   // belongs to this node/the treatment it's part of, not to any one
   // character's or place's own media history. Entity-attaching it (the
-  // original design, ported from the old Director tab) meant a two-agent
-  // scene's shots only ever got filed under whichever one agent happened
-  // to be the Treatment's chosen subject, and a place-only scene had
-  // nowhere to attach to at all.
+  // original design) meant a two-agent scene's shots only ever got filed
+  // under whichever one agent happened to be the Treatment's chosen
+  // subject, and a place-only scene had nowhere to attach to at all.
   url?: string;
   localPath?: string;
   // Resolved by pipeline.ts's enrichPipelineNodes() from any connected
@@ -43,9 +42,10 @@ export interface FrameNodeData extends Record<string, unknown> {
 
 export type FrameNodeType = Node<FrameNodeData, 'frame'>;
 
-// A storyboard shot -- spawned by a Treatment node's "emit frames" action
-// (pre-filled with that shot's parsed prompt and already wired via a
-// shot:in edge), or dropped freely on any canvas like every other node
+// A storyboard shot -- seeded inside a Storyboard's own canvas by a
+// Treatment node's "create storyboard" action (pre-filled with that shot's
+// parsed prompt and already wired to the carried-through Agent/Location/
+// Style nodes), or dropped freely on any canvas like every other node
 // type. No entity of its own to require or gate on.
 export function FrameNode({ id, data, selected }: NodeProps<FrameNodeType>) {
   const [prompt, setPrompt] = useState(data.prompt);

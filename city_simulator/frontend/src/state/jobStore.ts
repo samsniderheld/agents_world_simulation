@@ -2,7 +2,7 @@
 // agent runs, visuals generation), started once at the app root rather
 // than per-route -- this is what lets a running job keep showing as
 // running while you navigate the canvas (drill into a city, back out,
-// etc.), which per-page polling (the old app's pattern) couldn't do.
+// etc.), which per-page polling couldn't do.
 import { create } from 'zustand';
 import { agentsApi, history, visuals } from '../api/client';
 import type { AgentsState, JobStatus } from '../api/types';

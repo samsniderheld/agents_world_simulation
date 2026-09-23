@@ -7,10 +7,6 @@ the persisted city (citystate/routes.py, /api/city/*). Each job-style
 endpoint runs on its own background thread with its own status (see each
 package's jobs.py), so the frontend can drive them independently.
 
-The old templates/ + static/js Jinja frontend is retired but not yet
-deleted (it's unreachable now that / serves the SPA instead) -- it's
-formally removed once the rewrite no longer needs it as a reference.
-
 Usage:
     python3 app.py                                   # serve the built SPA
     (cd frontend && npm run dev)                      # SPA dev server, proxies /api to this process
@@ -53,8 +49,9 @@ def create_app() -> Flask:
     if saved_city is not None:
         agents_jobs.set_history_roster(saved_city)
 
-    # The SPA owns client-side routing (/, /agent/<id>, /place/<id>,
-    # /scratch/<id> -- see frontend/src/routes/router.ts), so every one of
+    # The SPA owns client-side routing (/, /c/<city>, /c/<city>/agent/<id>,
+    # /c/<city>/place/<id>, /c/<city>/gallery, /scratch/<id>,
+    # /storyboard/<id> -- see frontend/src/routes/router.ts), so every one of
     # those paths serves the same built index.html and lets it route from
     # there client-side. A matched /api/* GET (POST/DELETE never reach
     # this GET-only rule at all) is claimed by the blueprints above before
@@ -80,8 +77,8 @@ PORT = 8420
 
 def main():
     app = create_app()
-    # make_server (not app.run()) so threaded=True is available -- the
-    # long-lived SSE stream would otherwise block other requests.
+    # make_server (not app.run()) so threaded=True is available -- a slow
+    # job-status poll or media download must not block other requests.
     srv = make_server("127.0.0.1", PORT, app, threaded=True)
     url = f"http://127.0.0.1:{srv.server_port}/"
     print(f"Serving City Simulator at {url} -- refresh your existing tab, or open it (Ctrl+C to stop)")

@@ -34,8 +34,8 @@ export interface ImageNodeData extends Record<string, unknown> {
 
 export type ImageNodeType = Node<ImageNodeData, 'image'>;
 
-// Standalone per-entity image generation -- the node-ified version of the
-// old app's "+ Media" button. Not part of the Simulation/Treatment/Frame
+// Standalone per-entity image generation (the result attaches to the
+// owning place's or agent's own media). Not part of the Simulation/Treatment/Frame
 // pipeline (that's FrameNode, which shares this same generation logic
 // but requires a `shot:in` connection) -- this one's prompt is entirely
 // free-form.

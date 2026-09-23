@@ -13,9 +13,8 @@ export interface ScratchMusicNodeData extends Record<string, unknown> {
 
 export type ScratchMusicNodeType = Node<ScratchMusicNodeData, 'scratch-music'>;
 
-// Text-to-music (Google Lyria 2 via fal) -- the old Studio tab's music
-// generator, node-ified. No ports: nothing in this app consumes audio
-// downstream of it.
+// Text-to-music (Google Lyria 2 via fal). No ports: nothing in this app
+// consumes audio downstream of it.
 export function ScratchMusicNode({ id, data, selected }: NodeProps<ScratchMusicNodeType>) {
   const [prompt, setPrompt] = useState(data.prompt);
   const [negativePrompt, setNegativePrompt] = useState(data.negativePrompt);

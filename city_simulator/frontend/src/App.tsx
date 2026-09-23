@@ -11,9 +11,8 @@ import { navigate, useRoute, type Scope } from './routes/router';
 import { useJobStore } from './state/jobStore';
 import './App.css';
 
-// A single fixed board replaces the old Studio tab exactly (Studio was
-// one page too, not a list of named boards) -- real multi-board
-// management belongs with the top-level canvas, which now exists (see
+// A single fixed scratch board, not a list of named ones -- real
+// multi-board management belongs with the top-level canvas (see
 // CitiesScreen) but doesn't extend to scratch boards yet.
 const DEFAULT_SCRATCH_BOARD = 'default';
 

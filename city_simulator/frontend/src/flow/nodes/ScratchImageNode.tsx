@@ -27,9 +27,8 @@ export type ScratchImageNodeType = Node<ScratchImageNodeData, 'scratch-image'>;
 // Unlike ImageNode/FrameNode, this has no citystate entity to attach its
 // result to (a scratch board has no city) -- the generated file's own
 // url/local_path is persisted directly on this node instead, in the
-// graph document (via api/graph/<scope>). This is exactly the fix for
-// the old Studio tab's session-only gallery: closing the tab no longer
-// discards the work, since it's a real node in a real persisted canvas.
+// graph document (via api/graph/<scope>), so closing the browser tab
+// never discards the work: it's a real node in a real persisted canvas.
 export function ScratchImageNode({ id, data, selected }: NodeProps<ScratchImageNodeType>) {
   const [prompt, setPrompt] = useState(data.prompt);
   const [pending, setPending] = useState(false);

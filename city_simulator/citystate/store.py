@@ -276,24 +276,6 @@ def replace(history_payload: dict, city_id: str = None) -> str:
         return target_id
 
 
-def delete() -> None:
-    """Wipes the active city entirely -- history/locations/every agent's
-    files, and removes it from the collection -- leaving no active city
-    at all, unlike replace() which immediately writes a new one in its
-    place. The next get() call returns None. Safe to call with no active
-    city (all no-ops)."""
-    global _cache, _loaded, _active_id
-    with _lock:
-        if _active_id is None:
-            _active_id = _read_active_id()
-        if _active_id is not None and _city_dir(_active_id).exists():
-            shutil.rmtree(_city_dir(_active_id))
-        _write_active_id(None)
-        _cache = None
-        _active_id = None
-        _loaded = True
-
-
 def list_cities() -> list:
     """Lightweight summaries for the top-level city picker -- reads just
     city.json plus cheap counts, never hydrates every agent file the way
@@ -350,10 +332,9 @@ def set_active(city_id: str) -> None:
 
 
 def delete_city(city_id: str) -> None:
-    """Removes one city from the collection outright (distinct from
-    delete(), which only ever acts on the active one) -- if it happened
-    to be the active city, there's no active city left afterward, same
-    as delete()'s own behavior."""
+    """Removes one city from the collection outright -- if it happened to
+    be the active city, there's no active city left afterward (the next
+    get() returns None)."""
     global _cache, _active_id
     with _lock:
         if _city_dir(city_id).exists():

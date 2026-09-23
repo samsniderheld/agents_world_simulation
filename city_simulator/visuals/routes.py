@@ -1,4 +1,4 @@
-"""Flask blueprint for the Visuals tab's API -- thin view functions that
+"""Flask blueprint for media generation (/api/visuals/*) -- thin view functions that
 parse the request and delegate to jobs.py/storage.py.
 """
 

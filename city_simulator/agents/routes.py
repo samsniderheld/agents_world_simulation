@@ -58,9 +58,8 @@ def run():
     # every selected agent start this run at `place_id` instead of their
     # own grounding place -- resolved to a place *name* here, since
     # world.py's co-presence check is plain location-string equality
-    # (agents/world.py), not an id lookup. "grounded" (default, and the
-    # only mode the old UI ever used) leaves each agent's own location
-    # untouched.
+    # (agents/world.py), not an id lookup. "grounded" (the default) leaves
+    # each agent's own location untouched.
     place_id = body.get("place_id")
     location_mode = body.get("location_mode") or "grounded"
     convene_at = None
@@ -170,8 +169,8 @@ def generate_treatment_for_agent():
 
 @bp.get("/treatment/shots")
 def treatment_shots():
-    """Parses whichever treatment text the Director tab currently has
-    selected into its individual storyboard shots -- a query param, not
+    """Parses the treatment text a Treatment node currently holds into its
+    individual storyboard shots -- a query param, not
     tied to a stored treatment id, since treatment entries don't have one
     (see citystate.store.add_treatment's schema) and this needs to work
     for a just-generated treatment too, before any re-fetch from disk."""
