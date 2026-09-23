@@ -180,7 +180,7 @@ export function usePipelineCallbacks(
       // size from the moment it's created, and FRAME_GUTTER (60px) is
       // guaranteed clear space between them regardless.
       const FRAME_WIDTH = 540;
-      const FRAME_HEIGHT = 430;
+      const FRAME_HEIGHT = 480; // fits the edit-prompt row + input-image line
       const FRAME_GUTTER = 60;
       const frameNodes: GraphNode[] = shots.map((shotText, i) => ({
         id: newNodeId('frame'),

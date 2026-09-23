@@ -159,9 +159,15 @@ def generate_treatment_for_agent():
 
     provider = body.get("provider") or None
     model = body.get("model") or None
+    # The Simulation node's free-text directive for this run, if it had one
+    # -- persisted in the run's meta (see simulation.run()), so the
+    # treatment knows what the scene was *meant* to be about, not just
+    # what the transcript happens to show.
+    directive = (latest.get("meta") or {}).get("directive")
     text = treatment.generate_treatment(
         log, agent_names, model=model, provider=provider,
         location_details=location_details, cast_details=cast_details,
+        directive=directive,
     )
     entry = citystate.add_treatment(agent_id, text, run_started_at=latest.get("started_at"))
     return json_response({"treatment": entry})

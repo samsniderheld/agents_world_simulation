@@ -147,7 +147,7 @@ def _cast_block(cast_details: list) -> str:
 
 def generate_treatment(log: list[str], agent_names: list[str], model: str = None,
                         provider: str = None, location_details: list = None,
-                        cast_details: list = None) -> str:
+                        cast_details: list = None, directive: str = None) -> str:
     """Ask the LLM to read a finished simulation's transcript and write a
     short video-vignette treatment: the characters involved, a description
     of what happens, and 6 storyboard image prompts, each with art
@@ -166,10 +166,19 @@ def generate_treatment(log: list[str], agent_names: list[str], model: str = None
     was surfaced, into scenery invented from the name rather than the
     place's actual recorded appearance. `cast_details` is
     [{"name": str, "bio": str}, ...] -- see _cast_block above -- the same
-    idea applied to who's in the scene."""
+    idea applied to who's in the scene. `directive` is the free-text scene
+    direction the run itself was steered by (the Simulation node's text
+    input, persisted in the run's meta), so the treatment is written
+    toward the same intent."""
     transcript = "\n".join(log) or "(nothing happened)"
     setting_line = _setting_block(location_details)
     cast_line = _cast_block(cast_details)
+    direction_line = (
+        f"SCENE DIRECTION (what this scene was set up to be about -- let it "
+        f"shape the synopsis and shots, consistent with the transcript): "
+        f"{directive.strip()}\n\n"
+        if directive and directive.strip() else ""
+    )
 
     prompt = (
         "You are a film treatment writer adapting a scene transcript into a "
@@ -179,6 +188,7 @@ def generate_treatment(log: list[str], agent_names: list[str], model: str = None
         "not invent any other named characters.\n\n"
         f"{cast_line}"
         f"{setting_line}"
+        f"{direction_line}"
         f"Transcript:\n{transcript}\n\n"
         "Write the treatment in exactly this format, with no extra "
         "commentary before or after it:\n\n"
@@ -200,10 +210,10 @@ def generate_treatment(log: list[str], agent_names: list[str], model: str = None
         "on its own, standalone, to generate that shot's actual image later -- "
         "the Character field must repeat enough of their real appearance that "
         "the shot still reads correctly by itself, without needing the rest "
-        "of this treatment for context.)"
-        "the direction should take into account the japanese concept of MA, focusing on"
-        "individual moments, the characters within them, and how those characters experience"
-        "their environment"
+        "of this treatment for context.)\n\n"
+        "The direction should take into account the Japanese concept of MA, focusing on "
+        "individual moments, the characters within them, and how those characters experience "
+        "their environment."
     )
     return llm.complete(
         prompt, model=model, temperature=0.8,

@@ -9,6 +9,7 @@ import { visuals } from '../api/client';
 import type { GraphNode, HistoryData, Style } from '../api/types';
 import type { AgentNodeData } from './nodes/AgentNode';
 import type { FrameNodeData } from './nodes/FrameNode';
+import type { ImageNodeData } from './nodes/ImageNode';
 import type { LocationNodeData } from './nodes/LocationNode';
 import type { SimulationNodeData } from './nodes/SimulationNode';
 import type { StoryboardNodeData } from './nodes/StoryboardNode';
@@ -112,10 +113,13 @@ export function toPipelineRenderNode(gn: GraphNode, cb: PipelineCallbacks): Node
       // these all different sizes" bug a freshly-seeded Storyboard hits
       // immediately, before anyone's dragged a single handle).
       width: gn.width ?? 540,
-      height: gn.height ?? 430,
+      // 480, not the 430 floor: room for the edit-prompt row and the
+      // input-image line an image-bearing Frame can show.
+      height: gn.height ?? 480,
       data: {
         shotIndex: gn.data.shotIndex as number,
         prompt: (gn.data.prompt as string) ?? '',
+        editPrompt: (gn.data.editPrompt as string) ?? '',
         url: gn.data.url as string | undefined,
         localPath: gn.data.localPath as string | undefined,
         onUpdate: cb.onFrameUpdate,
@@ -216,7 +220,7 @@ export function pipelineToGraphNode(n: Node): GraphNode | null {
       position: n.position,
       width: n.width,
       height: n.height,
-      data: { shotIndex: d.shotIndex, prompt: d.prompt, url: d.url, localPath: d.localPath },
+      data: { shotIndex: d.shotIndex, prompt: d.prompt, editPrompt: d.editPrompt, url: d.url, localPath: d.localPath },
     };
   }
   if (n.type === 'video') {
@@ -291,6 +295,28 @@ function connectedEntityReferenceImages(nodeId: string, edges: Edge[], byId: Map
 // of connectedEntityReferenceImages's result, since a connected Agent/
 // Location with zero existing photos yet should still show its port as
 // "live," not fall back to looking exactly like nothing's wired at all.
+// Frame's image:in port -- the actual files of whatever image-producing
+// nodes are wired in (another Frame, a scratch Image, or an entity-attached
+// Image, whose file lives in that entity's media record). Order follows
+// edge order; a node wired to itself, or one with nothing generated yet,
+// contributes nothing.
+function connectedInputImagePaths(nodeId: string, edges: Edge[], byId: Map<string, Node>, historyData: HistoryData): string[] {
+  const paths: string[] = [];
+  for (const e of edges) {
+    if (e.target !== nodeId || e.targetHandle !== 'image:in' || e.source === nodeId) continue;
+    const source = byId.get(e.source);
+    let path: string | undefined;
+    if (source?.type === 'frame' || source?.type === 'scratch-image') {
+      path = (source.data as { localPath?: string }).localPath;
+    } else if (source?.type === 'image') {
+      const d = source.data as ImageNodeData;
+      path = d.mediaId ? historyData.media[d.entityId]?.find((m) => m.id === d.mediaId)?.local_path : undefined;
+    }
+    if (path) paths.push(path);
+  }
+  return paths;
+}
+
 function hasEdge(nodeId: string, handle: string, edges: Edge[]): boolean {
   return edges.some((e) => e.target === nodeId && e.targetHandle === handle);
 }
@@ -397,9 +423,11 @@ export function enrichPipelineNodes(nodes: Node[], edges: Edge[], historyData: H
           mergedStylePrompt: merged.stylePrompt,
           mergedStyleReferenceImages: merged.styleReferenceImages,
           mergedEntityReferenceImages: entityRefs,
+          inputImagePaths: connectedInputImagePaths(n.id, edges, byId, historyData),
           hasAgentRef: hasEdge(n.id, 'agent:in', edges),
           hasPlaceRef: hasEdge(n.id, 'place:in', edges),
           hasStyleRef: hasEdge(n.id, 'style:in', edges),
+          hasImageRef: hasEdge(n.id, 'image:in', edges),
         },
       };
     }

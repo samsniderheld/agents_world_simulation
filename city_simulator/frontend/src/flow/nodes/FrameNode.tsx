@@ -5,6 +5,7 @@ import { pollVisualsUntilDone } from '../../api/pollVisuals';
 import { useLightboxStore } from '../../state/lightboxStore';
 import { NodeShell } from './NodeShell';
 import { Port } from './Port';
+import { useProviderCapabilities } from './useProviderCapabilities';
 
 export interface FrameNodeData extends Record<string, unknown> {
   shotIndex: number;
@@ -17,6 +18,10 @@ export interface FrameNodeData extends Record<string, unknown> {
   // subject, and a place-only scene had nowhere to attach to at all.
   url?: string;
   localPath?: string;
+  // The second prompt box: an instruction applied to the *current* image
+  // ("make it night, add rain") rather than a fresh generation. Persisted
+  // so it survives a reload like the main prompt does.
+  editPrompt?: string;
   // Resolved by pipeline.ts's enrichPipelineNodes() from any connected
   // Style node(s) -- merged (per the design's rule: prompts joined with
   // ", ", reference arrays concatenated) since more than one can feed
@@ -37,7 +42,12 @@ export interface FrameNodeData extends Record<string, unknown> {
   hasAgentRef?: boolean;
   hasPlaceRef?: boolean;
   hasStyleRef?: boolean;
-  onUpdate: (nodeId: string, patch: { prompt?: string; url?: string; localPath?: string }) => void;
+  // Resolved by pipeline.ts from whatever's wired into image:in (another
+  // Frame, or an Image node) -- sent with both generate and edit, first in
+  // line ahead of the style/agent/place references.
+  inputImagePaths?: string[];
+  hasImageRef?: boolean;
+  onUpdate: (nodeId: string, patch: { prompt?: string; editPrompt?: string; url?: string; localPath?: string }) => void;
 }
 
 export type FrameNodeType = Node<FrameNodeData, 'frame'>;
@@ -49,19 +59,20 @@ export type FrameNodeType = Node<FrameNodeData, 'frame'>;
 // type. No entity of its own to require or gate on.
 export function FrameNode({ id, data, selected }: NodeProps<FrameNodeType>) {
   const [prompt, setPrompt] = useState(data.prompt);
-  const [pending, setPending] = useState(false);
+  const [editPrompt, setEditPrompt] = useState(data.editPrompt ?? '');
+  const [pending, setPending] = useState<'generate' | 'edit' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const openLightbox = useLightboxStore((s) => s.open);
+  // The local provider is text-to-image only -- it can't take an input
+  // image, so editing is greyed out rather than failing at submit time.
+  const capabilities = useProviderCapabilities();
+  const canEdit = capabilities?.supports_reference_images !== false;
 
-  async function onGenerate() {
+  async function run(kind: 'generate' | 'edit', params: Parameters<typeof visuals.generateImage>[0], patch: { prompt?: string; editPrompt?: string }) {
     setError(null);
-    setPending(true);
+    setPending(kind);
     try {
-      const start = await visuals.generateImage({
-        prompt,
-        stylePrompt: data.mergedStylePrompt,
-        styleReferenceImages: [...(data.mergedStyleReferenceImages ?? []), ...(data.mergedEntityReferenceImages ?? [])],
-      });
+      const start = await visuals.generateImage(params);
       if (!start.ok) {
         setError(start.error ?? 'failed to start');
         return;
@@ -72,19 +83,39 @@ export function FrameNode({ id, data, selected }: NodeProps<FrameNodeType>) {
         return;
       }
       const image = result.images[0];
-      data.onUpdate(id, { prompt, url: image.url, localPath: image.local_path });
+      data.onUpdate(id, { ...patch, url: image.url, localPath: image.local_path });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
-      setPending(false);
+      setPending(null);
     }
+  }
+
+  function onGenerate() {
+    run('generate', {
+      prompt,
+      stylePrompt: data.mergedStylePrompt,
+      styleReferenceImages: [...(data.inputImagePaths ?? []), ...(data.mergedStyleReferenceImages ?? []), ...(data.mergedEntityReferenceImages ?? [])],
+    }, { prompt });
+  }
+
+  // Sends the current image as the edit model's input (visuals/providers/
+  // fal.py switches to FAL_IMAGE_EDIT_MODEL whenever image_paths is set),
+  // always first, so it stays the picture being modified. Anything wired
+  // into image:in follows it -- an explicit choice, unlike the style/agent/
+  // place references, which are left out so the model doesn't blend
+  // several pictures instead of changing this one. The style *prompt*
+  // still rides along, so an edit keeps the same look.
+  function onEdit() {
+    if (!data.localPath) return;
+    run('edit', { prompt: editPrompt, imagePaths: [data.localPath, ...(data.inputImagePaths ?? [])], stylePrompt: data.mergedStylePrompt }, { editPrompt });
   }
 
   return (
     <NodeShell
       typeLabel={`Frame ${String(data.shotIndex + 1).padStart(2, '0')}`}
       selected={selected}
-      running={pending}
+      running={pending !== null}
       error={Boolean(error)}
       minWidth={540}
       minHeight={430}
@@ -107,13 +138,43 @@ export function FrameNode({ id, data, selected }: NodeProps<FrameNodeType>) {
         onBlur={() => prompt !== data.prompt && data.onUpdate(id, { prompt })}
       />
       {data.mergedStylePrompt && <div className="node-subtitle">style: {data.mergedStylePrompt}</div>}
-      {error && <div className="node-error-text">{error}</div>}
+      {data.hasImageRef && (
+        <div className="node-subtitle">
+          {data.inputImagePaths?.length
+            ? `+ ${data.inputImagePaths.length} input image${data.inputImagePaths.length === 1 ? '' : 's'}`
+            : 'input image not generated yet'}
+        </div>
+      )}
       <div className="node-controls">
-        <button className="node-run-btn" disabled={pending || !prompt.trim()} onClick={onGenerate}>
-          {pending ? 'generating…' : data.url ? '↻ regenerate' : '▶ generate'}
+        <button className="node-run-btn" disabled={pending !== null || !prompt.trim()} onClick={onGenerate}>
+          {pending === 'generate' ? 'generating…' : data.url ? '↻ regenerate' : '▶ generate'}
         </button>
       </div>
+      {data.url && (
+        <>
+          <textarea
+            className="node-prompt-input"
+            rows={2}
+            value={editPrompt}
+            placeholder="Edit this image, e.g. make it night, add rain on the glass…"
+            onChange={(e) => setEditPrompt(e.target.value)}
+            onBlur={() => editPrompt !== (data.editPrompt ?? '') && data.onUpdate(id, { editPrompt })}
+          />
+          <div className="node-controls">
+            <button
+              className="node-run-btn"
+              disabled={pending !== null || !editPrompt.trim() || !data.localPath || !canEdit}
+              title={canEdit ? 'Apply the edit to the current image' : 'The active image provider cannot edit images'}
+              onClick={onEdit}
+            >
+              {pending === 'edit' ? 'editing…' : '✎ edit image'}
+            </button>
+          </div>
+        </>
+      )}
+      {error && <div className="node-error-text">{error}</div>}
 
+      <Port id="image:in" type="image" direction="in" label="image" optional={!data.hasImageRef} top="calc(100% - 94px)" />
       <Port id="agent:in" type="agent" direction="in" label="agent" optional={!data.hasAgentRef} top="calc(100% - 74px)" />
       <Port id="place:in" type="place" direction="in" label="place" optional={!data.hasPlaceRef} top="calc(100% - 54px)" />
       <Port id="shot:in" type="shot" direction="in" label="shot" optional top="calc(100% - 34px)" />
