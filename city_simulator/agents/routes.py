@@ -97,7 +97,7 @@ def stop():
 @bp.post("/treatment")
 def generate_treatment_for_agent():
     """Generates (and persists) a treatment for one agent's most recent
-    run -- triggered manually from that agent's modal, see
+    run -- triggered manually from a Treatment node, see
     treatment.build_transcript()'s docstring for why this needs every
     co-participant's own record, not just this agent's."""
     body = request.get_json(silent=True) or {}

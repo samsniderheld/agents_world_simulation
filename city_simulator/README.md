@@ -175,6 +175,7 @@ city_simulator/
     routes.py          Blueprint: /api/history/*
 
   agents/            the agent-simulation engine + its API
+    README.md          how the agents work: memory, reflection, planning, the tick loop
     config.py, llm.py, providers/ (ollama.py, claude.py)
     agent.py, memory.py, planning.py, reflection.py, world.py
     recorder.py, display.py, textutil.py

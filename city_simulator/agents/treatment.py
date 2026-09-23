@@ -1,8 +1,8 @@
 """Turns a finished run's transcript into a short video-vignette
 treatment. This is deliberately not an Agent -- it has no memory stream or
-ongoing state of its own, just a single LLM call. Triggered manually, per
-agent, from that agent's own modal (agents/routes.py's POST /treatment) --
-not automatically at the end of every run.
+ongoing state of its own, just a single LLM call. Triggered manually from a
+Treatment node (agents/routes.py's POST /treatment) -- not automatically at
+the end of every run.
 """
 
 import datetime
