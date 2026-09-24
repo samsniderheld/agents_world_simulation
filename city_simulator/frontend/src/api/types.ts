@@ -333,3 +333,29 @@ export interface MusicGenResult {
 // visuals/jobs.py's get_result() -- `kind` plus the active provider's
 // generate_* return dict merged in flat.
 export type VisualsResult = ImageGenResult | VideoGenResult | MusicGenResult;
+
+// A saved graph (citystate/graph_library.py): a canvas's nodes/edges plus
+// the inner canvas of every Storyboard on it, keyed by the scope it had
+// when saved.
+export interface GraphBody {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+}
+
+export interface SavedGraphSummary {
+  id: string;
+  name: string;
+  created: string;
+  source_scope: string | null;
+  node_count: number;
+  storyboard_count: number;
+}
+
+export interface SavedGraph {
+  id: string;
+  name: string;
+  created: string;
+  source_scope: string | null;
+  root: GraphBody;
+  storyboards: Record<string, GraphBody>;
+}

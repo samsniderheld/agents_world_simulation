@@ -2,6 +2,8 @@
 that parse the request and delegate to jobs.py/simulation.py/recorder.py.
 """
 
+import re
+
 from flask import Blueprint, request
 
 from citystate import store as citystate
@@ -50,6 +52,14 @@ def events():
     return json_response({"events": events, "next": total})
 
 
+def _start_time(value):
+    """Normalizes "7:30" / "07:30" to "07:30"; None for blank or invalid."""
+    match = re.fullmatch(r"\s*(\d{1,2}):(\d{2})\s*", value or "")
+    if not match or int(match.group(1)) > 23 or int(match.group(2)) > 59:
+        return None
+    return f"{int(match.group(1)):02d}:{match.group(2)}"
+
+
 @bp.post("/run")
 def run():
     body = request.get_json(silent=True) or {}
@@ -83,6 +93,12 @@ def run():
         # Simulation node's free-text "guide how the characters are
         # interacting" field -- see simulation.run()'s docstring.
         "directive": (body.get("directive") or "").strip() or None,
+        # Simulated minutes per tick (the Simulation node's setting); blank
+        # keeps config.TICK_MINUTES.
+        "tick_minutes": max(1, min(1440, int(body["tick_minutes"]))) if body.get("tick_minutes") else None,
+        # Simulated time of day the run starts at, "HH:MM" (24-hour);
+        # blank = 06:00.
+        "start_time": _start_time(body.get("start_time")),
     }
     ok, error = jobs.start(params)
     return json_response({"ok": ok, "error": error}, status=200 if ok else 409)

@@ -140,6 +140,16 @@ is the one table of allowed connections; port colors follow
 | **Style** | `style:out` | A library entry: a style prompt plus reference images. Many can feed one port (prompts joined, references concatenated). Shared across every city and board. |
 | **Text** | `text:in` | Read-only viewer for a Treatment's full text. |
 
+**Saved graphs.** Every canvas's drawer has a *Saved graphs* section.
+"+ Save this canvas" stores a named copy of everything on it, including the
+inner canvas of each Storyboard. Click a saved graph to load it: *Add to
+canvas* places a copy to the right of what's there, *Replace canvas* clears
+the canvas first. Loaded nodes get fresh ids (a Storyboard gets a new inner
+canvas), so every load is independent of the saved copy and of other loads;
+Agent and Location nodes keep theirs, since they point at real residents and
+places. The library is global, like styles, so a setup saved in one city can
+be loaded into another, where its residents show up as Missing.
+
 Every node type is available on every canvas. Every canvas autosaves
 (600 ms debounce) to its own graph document, `PUT /api/graph/<scope>`; a
 saved Agent/Location node whose entity no longer exists (a regenerated or
@@ -207,7 +217,8 @@ city_simulator/
     store.py           the city collection + the active city
     routes.py          Blueprint: /api/city/*
     graph_store.py     one JSON document per canvas scope
-    graph_routes.py    Blueprint: /api/graph/*
+    graph_routes.py    Blueprints: /api/graph/*, /api/graph-library/*
+    graph_library.py   named saved graphs (data/library/<id>.json)
 ```
 
 `history/`, `agents/`, `visuals/`, and `citystate/` are plain Python
@@ -297,6 +308,7 @@ the agent roster from the active city at startup) all call through
 | `citystate/store.py` | citystate | The city collection under `data/cities/<id>/` and the *active* one (`data/active_city`) that every implicit-city endpoint reads. Each city is `city.json` (eras/figures/events/summary) + `locations.json` + one `agents/<id>/agent.json` per resident, each entity with its own `media/` directory alongside. Atomic writes, lazy-loaded. `get()` composes one dict shaped like a single-blob city so no reader sees the split. |
 | `citystate/routes.py` | citystate | The `/api/city/*` blueprint: `GET /agents/<id>` (one agent's full record, including persisted `plans`/`runs`), `POST /media` / `DELETE /media/<entity_id>/<media_id>`, and `GET /files/<path>` serving the relocated media. |
 | `citystate/graph_store.py` / `graph_routes.py` | citystate | The canvases: one JSON document per scope (`city:<id>`, `agent:<id>`, `place:<id>`, `scratch:<board>`, `storyboard:<id>`) under `data/graphs/`, with a `rev` for optimistic concurrency (`GET`/`PUT /api/graph/<scope>`). Deliberately opaque -- stores whatever `nodes`/`edges` the client sends; what a node *means* is entirely the frontend's business. |
+| `citystate/graph_library.py` | citystate | The *Saved graphs* library (`/api/graph-library/*`): named bundles of a canvas's nodes/edges plus every Storyboard's inner canvas, under `data/library/`. Opaque like `graph_store.py`; `frontend/src/flow/useGraphLibrary.ts` does the capture on save and the id remapping on load. |
 | `hardware.py` | history, agents | Detects available memory (Apple unified memory or NVIDIA VRAM) so each config can size its chat model to the machine it's running on. |
 | `jsonutil.py` | all | Shared `json_response()` helper every blueprint uses. |
 

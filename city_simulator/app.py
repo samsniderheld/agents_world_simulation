@@ -21,6 +21,7 @@ from agents import jobs as agents_jobs
 from agents.routes import bp as agents_bp
 from citystate import store as citystate
 from citystate.graph_routes import bp as graph_bp
+from citystate.graph_routes import library_bp as graph_library_bp
 from citystate.routes import bp as city_bp
 from history.routes import bp as history_bp
 from visuals.routes import bp as visuals_bp
@@ -40,6 +41,7 @@ def create_app() -> Flask:
     app.register_blueprint(visuals_bp)
     app.register_blueprint(city_bp)
     app.register_blueprint(graph_bp)
+    app.register_blueprint(graph_library_bp)
     app.register_blueprint(styles_bp)
 
     # citystate.store.get() lazily reads a previously-saved city off disk

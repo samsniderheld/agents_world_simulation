@@ -33,18 +33,23 @@ every LLM call an agent makes.
 
 ## One tick
 
-`World.step()` (`world.py`) advances the simulation by one tick, which is
-30 simulated minutes (`config.TICK_MINUTES`), starting from 6:00 AM.
+`World.step()` (`world.py`) advances the simulation by one tick. A run
+starts at 6:00 AM and a tick is 30 simulated minutes by default
+(`config.TICK_MINUTES`); the Simulation node can set both per run. The
+planning prompts are told the current time ("It is currently 10:00 PM"),
+and decompose asks for substeps that fill exactly one tick ("about 2
+hours"), so both settings change what agents do, not just the clock.
 
 ```
 World.step()
   │
   ├─ 1. ACT          one thread per free agent (in parallel)
   │     planning.next_action()
-  │       ├─ out of plan items?   generate_daily_plan()     5-8 broad steps for today
-  │       ├─ out of substeps?     decompose(next broad step) 3 finer actions,
-  │       │                                                  + WHERE: move somewhere?
-  │       └─ current_action = next substep
+  │       ├─ first turn?          generate_plan()      the whole run's plan, up to 8
+  │       │                                            items spread evenly over its ticks
+  │       ├─ entering an item?    decompose(item)      one action per tick it covers,
+  │       │                                            + WHERE: move somewhere?
+  │       └─ current_action = this tick's action
   │     memory.add("X is <action>")
   │
   ├─ 2. PERCEIVE + REACT      sequential, once per co-located pair
@@ -131,13 +136,18 @@ acting on conclusions nobody scripted.
 
 `planning.py` works top-down, one level less than the paper:
 
-- **The daily plan** (`generate_daily_plan`): 5-8 short items for the
-  whole day, in order. The prompt first retrieves memories of past days
-  and explicitly asks the model to move the story forward rather than
-  reuse the same schedule.
-- **Decomposition** (`decompose`): when the current broad item runs out,
-  the next one is split into 3 actions of a few minutes each. Each tick
-  consumes one action, so a broad item lasts 3 ticks.
+- **The plan** (`generate_plan`): on an agent's first turn it plans the
+  whole run, sized to it: "the next 7 days, from Day 1, 06:00 AM until
+  Day 8, 06:00 AM" for a week of day-long ticks, "the next 4 hours" for
+  8 half-hour ticks. It asks for one item per tick, up to 8
+  (`MAX_PLAN_ITEMS`); a longer run gets 8 broader items. The prompt first
+  retrieves memories of past runs and asks the model to move the story
+  forward rather than repeat them.
+- **Pinned to ticks**: the items are spread evenly over the run's ticks,
+  and each item is split into exactly as many actions as it has ticks (a
+  one-tick item becomes one action covering the whole tick). An agent who
+  spends a tick in conversation resumes wherever the clock says, so the
+  rest of the plan never slides later.
 - **Movement**: the decompose prompt also asks where the agent should be
   for that whole step, from the city's active places, or `STAY`. The reply
   is matched against the real place list and ignored if it doesn't match,
@@ -170,7 +180,7 @@ These arrive from the Simulation node through `routes.py` and
 | Option | Effect |
 |---|---|
 | `agent_names` | which residents take part (the agents wired into the node) |
-| `ticks` | how many 30-minute ticks to run |
+| `ticks`, `tick_minutes`, `start_time` | how many ticks to run, how many simulated minutes each lasts, and the time of day it starts (the last two are stored with the run so a treatment rebuilds the right timestamps) |
 | `convene_at` | a place name (from a Location wired into the node): every agent starts there, and they're *anchored* for the whole run, meaning decompose is never offered anywhere else to go. Without anchoring, each agent's own WHERE answer walks them back to their usual haunt within a couple of ticks. |
 | `directive` | free text ("they're planning a heist, keep it tense") spliced into every plan, decompose, react, and dialogue prompt via `textutil.directive_block()`. It's a scene nudge for this run only, not a permanent trait. |
 | `provider`, `chat_model` | `ollama` (default) or `claude`, and which model |

@@ -48,6 +48,14 @@ export function usePipelineCallbacks(
     setNodes((prev) => (prev ? prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, ticks } } : n)) : prev));
   }, [setNodes]);
 
+  const onTickMinutesChange = useCallback((nodeId: string, tickMinutes: number) => {
+    setNodes((prev) => (prev ? prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, tickMinutes } } : n)) : prev));
+  }, [setNodes]);
+
+  const onStartTimeChange = useCallback((nodeId: string, startTime: string) => {
+    setNodes((prev) => (prev ? prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, startTime } } : n)) : prev));
+  }, [setNodes]);
+
   const onDirectiveChange = useCallback((nodeId: string, directive: string) => {
     setNodes((prev) => (prev ? prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, directive } } : n)) : prev));
   }, [setNodes]);
@@ -273,6 +281,8 @@ export function usePipelineCallbacks(
 
   return {
     onTicksChange,
+    onTickMinutesChange,
+    onStartTimeChange,
     onDirectiveChange,
     onProviderChange,
     onChatModelChange,

@@ -49,7 +49,7 @@ export function AgentDetail({ characterId, onMediaChanged }: { characterId: stri
         {tab === 'plans' && <Plans record={record} />}
         {tab === 'events' && <EventLog record={record} />}
         {tab === 'treatments' && <Treatments record={record} />}
-        {tab === 'media' && <MediaGrid items={record.media} entityId={characterId} onDeleted={refetchAfterMediaChange} />}
+        {tab === 'media' && <MediaGrid items={newestFirst(record.media)} entityId={characterId} onDeleted={refetchAfterMediaChange} />}
       </div>
     </>
   );
@@ -63,7 +63,7 @@ function Bio({ record }: { record: AgentRecord }) {
       </div>
       {record.quirk && <p style={{ fontStyle: 'italic', color: 'var(--accent)' }}>{record.quirk}</p>}
       <p>{record.bio}</p>
-      {(record.history ?? []).map((h, i) => (
+      {[...(record.history ?? [])].sort((a, b) => b.year - a.year).map((h, i) => (
         <div className="inspector-entry" key={i}>
           <span className="inspector-entry-year">{h.year}</span>
           {h.gospel_text}
@@ -73,11 +73,18 @@ function Bio({ record }: { record: AgentRecord }) {
   );
 }
 
+// Everything in an agent's record is appended as it happens (citystate/
+// store.py), so stored order is oldest-first; the panel shows newest-first.
+// Only the *list* is flipped -- a single plan's own steps keep their order.
+function newestFirst<T>(items: T[]): T[] {
+  return [...items].reverse();
+}
+
 function Plans({ record }: { record: AgentRecord }) {
   if (record.plans.length === 0) return <div className="inspector-empty">No plans yet.</div>;
   return (
     <div>
-      {record.plans.map((p, i) => (
+      {newestFirst(record.plans).map((p, i) => (
         <div className="inspector-entry" key={i}>
           <div className="inspector-kv">
             <b>tick {p.tick}</b> · run started {fmtDate(p.run_started_at)}
@@ -97,10 +104,10 @@ function EventLog({ record }: { record: AgentRecord }) {
   if (record.runs.length === 0) return <div className="inspector-empty">No runs yet.</div>;
   return (
     <div>
-      {record.runs.map((run, i) => (
+      {newestFirst(record.runs).map((run, i) => (
         <div key={i}>
           <div className="inspector-run-header">run · {fmtDate(run.started_at)}</div>
-          {run.events.map((e, j) => (
+          {newestFirst(run.events).map((e, j) => (
             <div className="inspector-event-row" key={j}>
               <span className="inspector-event-badge">{e.kind}</span>
               <span>{eventLine(e)}</span>
@@ -116,7 +123,7 @@ function Treatments({ record }: { record: AgentRecord }) {
   if (record.treatments.length === 0) return <div className="inspector-empty">No treatments generated yet.</div>;
   return (
     <div>
-      {record.treatments.map((t, i) => (
+      {newestFirst(record.treatments).map((t, i) => (
         <div className="inspector-entry" key={i}>
           <div className="inspector-kv">{fmtDate(t.created_at)}</div>
           <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'var(--sans)', fontSize: 13 }}>{t.text}</pre>

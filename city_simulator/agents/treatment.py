@@ -11,15 +11,16 @@ import re
 from . import config
 from . import llm
 from .config import TICK_MINUTES
+from .world import clock_label
 
 _STORYBOARD_HEADER_RE = re.compile(r"^\s*storyboard\s*:?\s*$", re.IGNORECASE)
 _SHOT_LINE_RE = re.compile(r"^\s*\d+\.\s*(.+)$")
 
-# Matches World.__init__'s own hardcoded default exactly (simulation.py's
-# one World(...) call never overrides start_time) -- needed here because
-# a persisted "dialogue" event has no stored time field of its own (only
-# "action" events do), so its display time has to be recomputed from its
-# tick number the same way World.current_time would have shown it live.
+# World's default start (6:00 AM) -- runs saved before start_time was
+# stored in their meta used it. Needed because a persisted "dialogue" event
+# has no stored time field of its own (only "action" events do), so its
+# display time is recomputed from its tick number the same way
+# World.current_time showed it live.
 _DEFAULT_START_TIME = datetime.datetime(2026, 8, 24, 6, 0)
 
 
@@ -52,11 +53,18 @@ def build_transcript(agent_records: dict, started_at: str) -> tuple:
     """
     merged_events = []
     agent_names = set()
+    tick_minutes = TICK_MINUTES  # runs from before this was stored used the default
+    start = _DEFAULT_START_TIME
     for name, record in agent_records.items():
         for run in (record or {}).get("runs", []):
             if run.get("started_at") != started_at:
                 continue
             merged_events.extend(run.get("events", []))
+            meta = run.get("meta") or {}
+            tick_minutes = meta.get("tick_minutes") or tick_minutes
+            if meta.get("start_time"):
+                hour, minute = (int(x) for x in meta["start_time"].split(":"))
+                start = _DEFAULT_START_TIME.replace(hour=hour, minute=minute)
             agent_names.add(name)
 
     narrative = [e for e in merged_events if e.get("kind") in ("action", "dialogue")]
@@ -72,8 +80,8 @@ def build_transcript(agent_records: dict, started_at: str) -> tuple:
             if location and location not in locations:
                 locations.append(location)
         else:
-            time = (_DEFAULT_START_TIME + datetime.timedelta(
-                minutes=TICK_MINUTES * e.get("tick", 0))).strftime("%I:%M %p")
+            when = start + datetime.timedelta(minutes=tick_minutes * e.get("tick", 0))
+            time = clock_label(start, when, tick_minutes)
             log.append(f"[{time}] {e.get('agent')}: {e.get('text')}")
 
     return log, sorted(agent_names), locations

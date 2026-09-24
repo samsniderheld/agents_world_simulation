@@ -19,6 +19,8 @@ import type { VideoNodeData } from './nodes/VideoNode';
 
 export interface PipelineCallbacks {
   onTicksChange: (nodeId: string, ticks: number) => void;
+  onTickMinutesChange: (nodeId: string, tickMinutes: number) => void;
+  onStartTimeChange: (nodeId: string, startTime: string) => void;
   onDirectiveChange: (nodeId: string, directive: string) => void;
   onProviderChange: (nodeId: string, provider: string) => void;
   onChatModelChange: (nodeId: string, chatModel: string) => void;
@@ -55,6 +57,8 @@ export function toPipelineRenderNode(gn: GraphNode, cb: PipelineCallbacks): Node
       height: gn.height,
       data: {
         ticks: (gn.data.ticks as number) ?? 8,
+        tickMinutes: (gn.data.tickMinutes as number) ?? 30,
+        startTime: (gn.data.startTime as string) ?? '06:00',
         directive: (gn.data.directive as string) ?? '',
         provider: (gn.data.provider as string) ?? 'ollama',
         chatModel: (gn.data.chatModel as string) ?? '',
@@ -65,6 +69,8 @@ export function toPipelineRenderNode(gn: GraphNode, cb: PipelineCallbacks): Node
         verbose: (gn.data.verbose as boolean) ?? true,
         agentNames: [],
         onTicksChange: cb.onTicksChange,
+        onTickMinutesChange: cb.onTickMinutesChange,
+        onStartTimeChange: cb.onStartTimeChange,
         onDirectiveChange: cb.onDirectiveChange,
         onProviderChange: cb.onProviderChange,
         onChatModelChange: cb.onChatModelChange,
@@ -198,7 +204,7 @@ export function pipelineToGraphNode(n: Node): GraphNode | null {
       position: n.position,
       width: n.width,
       height: n.height,
-      data: { ticks: d.ticks, directive: d.directive, provider: d.provider, chatModel: d.chatModel, verbose: d.verbose },
+      data: { ticks: d.ticks, tickMinutes: d.tickMinutes, startTime: d.startTime, directive: d.directive, provider: d.provider, chatModel: d.chatModel, verbose: d.verbose },
     };
   }
   if (n.type === 'treatment') {

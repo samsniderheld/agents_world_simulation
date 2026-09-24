@@ -14,6 +14,7 @@ import {
   useReactFlow,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import { canvasInteractionProps } from './canvasInteraction';
 import { history } from '../api/client';
 import type { Character, GraphNode, HistoryData, Place } from '../api/types';
 import { Inspector } from '../inspector/Inspector';
@@ -43,6 +44,7 @@ import { reconcile } from './reconcile';
 import { scratchToGraphNode, toScratchRenderNode } from './scratchNodeKit';
 import { useAddNodeActions } from './useAddNodeActions';
 import { useHiddenEntities } from './useHiddenEntities';
+import { useSavedGraphs } from './useSavedGraphs';
 import { usePersistedGraph } from './usePersistedGraph';
 import { usePipelineCallbacks } from './usePipelineCallbacks';
 import { useStylesLibrary } from './useStylesLibrary';
@@ -73,7 +75,8 @@ const PIPELINE_TYPES = new Set(['sim', 'treatment', 'frame', 'video', 'style', '
 const SCRATCH_TYPES = new Set(['scratch-image', 'scratch-music']);
 
 function CanvasInner({ cityId, data, onDataRefresh }: { cityId: string; data: HistoryData; onDataRefresh: () => void }) {
-  const { doc, save } = usePersistedGraph(`city:${cityId}`);
+  const { doc, save, flush, adopt } = usePersistedGraph(`city:${cityId}`);
+  const savedGraphs = useSavedGraphs(`city:${cityId}`, { flush, adopt });
   const { screenToFlowPosition } = useReactFlow();
   const [selection, setSelection] = useState<Selection>({ kind: 'city' });
   const [nodes, setNodes] = useState<Node[] | null>(null);
@@ -286,6 +289,7 @@ function CanvasInner({ cityId, data, onDataRefresh }: { cityId: string; data: Hi
       items: notOnCanvasLocations.map((p) => ({ id: p.id, label: p.name, sublabel: p.place_type, dragPayload: `location:${p.id}`, onAdd: () => addToCanvas({ id: p.id, kind: 'location' }) })),
     },
   ];
+  sections.push(savedGraphs.section);
 
   return (
     <div className="city-canvas-layout">
@@ -302,6 +306,7 @@ function CanvasInner({ cityId, data, onDataRefresh }: { cityId: string; data: Hi
           onNodeClick={onNodeClick}
           onNodeDoubleClick={onNodeDoubleClick}
           onPaneClick={() => setSelection({ kind: 'city' })}
+          {...canvasInteractionProps}
           fitView
           proOptions={{ hideAttribution: true }}
         >
@@ -311,6 +316,7 @@ function CanvasInner({ cityId, data, onDataRefresh }: { cityId: string; data: Hi
         </ReactFlow>
       </div>
       <Inspector selection={selection} data={data} onDataRefresh={onDataRefresh} />
+      {savedGraphs.modal}
       {newAgentModal && (
         <NewAgentModal
           places={data.places}

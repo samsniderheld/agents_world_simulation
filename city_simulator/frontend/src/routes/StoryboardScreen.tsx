@@ -3,6 +3,7 @@ import type { DragEvent } from 'react';
 import type { Connection, Edge, Node, NodeMouseHandler, XYPosition } from '@xyflow/react';
 import { addEdge, applyEdgeChanges, applyNodeChanges, Background, BackgroundVariant, Controls, MiniMap, ReactFlow, ReactFlowProvider, useReactFlow } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import { canvasInteractionProps } from '../flow/canvasInteraction';
 import { history } from '../api/client';
 import type { Character, GraphNode, HistoryData, Place } from '../api/types';
 import '../flow/canvas.css';
@@ -30,6 +31,7 @@ import { DRAG_MIME, SideDrawer, type DrawerSection } from '../flow/SideDrawer';
 import { navigate, type Scope } from './router';
 import { useAddNodeActions } from '../flow/useAddNodeActions';
 import { useHiddenEntities } from '../flow/useHiddenEntities';
+import { useSavedGraphs } from '../flow/useSavedGraphs';
 import { usePersistedGraph } from '../flow/usePersistedGraph';
 import { usePipelineCallbacks } from '../flow/usePipelineCallbacks';
 import { useStylesLibrary } from '../flow/useStylesLibrary';
@@ -72,7 +74,8 @@ function StoryboardCanvasInner({
   activeCityId?: string;
   onCityDataRefresh?: () => void;
 }) {
-  const { doc, save } = usePersistedGraph(storyboardId);
+  const { doc, save, flush, adopt } = usePersistedGraph(storyboardId);
+  const savedGraphs = useSavedGraphs(storyboardId, { flush, adopt });
   const { screenToFlowPosition } = useReactFlow();
   const [nodes, setNodes] = useState<Node[] | null>(null);
   const [edges, setEdges] = useState<Edge[]>([]);
@@ -291,6 +294,7 @@ function StoryboardCanvasInner({
       items: notOnCanvasLocations.map((p) => ({ id: p.id, label: p.name, sublabel: p.place_type, dragPayload: `location:${p.id}`, onAdd: () => addToCanvas({ id: p.id, kind: 'location' }) })),
     },
   ];
+  sections.push(savedGraphs.section);
 
   return (
     <div className="city-canvas-layout">
@@ -305,6 +309,7 @@ function StoryboardCanvasInner({
           onConnect={onConnect}
           isValidConnection={isValidConnection}
           onNodeDoubleClick={onNodeDoubleClick}
+          {...canvasInteractionProps}
           fitView
           proOptions={{ hideAttribution: true }}
         >
@@ -313,6 +318,7 @@ function StoryboardCanvasInner({
           <MiniMap nodeColor={miniMapNodeColor} pannable zoomable />
         </ReactFlow>
       </div>
+      {savedGraphs.modal}
       {newAgentModal && cityData && (
         <NewAgentModal
           places={cityData.places}

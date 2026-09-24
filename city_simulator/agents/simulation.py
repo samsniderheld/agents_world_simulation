@@ -5,6 +5,8 @@ streamed live through recorder.py rather than returned, since the
 frontend is watching the event log, not this function's return value.
 """
 
+import datetime
+
 from citystate import store as citystate
 
 from . import config
@@ -136,7 +138,7 @@ def _hydrate_agents(agents: list) -> None:
 def run(ticks: int = 8, provider: str = None, chat_model: str = None, embed_model: str = None,
         context_tokens: int = None, tick_sleep: float = 0,
         agent_names: list = None, verbose: bool = False, stop_flag=None, convene_at: str = None,
-        directive: str = None):
+        directive: str = None, tick_minutes: int = None, start_time: str = None):
     """Blocking -- meant to be called on a background thread (see
     agents/jobs.py). Configures config.py's overridable settings, builds
     the chosen agents, and runs the tick loop.
@@ -206,6 +208,11 @@ def run(ticks: int = 8, provider: str = None, chat_model: str = None, embed_mode
             # Kept with the run so a later treatment of it knows what the
             # scene was steered toward (see agents/routes.py's /treatment).
             "directive": directive,
+            # Treatment rebuilds dialogue timestamps from tick numbers, so
+            # it needs the tick length this run actually used.
+            "tick_minutes": tick_minutes or config.TICK_MINUTES,
+            # "HH:MM" -- likewise needed to rebuild dialogue timestamps.
+            "start_time": start_time or "06:00",
         },
     )
 
@@ -219,8 +226,10 @@ def run(ticks: int = 8, provider: str = None, chat_model: str = None, embed_mode
         known_places = sorted({a.location for a in agents})
 
     anchored_agents = {a.name for a in agents} if convene_at else None
-    world = World(agents, tick_sleep=tick_sleep, verbose=verbose, stop_flag=stop_flag,
-                  known_places=known_places, anchored_agents=anchored_agents, directive=directive)
+    hour, minute = (int(x) for x in (start_time or "06:00").split(":"))
+    world = World(agents, start_time=datetime.datetime(2026, 8, 24, hour, minute), tick_sleep=tick_sleep, verbose=verbose, stop_flag=stop_flag,
+                  known_places=known_places, anchored_agents=anchored_agents, directive=directive,
+                  tick_minutes=tick_minutes)
     world.run(ticks)
 
     citystate.append_agent_run(recorder.to_dict())

@@ -1,20 +1,21 @@
-// Thin typed wrappers over the existing Flask JSON API -- one function per
-// route, request/response shapes verified against the real route handlers
-// (history/routes.py, agents/routes.py, visuals/routes.py,
-// citystate/routes.py), not guessed. No endpoint here is new; Phase 4/5
-// of the plan will add the ones that don't exist yet (graph persistence,
-// styles, multi-city).
+// Thin typed wrappers over the Flask JSON API -- one function per route,
+// request/response shapes verified against the real route handlers
+// (history/, agents/, visuals/ and citystate/'s routes.py files, plus
+// citystate/graph_routes.py and visuals/styles_routes.py), not guessed.
 
 import type {
   AgentRecord,
   AgentsState,
   Character,
   CitySummary,
+  GraphBody,
   GraphDoc,
   HistoryData,
   JobStatus,
   MediaItem,
   ProviderCapabilities,
+  SavedGraph,
+  SavedGraphSummary,
   Style,
   Treatment,
   VisualsResult,
@@ -127,6 +128,10 @@ export const agentsApi = {
   run: (params: {
     agentNames: string[];
     ticks?: number;
+    // Simulated minutes per tick; omitted = server default (config.TICK_MINUTES).
+    tickMinutes?: number;
+    // Simulated start time of day, "HH:MM"; omitted = 06:00.
+    startTime?: string;
     provider?: string;
     tickSleep?: number;
     chatModel?: string;
@@ -147,6 +152,8 @@ export const agentsApi = {
       body: json({
         agent_names: params.agentNames,
         ticks: params.ticks ?? 8,
+        tick_minutes: params.tickMinutes,
+        start_time: params.startTime,
         provider: params.provider,
         tick_sleep: params.tickSleep ?? 0,
         chat_model: params.chatModel,
@@ -324,6 +331,19 @@ export const graph = {
     if (!res.ok) throw new Error(body.error ?? `${res.status} ${res.statusText}`);
     return body as GraphDoc;
   },
+};
+
+// ---- saved graphs (/api/graph-library) -- see citystate/graph_library.py ---
+
+export const graphLibrary = {
+  list: () => request<{ graphs: SavedGraphSummary[] }>('/api/graph-library/'),
+  get: (id: string) => request<{ graph: SavedGraph }>(`/api/graph-library/${encodeURIComponent(id)}`),
+  save: (params: { name: string; root: GraphBody; storyboards: Record<string, GraphBody>; sourceScope: string }) =>
+    request<{ graph: { id: string; name: string } }>('/api/graph-library/', {
+      method: 'POST',
+      body: json({ name: params.name, root: params.root, storyboards: params.storyboards, source_scope: params.sourceScope }),
+    }),
+  remove: (id: string) => request<{ ok: boolean }>(`/api/graph-library/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 };
 
 // ---- styles (/api/styles) -- the global, reusable style library --------
