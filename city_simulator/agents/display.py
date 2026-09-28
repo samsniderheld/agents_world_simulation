@@ -75,7 +75,7 @@ def _clean(text: str, limit: int = 160) -> str:
 
 
 def plan_line(agent_name: str, color: str, plan_items: list) -> str:
-    """A fresh daily plan was generated -- planning.generate_daily_plan."""
+    """A plan for the run was generated -- planning.generate_plan."""
     items = _clean("; ".join(plan_items))
     return f"    {_tag('PLAN', _PLAN_TAG)} {_name(agent_name, color)}'s plan for today: {items}"
 

@@ -21,15 +21,18 @@ export function usePersistedGraph(scope: string) {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingRef = useRef<{ nodes: GraphNode[]; edges: GraphEdge[] } | null>(null);
 
-  const flush = useCallback(() => {
+  // Returns the save's promise (resolved immediately when nothing's
+  // pending), so a caller that needs the server copy current -- saving the
+  // canvas into the library -- can wait for it.
+  const flush = useCallback((): Promise<void> => {
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = null;
     const pending = pendingRef.current;
     const current = docRef.current;
-    if (!pending || !current) return;
+    if (!pending || !current) return Promise.resolve();
     pendingRef.current = null;
 
-    graph
+    return graph
       .put(scope, {
         version: current.version,
         rev: current.rev,
@@ -79,5 +82,16 @@ export function usePersistedGraph(scope: string) {
     [flush],
   );
 
-  return { doc, save, flush };
+  // Swap in a document just written to this scope by something other than
+  // autosave (loading a saved graph) -- the caller's rebuild effect sees a
+  // new `doc.rev` and rebuilds from it, exactly like a fresh load.
+  const adopt = useCallback((next: GraphDoc) => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = null;
+    pendingRef.current = null;
+    docRef.current = next;
+    setDoc(next);
+  }, []);
+
+  return { doc, save, flush, adopt };
 }

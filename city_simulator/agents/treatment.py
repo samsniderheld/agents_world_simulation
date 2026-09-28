@@ -11,15 +11,16 @@ import re
 from . import config
 from . import llm
 from .config import TICK_MINUTES
+from .world import clock_label
 
 _STORYBOARD_HEADER_RE = re.compile(r"^\s*storyboard\s*:?\s*$", re.IGNORECASE)
 _SHOT_LINE_RE = re.compile(r"^\s*\d+\.\s*(.+)$")
 
-# Matches World.__init__'s own hardcoded default exactly (simulation.py's
-# one World(...) call never overrides start_time) -- needed here because
-# a persisted "dialogue" event has no stored time field of its own (only
-# "action" events do), so its display time has to be recomputed from its
-# tick number the same way World.current_time would have shown it live.
+# World's default start (6:00 AM) -- runs saved before start_time was
+# stored in their meta used it. Needed because a persisted "dialogue" event
+# has no stored time field of its own (only "action" events do), so its
+# display time is recomputed from its tick number the same way
+# World.current_time showed it live.
 _DEFAULT_START_TIME = datetime.datetime(2026, 8, 24, 6, 0)
 
 
@@ -52,11 +53,18 @@ def build_transcript(agent_records: dict, started_at: str) -> tuple:
     """
     merged_events = []
     agent_names = set()
+    tick_minutes = TICK_MINUTES  # runs from before this was stored used the default
+    start = _DEFAULT_START_TIME
     for name, record in agent_records.items():
         for run in (record or {}).get("runs", []):
             if run.get("started_at") != started_at:
                 continue
             merged_events.extend(run.get("events", []))
+            meta = run.get("meta") or {}
+            tick_minutes = meta.get("tick_minutes") or tick_minutes
+            if meta.get("start_time"):
+                hour, minute = (int(x) for x in meta["start_time"].split(":"))
+                start = _DEFAULT_START_TIME.replace(hour=hour, minute=minute)
             agent_names.add(name)
 
     narrative = [e for e in merged_events if e.get("kind") in ("action", "dialogue")]
@@ -72,8 +80,8 @@ def build_transcript(agent_records: dict, started_at: str) -> tuple:
             if location and location not in locations:
                 locations.append(location)
         else:
-            time = (_DEFAULT_START_TIME + datetime.timedelta(
-                minutes=TICK_MINUTES * e.get("tick", 0))).strftime("%I:%M %p")
+            when = start + datetime.timedelta(minutes=tick_minutes * e.get("tick", 0))
+            time = clock_label(start, when, tick_minutes)
             log.append(f"[{time}] {e.get('agent')}: {e.get('text')}")
 
     return log, sorted(agent_names), locations
@@ -147,7 +155,7 @@ def _cast_block(cast_details: list) -> str:
 
 def generate_treatment(log: list[str], agent_names: list[str], model: str = None,
                         provider: str = None, location_details: list = None,
-                        cast_details: list = None) -> str:
+                        cast_details: list = None, directive: str = None) -> str:
     """Ask the LLM to read a finished simulation's transcript and write a
     short video-vignette treatment: the characters involved, a description
     of what happens, and 6 storyboard image prompts, each with art
@@ -166,10 +174,19 @@ def generate_treatment(log: list[str], agent_names: list[str], model: str = None
     was surfaced, into scenery invented from the name rather than the
     place's actual recorded appearance. `cast_details` is
     [{"name": str, "bio": str}, ...] -- see _cast_block above -- the same
-    idea applied to who's in the scene."""
+    idea applied to who's in the scene. `directive` is the free-text scene
+    direction the run itself was steered by (the Simulation node's text
+    input, persisted in the run's meta), so the treatment is written
+    toward the same intent."""
     transcript = "\n".join(log) or "(nothing happened)"
     setting_line = _setting_block(location_details)
     cast_line = _cast_block(cast_details)
+    direction_line = (
+        f"SCENE DIRECTION (what this scene was set up to be about -- let it "
+        f"shape the synopsis and shots, consistent with the transcript): "
+        f"{directive.strip()}\n\n"
+        if directive and directive.strip() else ""
+    )
 
     prompt = (
         "You are a film treatment writer adapting a scene transcript into a "
@@ -179,6 +196,7 @@ def generate_treatment(log: list[str], agent_names: list[str], model: str = None
         "not invent any other named characters.\n\n"
         f"{cast_line}"
         f"{setting_line}"
+        f"{direction_line}"
         f"Transcript:\n{transcript}\n\n"
         "Write the treatment in exactly this format, with no extra "
         "commentary before or after it:\n\n"
@@ -200,10 +218,10 @@ def generate_treatment(log: list[str], agent_names: list[str], model: str = None
         "on its own, standalone, to generate that shot's actual image later -- "
         "the Character field must repeat enough of their real appearance that "
         "the shot still reads correctly by itself, without needing the rest "
-        "of this treatment for context.)"
-        "the direction should take into account the japanese concept of MA, focusing on"
-        "individual moments, the characters within them, and how those characters experience"
-        "their environment"
+        "of this treatment for context.)\n\n"
+        "The direction should take into account the Japanese concept of MA, focusing on "
+        "individual moments, the characters within them, and how those characters experience "
+        "their environment."
     )
     return llm.complete(
         prompt, model=model, temperature=0.8,

@@ -30,6 +30,7 @@ Layout (`src/`):
 | `flow/edgeRules.ts` | The one table of which output port may plug into which input port |
 | `flow/pipeline.ts` | Cross-node data derivation, recomputed from raw nodes/edges every render |
 | `flow/usePersistedGraph.ts`, `graphIds.ts`, `reconcile.ts` | Autosaved graph documents (`/api/graph/<scope>`) and reconciling saved nodes against the city's current entities |
+| `flow/useGraphLibrary.ts`, `useSavedGraphs.tsx`, `SavedGraphDialog.tsx` | The drawer's *Saved graphs* section: save a canvas (with its Storyboards' inner canvases) to the library, load one back with fresh ids |
 | `flow/use*.ts`, `*NodeKit.ts`, `layout.ts` | Shared canvas hooks (add-node actions, pipeline callbacks, styles library, hidden-entity curation) and node <-> persisted-shape mapping |
 | `inspector/` | The right-hand Inspector panel (city overview + generation log, agent/place detail, media grid) |
 | `api/` | Typed fetch wrappers (`client.ts`), response types (`types.ts`), visuals job polling |

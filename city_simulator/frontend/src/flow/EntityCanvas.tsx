@@ -3,6 +3,7 @@ import type { DragEvent } from 'react';
 import type { Connection, Edge, Node, NodeMouseHandler, XYPosition } from '@xyflow/react';
 import { addEdge, applyEdgeChanges, applyNodeChanges, Background, BackgroundVariant, Controls, MiniMap, ReactFlow, ReactFlowProvider, useReactFlow } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import { canvasInteractionProps } from './canvasInteraction';
 import { city } from '../api/client';
 import type { Character, GraphNode, HistoryData, MediaItem, Place } from '../api/types';
 import './canvas.css';
@@ -32,6 +33,7 @@ import { navigate, type Scope } from '../routes/router';
 import { scratchToGraphNode, toScratchRenderNode } from './scratchNodeKit';
 import { useAddNodeActions } from './useAddNodeActions';
 import { useHiddenEntities } from './useHiddenEntities';
+import { useSavedGraphs } from './useSavedGraphs';
 import { usePersistedGraph } from './usePersistedGraph';
 import { usePipelineCallbacks } from './usePipelineCallbacks';
 import { useStylesLibrary } from './useStylesLibrary';
@@ -102,7 +104,8 @@ function CanvasInner({
   cityData: HistoryData | null;
   onCityDataRefresh?: () => void;
 }) {
-  const { doc, save } = usePersistedGraph(scope);
+  const { doc, save, flush, adopt } = usePersistedGraph(scope);
+  const savedGraphs = useSavedGraphs(scope, { flush, adopt });
   const { screenToFlowPosition } = useReactFlow();
   const [nodes, setNodes] = useState<Node[] | null>(null);
   const [edges, setEdges] = useState<Edge[]>([]);
@@ -391,6 +394,7 @@ function CanvasInner({
       items: notOnCanvasMedia.map((m) => ({ id: m.id, label: m.prompt.slice(0, 40) || m.id, dragPayload: `media:${m.id}`, onAdd: () => addExistingMedia(m.id) })),
     },
   ];
+  sections.push(savedGraphs.section);
 
   // A fragment, not another .city-canvas-layout wrapper -- the caller
   // (AgentScreen/PlaceScreen) already provides that flex row, alongside
@@ -409,6 +413,7 @@ function CanvasInner({
           onConnect={onConnect}
           isValidConnection={isValidConnection}
           onNodeClick={onNodeClick}
+          {...canvasInteractionProps}
           fitView
           proOptions={{ hideAttribution: true }}
         >
@@ -417,6 +422,7 @@ function CanvasInner({
           <MiniMap nodeColor={miniMapNodeColor} pannable zoomable />
         </ReactFlow>
       </div>
+      {savedGraphs.modal}
       {newAgentModal && cityData && (
         <NewAgentModal
           places={cityData.places}

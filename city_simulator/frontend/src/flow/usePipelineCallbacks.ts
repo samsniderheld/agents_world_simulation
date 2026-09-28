@@ -48,6 +48,14 @@ export function usePipelineCallbacks(
     setNodes((prev) => (prev ? prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, ticks } } : n)) : prev));
   }, [setNodes]);
 
+  const onTickMinutesChange = useCallback((nodeId: string, tickMinutes: number) => {
+    setNodes((prev) => (prev ? prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, tickMinutes } } : n)) : prev));
+  }, [setNodes]);
+
+  const onStartTimeChange = useCallback((nodeId: string, startTime: string) => {
+    setNodes((prev) => (prev ? prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, startTime } } : n)) : prev));
+  }, [setNodes]);
+
   const onDirectiveChange = useCallback((nodeId: string, directive: string) => {
     setNodes((prev) => (prev ? prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, directive } } : n)) : prev));
   }, [setNodes]);
@@ -180,7 +188,7 @@ export function usePipelineCallbacks(
       // size from the moment it's created, and FRAME_GUTTER (60px) is
       // guaranteed clear space between them regardless.
       const FRAME_WIDTH = 540;
-      const FRAME_HEIGHT = 430;
+      const FRAME_HEIGHT = 480; // fits the edit-prompt row + input-image line
       const FRAME_GUTTER = 60;
       const frameNodes: GraphNode[] = shots.map((shotText, i) => ({
         id: newNodeId('frame'),
@@ -273,6 +281,8 @@ export function usePipelineCallbacks(
 
   return {
     onTicksChange,
+    onTickMinutesChange,
+    onStartTimeChange,
     onDirectiveChange,
     onProviderChange,
     onChatModelChange,

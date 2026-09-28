@@ -17,10 +17,10 @@ class Agent:
         self.location = location
 
         self.memory = MemoryStream()
-        self.plan: list[str] = []      # today's broad-strokes plan, in order
-        self.plan_cursor = 0
-        self.substeps: list[str] = []  # current broad step, decomposed
-        self.substep_cursor = 0
+        self.plan: list[str] = []      # the whole run's plan, broad items in order
+        self.plan_bounds: list = []    # (first tick, end tick) each item covers
+        self.current_item = -1         # index into plan of the decomposed item
+        self.substeps: list[str] = []  # that item, one action per tick
         self.current_action: str = "idle"
         self.chatting_with: "Agent | None" = None
 

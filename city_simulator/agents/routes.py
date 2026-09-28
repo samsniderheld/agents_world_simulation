@@ -2,6 +2,8 @@
 that parse the request and delegate to jobs.py/simulation.py/recorder.py.
 """
 
+import re
+
 from flask import Blueprint, request
 
 from citystate import store as citystate
@@ -50,6 +52,14 @@ def events():
     return json_response({"events": events, "next": total})
 
 
+def _start_time(value):
+    """Normalizes "7:30" / "07:30" to "07:30"; None for blank or invalid."""
+    match = re.fullmatch(r"\s*(\d{1,2}):(\d{2})\s*", value or "")
+    if not match or int(match.group(1)) > 23 or int(match.group(2)) > 59:
+        return None
+    return f"{int(match.group(1)):02d}:{match.group(2)}"
+
+
 @bp.post("/run")
 def run():
     body = request.get_json(silent=True) or {}
@@ -83,6 +93,12 @@ def run():
         # Simulation node's free-text "guide how the characters are
         # interacting" field -- see simulation.run()'s docstring.
         "directive": (body.get("directive") or "").strip() or None,
+        # Simulated minutes per tick (the Simulation node's setting); blank
+        # keeps config.TICK_MINUTES.
+        "tick_minutes": max(1, min(1440, int(body["tick_minutes"]))) if body.get("tick_minutes") else None,
+        # Simulated time of day the run starts at, "HH:MM" (24-hour);
+        # blank = 06:00.
+        "start_time": _start_time(body.get("start_time")),
     }
     ok, error = jobs.start(params)
     return json_response({"ok": ok, "error": error}, status=200 if ok else 409)
@@ -159,9 +175,15 @@ def generate_treatment_for_agent():
 
     provider = body.get("provider") or None
     model = body.get("model") or None
+    # The Simulation node's free-text directive for this run, if it had one
+    # -- persisted in the run's meta (see simulation.run()), so the
+    # treatment knows what the scene was *meant* to be about, not just
+    # what the transcript happens to show.
+    directive = (latest.get("meta") or {}).get("directive")
     text = treatment.generate_treatment(
         log, agent_names, model=model, provider=provider,
         location_details=location_details, cast_details=cast_details,
+        directive=directive,
     )
     entry = citystate.add_treatment(agent_id, text, run_started_at=latest.get("started_at"))
     return json_response({"treatment": entry})

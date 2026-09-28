@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DragEvent } from 'react';
-import type { Connection, Edge, Node, XYPosition } from '@xyflow/react';
+import type { Connection, Edge, Node, NodeMouseHandler, XYPosition } from '@xyflow/react';
 import { addEdge, applyEdgeChanges, applyNodeChanges, Background, BackgroundVariant, Controls, MiniMap, ReactFlow, ReactFlowProvider, useReactFlow } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import { canvasInteractionProps } from '../flow/canvasInteraction';
 import { history } from '../api/client';
 import type { Character, GraphNode, HistoryData, Place } from '../api/types';
 import '../flow/canvas.css';
@@ -30,6 +31,7 @@ import { DRAG_MIME, SideDrawer, type DrawerSection } from '../flow/SideDrawer';
 import { navigate, type Scope } from './router';
 import { useAddNodeActions } from '../flow/useAddNodeActions';
 import { useHiddenEntities } from '../flow/useHiddenEntities';
+import { useSavedGraphs } from '../flow/useSavedGraphs';
 import { usePersistedGraph } from '../flow/usePersistedGraph';
 import { usePipelineCallbacks } from '../flow/usePipelineCallbacks';
 import { useStylesLibrary } from '../flow/useStylesLibrary';
@@ -67,11 +69,13 @@ function StoryboardCanvasInner({
 }: {
   storyboardId: string;
   from?: Scope;
-  cityData: HistoryData | null;
+  // undefined while still loading; null once known there's no active city.
+  cityData: HistoryData | null | undefined;
   activeCityId?: string;
   onCityDataRefresh?: () => void;
 }) {
-  const { doc, save } = usePersistedGraph(storyboardId);
+  const { doc, save, flush, adopt } = usePersistedGraph(storyboardId);
+  const savedGraphs = useSavedGraphs(storyboardId, { flush, adopt });
   const { screenToFlowPosition } = useReactFlow();
   const [nodes, setNodes] = useState<Node[] | null>(null);
   const [edges, setEdges] = useState<Edge[]>([]);
@@ -83,7 +87,33 @@ function StoryboardCanvasInner({
   const onMusicUpdate = useCallback((nodeId: string, patch: Partial<ScratchMusicNodeData>) => {
     setNodes((prev) => (prev ? prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, ...patch } } : n)) : prev));
   }, []);
-  const noExpand = useCallback(() => {}, []);
+  // Agent/Location nodes drill into that entity's own screen, with this
+  // board as the "back" target. The active city id arrives asynchronously
+  // and these callbacks get baked into nodes at build time, so read it
+  // through a ref rather than capturing whatever it was then.
+  const activeCityIdRef = useRef(activeCityId);
+  activeCityIdRef.current = activeCityId;
+  const onExpandAgent = useCallback(
+    (agentId: string) => {
+      const cityId = activeCityIdRef.current;
+      if (cityId) navigate({ kind: 'agent', cityId, agentId, from: { kind: 'storyboard', storyboardId, from } });
+    },
+    [storyboardId, from],
+  );
+  const onExpandPlace = useCallback(
+    (placeId: string) => {
+      const cityId = activeCityIdRef.current;
+      if (cityId) navigate({ kind: 'place', cityId, placeId, from: { kind: 'storyboard', storyboardId, from } });
+    },
+    [storyboardId, from],
+  );
+  const onNodeDoubleClick: NodeMouseHandler = useCallback(
+    (_, node) => {
+      if (node.type === 'agent') onExpandAgent((node.data as { character: Character }).character.id);
+      else if (node.type === 'location') onExpandPlace((node.data as { place: Place }).place.id);
+    },
+    [onExpandAgent, onExpandPlace],
+  );
   const onRemoveMissing = useCallback((nodeId: string) => {
     setNodes((prev) => (prev ? prev.filter((n) => n.id !== nodeId) : prev));
     setEdges((prev) => prev.filter((e) => e.source !== nodeId && e.target !== nodeId));
@@ -98,10 +128,10 @@ function StoryboardCanvasInner({
   const { styles, refresh: refreshStyles, remove: removeStyle } = useStylesLibrary();
   const [newAgentModal, setNewAgentModal] = useState<{ position?: XYPosition } | null>(null);
   const { addToCanvas, addPipelineNode, addStyleNode, addNewAgent, placeAgentNode, addScratchNode } = useAddNodeActions({
-    data: cityData,
+    data: cityData ?? null,
     setNodes,
-    onExpandAgent: noExpand,
-    onExpandPlace: noExpand,
+    onExpandAgent,
+    onExpandPlace,
     onRemoveMissing,
     onDataRefresh: onCityDataRefresh,
     onStyleCreated: refreshStyles,
@@ -113,6 +143,13 @@ function StoryboardCanvasInner({
 
   useEffect(() => {
     if (!doc) return;
+    // Wait for the city data before the first build. Agent/Location nodes
+    // can only be built once it's here, and building without it drops
+    // them -- and every edge touching them -- from the canvas. The first
+    // autosave would then persist that broken graph (confirmed: a freshly
+    // created Storyboard lost its seeded Agent/Location wiring whenever a
+    // large city's data arrived after the graph did).
+    if (cityData === undefined) return;
     const agentIds = cityData?.characters.map((c) => c.id) ?? [];
     const placeIds = cityData?.places.map((p) => p.id) ?? [];
     const key = `${doc.rev}:${cityData?.generated_at ?? 'none'}`;
@@ -130,7 +167,7 @@ function StoryboardCanvasInner({
     }));
     const builtEntity = cityData
       ? [...agentRecon.present, ...placeRecon.present, ...alreadyMissing, ...danglingAsMissing]
-          .map((gn) => toEntityRenderNode(gn, cityData, noExpand, noExpand, onRemoveMissing))
+          .map((gn) => toEntityRenderNode(gn, cityData, onExpandAgent, onExpandPlace, onRemoveMissing))
           .filter((n): n is Node => n !== null)
       : [];
 
@@ -257,6 +294,7 @@ function StoryboardCanvasInner({
       items: notOnCanvasLocations.map((p) => ({ id: p.id, label: p.name, sublabel: p.place_type, dragPayload: `location:${p.id}`, onAdd: () => addToCanvas({ id: p.id, kind: 'location' }) })),
     },
   ];
+  sections.push(savedGraphs.section);
 
   return (
     <div className="city-canvas-layout">
@@ -270,6 +308,8 @@ function StoryboardCanvasInner({
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
           isValidConnection={isValidConnection}
+          onNodeDoubleClick={onNodeDoubleClick}
+          {...canvasInteractionProps}
           fitView
           proOptions={{ hideAttribution: true }}
         >
@@ -278,6 +318,7 @@ function StoryboardCanvasInner({
           <MiniMap nodeColor={miniMapNodeColor} pannable zoomable />
         </ReactFlow>
       </div>
+      {savedGraphs.modal}
       {newAgentModal && cityData && (
         <NewAgentModal
           places={cityData.places}
@@ -293,7 +334,7 @@ function StoryboardCanvasInner({
 }
 
 export function StoryboardScreen({ storyboardId, from }: { storyboardId: string; from?: Scope }) {
-  const [cityData, setCityData] = useState<HistoryData | null>(null);
+  const [cityData, setCityData] = useState<HistoryData | null | undefined>(undefined);
   // Same resolution ScratchScreen needs and for the same reason --
   // HistoryData carries no city id of its own.
   const [activeCityId, setActiveCityId] = useState<string | undefined>(undefined);

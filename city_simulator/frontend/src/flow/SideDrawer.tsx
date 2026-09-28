@@ -35,7 +35,10 @@ export const DRAG_MIME = 'application/x-city-sim-node';
 // flatter Nodes-only list), so this component owns no domain knowledge.
 export function SideDrawer({ sections }: { sections: DrawerSection[] }) {
   const [collapsed, setCollapsed] = useState(true);
-  const [openIds, setOpenIds] = useState<Set<string>>(() => new Set(sections.map((s) => s.id)));
+  // Every category starts collapsed, and collapses again each time the
+  // drawer is reopened -- with long lists (78 locations) open by default,
+  // finding the one section you want meant scrolling past all the others.
+  const [openIds, setOpenIds] = useState<Set<string>>(() => new Set());
 
   const toggle = (id: string) =>
     setOpenIds((prev) => {
@@ -47,7 +50,14 @@ export function SideDrawer({ sections }: { sections: DrawerSection[] }) {
 
   if (collapsed) {
     return (
-      <button className="drawer-expand-tab" onClick={() => setCollapsed(false)} title="Show add-node panel">
+      <button
+        className="drawer-expand-tab"
+        onClick={() => {
+          setOpenIds(new Set());
+          setCollapsed(false);
+        }}
+        title="Show add-node panel"
+      >
         ▶
       </button>
     );
