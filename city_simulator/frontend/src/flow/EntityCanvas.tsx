@@ -5,7 +5,6 @@ import { addEdge, applyEdgeChanges, applyNodeChanges, Background, BackgroundVari
 import '@xyflow/react/dist/style.css';
 import { useEdgeReconnect } from './useEdgeReconnect';
 import { canvasInteractionProps } from './canvasInteraction';
-import { city } from '../api/client';
 import type { Character, GraphNode, HistoryData, MediaItem, Place } from '../api/types';
 import './canvas.css';
 import { isValidConnection as checkValidConnection } from './edgeRules';
@@ -13,10 +12,9 @@ import { entityToGraphNode, toEntityRenderNode } from './entityNodeKit';
 import { NewAgentModal } from './NewAgentModal';
 import { AgentNode } from './nodes/AgentNode';
 import { FrameNode } from './nodes/FrameNode';
-import { ImageNode, type ImageNodeData } from './nodes/ImageNode';
+import type { FrameNodeData } from './nodes/FrameNode';
 import { LocationNode } from './nodes/LocationNode';
 import { MissingNode } from './nodes/MissingNode';
-import { ScratchImageNode, type ScratchImageNodeData } from './nodes/ScratchImageNode';
 import { ScratchMusicNode, type ScratchMusicNodeData } from './nodes/ScratchMusicNode';
 import { PopulationNode } from './nodes/PopulationNode';
 import { SimulationNode } from './nodes/SimulationNode';
@@ -28,7 +26,7 @@ import { VideoNode } from './nodes/VideoNode';
 import { DRAG_MIME, SideDrawer, type DrawerSection } from './SideDrawer';
 import { gridPosition } from './layout';
 import { miniMapNodeColor } from './miniMapColor';
-import { enrichPipelineNodes, pipelineToGraphNode, toPipelineRenderNode } from './pipeline';
+import { enrichPipelineNodes, migrateImageNode, pipelineToGraphNode, toPipelineRenderNode } from './pipeline';
 import { toFlowEdge, toGraphEdge } from './graphIds';
 import { reconcile } from './reconcile';
 import { navigate, type Scope } from '../routes/router';
@@ -52,37 +50,11 @@ const nodeTypes = {
   style: StyleNode,
   storyboard: StoryboardNode,
   'text-viewer': TextViewerNode,
-  image: ImageNode,
-  'scratch-image': ScratchImageNode,
   'scratch-music': ScratchMusicNode,
 };
 
 const PIPELINE_TYPES = new Set(['population', 'sim', 'treatment', 'frame', 'video', 'style', 'storyboard', 'text-viewer']);
-const SCRATCH_TYPES = new Set(['scratch-image', 'scratch-music']);
-
-function toImageRenderNode(gn: GraphNode, entityId: string, mediaById: Map<string, MediaItem>, onUpdate: ImageNodeData['onUpdate']): Node | null {
-  if (gn.type !== 'image') return null;
-  const mediaId = gn.data.mediaId as string | undefined;
-  const media = mediaId ? mediaById.get(mediaId) : undefined;
-  if (mediaId && !media) return null; // already routed to `missing` by the caller
-  return {
-    id: gn.id,
-    type: 'image',
-    position: gn.position,
-    // Same explicit floor as Frame/Video's own render-node builders (see
-    // pipeline.ts) -- without it a never-resized Image node shrink-to-
-    // fits its own content independently of its siblings.
-    width: gn.width ?? 540,
-    height: gn.height ?? 430,
-    data: { entityId, prompt: (gn.data.prompt as string) ?? media?.prompt ?? '', aspectRatio: gn.data.aspectRatio as string | undefined, mediaId, mediaUrl: media ? city.fileUrl(media.url) : undefined, onUpdate },
-  };
-}
-
-function imageToGraphNode(n: Node): GraphNode | null {
-  if (n.type !== 'image') return null;
-  const d = n.data as ImageNodeData;
-  return { id: n.id, type: 'image', position: n.position, width: n.width, height: n.height, data: { prompt: d.prompt, aspectRatio: d.aspectRatio, mediaId: d.mediaId } };
-}
+const SCRATCH_TYPES = new Set(['scratch-music']);
 
 // This entity's own drill-in canvas, with the *same* full node palette
 // every other canvas offers (Agent/Location/Simulation/Treatment/Frame/
@@ -90,8 +62,8 @@ function imageToGraphNode(n: Node): GraphNode | null {
 // requirement that no node type be tied to wherever it happened to make
 // the most obvious sense. `cityData` (this entity's own city) drives the
 // Agents/Locations sections and reconciliation exactly like CityCanvas;
-// `entityId` is additionally the *default* target new Image/Frame nodes
-// attach their media to, since that's still the natural default here.
+// `entityId` is additionally where new Image nodes save their results by
+// default (their "save to ... media" checkbox starts ticked here).
 function CanvasInner({
   cityId,
   entityId,
@@ -114,22 +86,6 @@ function CanvasInner({
   const [edges, setEdges] = useState<Edge[]>([]);
   const initializedFor = useRef<string | null>(null);
 
-  // Same "refresh after a real generation" rule usePipelineCallbacks
-  // applies to Frame/Video -- this canvas's standalone `image` node type
-  // isn't part of that shared hook, so it needs its own copy of the same
-  // fix: without it, any OTHER node whose agent:in/place:in reference
-  // images come from *this* entity's media would keep working off a
-  // stale snapshot that doesn't yet include what was just generated.
-  const onImageUpdate = useCallback(
-    (nodeId: string, patch: Partial<ImageNodeData>) => {
-      setNodes((prev) => (prev ? prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, ...patch } } : n)) : prev));
-      if (patch.mediaId) onCityDataRefresh?.();
-    },
-    [onCityDataRefresh],
-  );
-  const onScratchImageUpdate = useCallback((nodeId: string, patch: Partial<ScratchImageNodeData>) => {
-    setNodes((prev) => (prev ? prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, ...patch } } : n)) : prev));
-  }, []);
   const onMusicUpdate = useCallback((nodeId: string, patch: Partial<ScratchMusicNodeData>) => {
     setNodes((prev) => (prev ? prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, ...patch } } : n)) : prev));
   }, []);
@@ -173,36 +129,21 @@ function CanvasInner({
     onStyleCreated: refreshStyles,
     onOpenNewAgentModal: (position) => setNewAgentModal({ position }),
     pipeline,
-    onImageUpdate: onScratchImageUpdate,
     onMusicUpdate,
+    ownerEntityId: entityId,
   });
-
-  const addImageNode = useCallback(
-    (position?: XYPosition) => {
-      setNodes((prev) => {
-        const list = prev ?? [];
-        const pos = position ?? gridPosition(list.length, { columns: 4, cellWidth: 260, cellHeight: 220 });
-        const id = `image:draft_${Date.now()}`;
-        return [...list, { id, type: 'image', position: pos, data: { entityId, prompt: '', onUpdate: onImageUpdate } }];
-      });
-    },
-    [entityId, onImageUpdate],
-  );
 
   useEffect(() => {
     if (!doc || !cityData) return;
-    const images = media.filter((m) => m.kind === 'image');
-    const mediaIds = images.map((m) => m.id);
-    const mediaById = new Map(images.map((m) => [m.id, m]));
     const agentIds = cityData.characters.map((c) => c.id);
     const placeIds = cityData.places.map((p) => p.id);
-    // Deliberately NOT keyed on mediaIds -- usePersistedGraph's `doc` is
+    // Deliberately NOT keyed on this entity's media -- usePersistedGraph's `doc` is
     // frozen at whatever it was on mount/scope-change (it's never updated
     // after an autosave, see that hook's own comment on why), so any node
     // added or resized *after* mount is already missing from doc.nodes.
     // Rebuilding from `doc` every time `media` changes (which
     // onCityDataRefresh does after every completed generation, per
-    // ImageNode/FrameNode/VideoNode's onUpdate) would silently wipe every
+    // an Image node's save-to-media) would silently wipe every
     // such node back out on the very first image a user generates here --
     // confirmed live: a Style node + an Image node, added this session,
     // both vanished the moment the image finished. The one-time initial
@@ -212,23 +153,12 @@ function CanvasInner({
     const key = `${doc.rev}:${cityData.generated_at}`;
     if (initializedFor.current === key && nodes) return;
     initializedFor.current = key;
+    // Older Image/freeform-image nodes load as the one Image node.
+    const docNodes = doc.nodes.map((n) => migrateImageNode(n, entityId));
 
-    const imageGraphNodes = doc.nodes.filter((n) => n.type === 'image');
-    // Draft image nodes (never generated -- no mediaId yet) don't
-    // reference anything, so they're always kept; only generated ones
-    // reconcile against the entity's current media.
-    const imageDrafts = imageGraphNodes.filter((n) => !n.data.mediaId);
-    const imageGenerated = imageGraphNodes.filter((n) => n.data.mediaId);
-    const imageRecon = reconcile(imageGenerated, mediaIds, (n) => n.data.mediaId as string);
-    const builtImages = [...imageDrafts, ...imageRecon.present]
-      .map((gn) => toImageRenderNode(gn, entityId, mediaById, onImageUpdate))
-      .filter((n): n is Node => n !== null);
-    // An image node whose media was deleted is low-value clutter here --
-    // dropped rather than rendered as `missing`, same call as before.
-
-    const agentRecon = reconcile(doc.nodes.filter((n) => n.type === 'agent'), agentIds, (n) => n.data.characterId as string);
-    const placeRecon = reconcile(doc.nodes.filter((n) => n.type === 'location'), placeIds, (n) => n.data.placeId as string);
-    const alreadyMissing = doc.nodes.filter((n) => n.type === 'missing');
+    const agentRecon = reconcile(docNodes.filter((n) => n.type === 'agent'), agentIds, (n) => n.data.characterId as string);
+    const placeRecon = reconcile(docNodes.filter((n) => n.type === 'location'), placeIds, (n) => n.data.placeId as string);
+    const alreadyMissing = docNodes.filter((n) => n.type === 'missing');
     const danglingAsMissing: GraphNode[] = [...agentRecon.missing, ...placeRecon.missing].map((n) => ({
       id: n.id,
       type: 'missing',
@@ -239,20 +169,20 @@ function CanvasInner({
       .map((gn) => toEntityRenderNode(gn, cityData, noExpand, noExpand, onRemoveMissing))
       .filter((n): n is Node => n !== null);
 
-    const pipelineGraphNodes = doc.nodes.filter((n) => PIPELINE_TYPES.has(n.type));
-    const builtPipeline = pipelineGraphNodes.map((gn) => toPipelineRenderNode(gn, pipeline)).filter((n): n is Node => n !== null);
+    const pipelineGraphNodes = docNodes.filter((n) => PIPELINE_TYPES.has(n.type));
+    const builtPipeline = pipelineGraphNodes.map((gn) => toPipelineRenderNode(gn, pipeline, entityId)).filter((n): n is Node => n !== null);
 
-    const scratchGraphNodes = doc.nodes.filter((n) => SCRATCH_TYPES.has(n.type));
-    const builtScratch = scratchGraphNodes.map((gn) => toScratchRenderNode(gn, onScratchImageUpdate, onMusicUpdate)).filter((n): n is Node => n !== null);
+    const scratchGraphNodes = docNodes.filter((n) => SCRATCH_TYPES.has(n.type));
+    const builtScratch = scratchGraphNodes.map((gn) => toScratchRenderNode(gn, onMusicUpdate)).filter((n): n is Node => n !== null);
 
-    const allBuilt = [...builtImages, ...builtEntity, ...builtPipeline, ...builtScratch];
+    const allBuilt = [...builtEntity, ...builtPipeline, ...builtScratch];
     const nodeIds = new Set(allBuilt.map((n) => n.id));
     const builtEdges = doc.edges.filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target)).map(toFlowEdge);
 
     setNodes(allBuilt);
     setEdges(builtEdges);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [doc, media, cityData, entityId]);
+  }, [doc, cityData, entityId]);
 
   useEffect(() => {
     if (!nodes) return;
@@ -263,7 +193,7 @@ function CanvasInner({
   useEffect(() => {
     if (nodes) {
       const graphNodes = nodes
-        .map((n) => imageToGraphNode(n) ?? entityToGraphNode(n) ?? pipelineToGraphNode(n) ?? scratchToGraphNode(n))
+        .map((n) => entityToGraphNode(n) ?? pipelineToGraphNode(n) ?? scratchToGraphNode(n))
         .filter((gn): gn is GraphNode => gn !== null);
       save(graphNodes, edges.map(toGraphEdge));
     }
@@ -287,7 +217,7 @@ function CanvasInner({
 
   const notOnCanvasMedia = (() => {
     if (!nodes) return [];
-    const onCanvasMediaIds = new Set(nodes.filter((n) => n.type === 'image').map((n) => (n.data as ImageNodeData).mediaId).filter(Boolean));
+    const onCanvasMediaIds = new Set(nodes.filter((n) => n.type === 'frame').map((n) => (n.data as FrameNodeData).mediaId).filter(Boolean));
     return media.filter((m) => m.kind === 'image' && !onCanvasMediaIds.has(m.id));
   })();
   const notOnCanvasAgents = (() => {
@@ -308,11 +238,16 @@ function CanvasInner({
       setNodes((prev) => {
         const list = prev ?? [];
         const pos = position ?? gridPosition(list.length, { columns: 4, cellWidth: 260, cellHeight: 220 });
-        const built = toImageRenderNode({ id: `image:${item.id}`, type: 'image', position: pos, data: { mediaId: item.id } }, entityId, new Map([[item.id, item]]), onImageUpdate);
+        // An Image node showing that picture, still saved to this entity.
+        const built = toPipelineRenderNode(
+          { id: `image:${item.id}`, type: 'frame', position: pos, data: { prompt: item.prompt, mediaId: item.id, attachTo: entityId } },
+          pipeline,
+          entityId,
+        );
         return built ? [...list, built] : list;
       });
     },
-    [media, entityId, onImageUpdate],
+    [media, entityId, pipeline],
   );
 
   const onDragOver = useCallback((e: DragEvent) => {
@@ -328,17 +263,16 @@ function CanvasInner({
       e.preventDefault();
       const position = screenToFlowPosition({ x: e.clientX, y: e.clientY });
       const [kind, ...rest] = payload.split(':');
-      if (kind === 'image' && rest[0] === 'new') addImageNode(position);
-      else if (kind === 'media') addExistingMedia(rest[0], position);
+      if (kind === 'media') addExistingMedia(rest[0], position);
       else if (kind === 'pipeline') addPipelineNode(rest[0] as 'sim' | 'treatment' | 'video' | 'text-viewer' | 'frame' | 'storyboard' | 'population', position);
       else if (kind === 'style' && rest[0] === 'new') addStyleNode(position);
       else if (kind === 'style') addStyleNode(position, styles.find((s) => s.id === rest[0]));
-      else if (kind === 'scratch') addScratchNode(rest[0] as 'scratch-image' | 'scratch-music', position);
+      else if (kind === 'scratch') addScratchNode('scratch-music', position);
       else if (kind === 'agent' && rest[0] === 'new') addNewAgent(position);
       else if (kind === 'agent') addToCanvas({ id: rest[0], kind: 'agent' }, position);
       else if (kind === 'location') addToCanvas({ id: rest[0], kind: 'location' }, position);
     },
-    [screenToFlowPosition, addImageNode, addExistingMedia, addPipelineNode, addStyleNode, addScratchNode, addNewAgent, addToCanvas, styles],
+    [screenToFlowPosition, addExistingMedia, addPipelineNode, addStyleNode, addScratchNode, addNewAgent, addToCanvas, styles],
   );
 
   if (!nodes) return <div className="canvas-empty">Loading canvas…</div>;
@@ -350,15 +284,13 @@ function CanvasInner({
       id: 'nodes',
       label: 'Nodes',
       items: [
-        { id: 'new-image', label: '+ Image', dragPayload: 'image:new', onAdd: () => addImageNode() },
+        { id: 'image', label: 'Image', sublabel: 'saves to this one\'s media by default', dragPayload: 'pipeline:frame', onAdd: () => addPipelineNode('frame') },
         { id: 'population', label: 'Population', sublabel: 'a new resident + portraits for N locations', dragPayload: 'pipeline:population', onAdd: () => addPipelineNode('population') },
         { id: 'sim', label: 'Simulation', dragPayload: 'pipeline:sim', onAdd: () => addPipelineNode('sim') },
         { id: 'treatment', label: 'Treatment', dragPayload: 'pipeline:treatment', onAdd: () => addPipelineNode('treatment') },
-        { id: 'frame', label: 'Frame', dragPayload: 'pipeline:frame', onAdd: () => addPipelineNode('frame') },
         { id: 'storyboard', label: 'Storyboard', dragPayload: 'pipeline:storyboard', onAdd: () => addPipelineNode('storyboard') },
         { id: 'video', label: 'Video', dragPayload: 'pipeline:video', onAdd: () => addPipelineNode('video') },
         { id: 'text-viewer', label: 'Text', sublabel: 'view a Treatment\'s text', dragPayload: 'pipeline:text-viewer', onAdd: () => addPipelineNode('text-viewer') },
-        { id: 'scratch-image', label: 'Freeform image', dragPayload: 'scratch:scratch-image', onAdd: () => addScratchNode('scratch-image') },
         { id: 'music', label: 'Music', dragPayload: 'scratch:scratch-music', onAdd: () => addScratchNode('scratch-music') },
       ],
     },

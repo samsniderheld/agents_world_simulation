@@ -29,7 +29,6 @@ import { AgentNode } from './nodes/AgentNode';
 import { FrameNode } from './nodes/FrameNode';
 import { LocationNode } from './nodes/LocationNode';
 import { MissingNode } from './nodes/MissingNode';
-import { ScratchImageNode, type ScratchImageNodeData } from './nodes/ScratchImageNode';
 import { ScratchMusicNode, type ScratchMusicNodeData } from './nodes/ScratchMusicNode';
 import { PopulationNode } from './nodes/PopulationNode';
 import { SimulationNode } from './nodes/SimulationNode';
@@ -40,7 +39,7 @@ import { TreatmentNode } from './nodes/TreatmentNode';
 import { VideoNode } from './nodes/VideoNode';
 import { DRAG_MIME, SideDrawer, type DrawerSection } from './SideDrawer';
 import { miniMapNodeColor } from './miniMapColor';
-import { enrichPipelineNodes, pipelineToGraphNode, toPipelineRenderNode } from './pipeline';
+import { enrichPipelineNodes, migrateImageNode, pipelineToGraphNode, toPipelineRenderNode } from './pipeline';
 import { toFlowEdge, toGraphEdge } from './graphIds';
 import { reconcile } from './reconcile';
 import { scratchToGraphNode, toScratchRenderNode } from './scratchNodeKit';
@@ -64,7 +63,6 @@ const nodeTypes = {
   style: StyleNode,
   storyboard: StoryboardNode,
   'text-viewer': TextViewerNode,
-  'scratch-image': ScratchImageNode,
   'scratch-music': ScratchMusicNode,
 };
 
@@ -75,7 +73,7 @@ const nodeTypes = {
 // "wherever it happened to make the most obvious sense"), so this same
 // set applies here, in EntityCanvas, and in ScratchScreen alike.
 const PIPELINE_TYPES = new Set(['population', 'sim', 'treatment', 'frame', 'video', 'style', 'storyboard', 'text-viewer']);
-const SCRATCH_TYPES = new Set(['scratch-image', 'scratch-music']);
+const SCRATCH_TYPES = new Set(['scratch-music']);
 
 function CanvasInner({ cityId, data, onDataRefresh }: { cityId: string; data: HistoryData; onDataRefresh: () => void }) {
   const { doc, save, flush, adopt } = usePersistedGraph(`city:${cityId}`);
@@ -91,9 +89,6 @@ function CanvasInner({ cityId, data, onDataRefresh }: { cityId: string; data: Hi
   const onRemoveMissing = useCallback((nodeId: string) => {
     setNodes((prev) => (prev ? prev.filter((n) => n.id !== nodeId) : prev));
     setEdges((prev) => prev.filter((e) => e.source !== nodeId && e.target !== nodeId));
-  }, []);
-  const onImageUpdate = useCallback((nodeId: string, patch: Partial<ScratchImageNodeData>) => {
-    setNodes((prev) => (prev ? prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, ...patch } } : n)) : prev));
   }, []);
   const onMusicUpdate = useCallback((nodeId: string, patch: Partial<ScratchMusicNodeData>) => {
     setNodes((prev) => (prev ? prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, ...patch } } : n)) : prev));
@@ -117,7 +112,6 @@ function CanvasInner({ cityId, data, onDataRefresh }: { cityId: string; data: Hi
     onStyleCreated: refreshStyles,
     onOpenNewAgentModal: (position) => setNewAgentModal({ position }),
     pipeline,
-    onImageUpdate,
     onMusicUpdate,
   });
 
@@ -129,14 +123,16 @@ function CanvasInner({ cityId, data, onDataRefresh }: { cityId: string; data: Hi
     const key = `${doc.rev}:${data.generated_at}`;
     if (initializedFor.current === key && nodes) return;
     initializedFor.current = key;
+    // Older freeform-image nodes load as the one Image node.
+    const docNodes = doc.nodes.map((n) => migrateImageNode(n));
 
     const agentIds = data.characters.map((c) => c.id);
     const placeIds = data.places.map((p) => p.id);
-    const agentRecon = reconcile(doc.nodes.filter((n) => n.type === 'agent'), agentIds, (n) => n.data.characterId as string);
-    const placeRecon = reconcile(doc.nodes.filter((n) => n.type === 'location'), placeIds, (n) => n.data.placeId as string);
-    const alreadyMissing = doc.nodes.filter((n) => n.type === 'missing');
-    const pipelineGraphNodes = doc.nodes.filter((n) => PIPELINE_TYPES.has(n.type));
-    const scratchGraphNodes = doc.nodes.filter((n) => SCRATCH_TYPES.has(n.type));
+    const agentRecon = reconcile(docNodes.filter((n) => n.type === 'agent'), agentIds, (n) => n.data.characterId as string);
+    const placeRecon = reconcile(docNodes.filter((n) => n.type === 'location'), placeIds, (n) => n.data.placeId as string);
+    const alreadyMissing = docNodes.filter((n) => n.type === 'missing');
+    const pipelineGraphNodes = docNodes.filter((n) => PIPELINE_TYPES.has(n.type));
+    const scratchGraphNodes = docNodes.filter((n) => SCRATCH_TYPES.has(n.type));
 
     const persisted = [...agentRecon.present, ...placeRecon.present, ...alreadyMissing];
     const danglingAsMissing: GraphNode[] = [...agentRecon.missing, ...placeRecon.missing].map((n) => ({
@@ -150,7 +146,7 @@ function CanvasInner({ cityId, data, onDataRefresh }: { cityId: string; data: Hi
       .map((gn) => toEntityRenderNode(gn, data, onExpandAgent, onExpandPlace, onRemoveMissing))
       .filter((n): n is Node => n !== null);
     const builtPipeline = pipelineGraphNodes.map((gn) => toPipelineRenderNode(gn, pipeline)).filter((n): n is Node => n !== null);
-    const builtScratch = scratchGraphNodes.map((gn) => toScratchRenderNode(gn, onImageUpdate, onMusicUpdate)).filter((n): n is Node => n !== null);
+    const builtScratch = scratchGraphNodes.map((gn) => toScratchRenderNode(gn, onMusicUpdate)).filter((n): n is Node => n !== null);
     const allBuilt = [...builtEntity, ...builtPipeline, ...builtScratch];
 
     // Edges referencing a node that didn't make it through (e.g. an
@@ -235,7 +231,7 @@ function CanvasInner({ cityId, data, onDataRefresh }: { cityId: string; data: Hi
       if (kind === 'pipeline') addPipelineNode(rest[0] as 'sim' | 'treatment' | 'video' | 'text-viewer' | 'frame' | 'storyboard' | 'population', position);
       else if (kind === 'style' && rest[0] === 'new') addStyleNode(position);
       else if (kind === 'style') addStyleNode(position, styles.find((s) => s.id === rest[0]));
-      else if (kind === 'scratch') addScratchNode(rest[0] as 'scratch-image' | 'scratch-music', position);
+      else if (kind === 'scratch') addScratchNode('scratch-music', position);
       else if (kind === 'agent' && rest[0] === 'new') addNewAgent(position);
       else if (kind === 'agent') addToCanvas({ id: rest[0], kind: 'agent' }, position);
       else if (kind === 'location') addToCanvas({ id: rest[0], kind: 'location' }, position);
@@ -255,11 +251,10 @@ function CanvasInner({ cityId, data, onDataRefresh }: { cityId: string; data: Hi
         { id: 'population', label: 'Population', sublabel: 'a new resident + portraits for N locations', dragPayload: 'pipeline:population', onAdd: () => addPipelineNode('population') },
         { id: 'sim', label: 'Simulation', dragPayload: 'pipeline:sim', onAdd: () => addPipelineNode('sim') },
         { id: 'treatment', label: 'Treatment', dragPayload: 'pipeline:treatment', onAdd: () => addPipelineNode('treatment') },
-        { id: 'frame', label: 'Frame', dragPayload: 'pipeline:frame', onAdd: () => addPipelineNode('frame') },
+        { id: 'image', label: 'Image', dragPayload: 'pipeline:frame', onAdd: () => addPipelineNode('frame') },
         { id: 'storyboard', label: 'Storyboard', dragPayload: 'pipeline:storyboard', onAdd: () => addPipelineNode('storyboard') },
         { id: 'video', label: 'Video', dragPayload: 'pipeline:video', onAdd: () => addPipelineNode('video') },
         { id: 'text-viewer', label: 'Text', sublabel: 'view a Treatment\'s text', dragPayload: 'pipeline:text-viewer', onAdd: () => addPipelineNode('text-viewer') },
-        { id: 'image', label: 'Image', dragPayload: 'scratch:scratch-image', onAdd: () => addScratchNode('scratch-image') },
         { id: 'music', label: 'Music', dragPayload: 'scratch:scratch-music', onAdd: () => addScratchNode('scratch-music') },
       ],
     },

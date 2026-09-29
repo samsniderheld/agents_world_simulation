@@ -5,11 +5,10 @@
 // output -- reading raw source data directly means there's no dependency
 // on which node happens to be processed first in a .map() pass.
 import type { Edge, Node } from '@xyflow/react';
-import { visuals } from '../api/client';
+import { city, visuals } from '../api/client';
 import type { GraphNode, HistoryData, Style } from '../api/types';
 import type { AgentNodeData } from './nodes/AgentNode';
 import type { FrameNodeData } from './nodes/FrameNode';
-import type { ImageNodeData } from './nodes/ImageNode';
 import type { LocationNodeData } from './nodes/LocationNode';
 import type { PopulationNodeData } from './nodes/PopulationNode';
 import type { SimulationNodeData } from './nodes/SimulationNode';
@@ -50,7 +49,24 @@ export interface PipelineCallbacks {
   onStyleDelete: (nodeId: string) => void;
 }
 
-export function toPipelineRenderNode(gn: GraphNode, cb: PipelineCallbacks): Node | null {
+// Saved canvases can still hold the two node types the Image node replaced:
+// "scratch-image" (a freeform image, result kept on the node) and "image"
+// (an agent's/place's image, result in that entity's media). Each canvas
+// runs its saved nodes through this before building them, so they load as
+// the one Image node ("frame") with the same prompt and picture. `ownerEntityId`
+// is the agent/place whose own canvas this is -- where an old "image"
+// node's results live.
+export function migrateImageNode(gn: GraphNode, ownerEntityId?: string): GraphNode {
+  if (gn.type === 'scratch-image') {
+    return { ...gn, type: 'frame', data: { prompt: gn.data.prompt, aspectRatio: gn.data.aspectRatio, url: gn.data.url, localPath: gn.data.localPath } };
+  }
+  if (gn.type === 'image') {
+    return { ...gn, type: 'frame', data: { prompt: gn.data.prompt, aspectRatio: gn.data.aspectRatio, mediaId: gn.data.mediaId, attachTo: ownerEntityId } };
+  }
+  return gn;
+}
+
+export function toPipelineRenderNode(gn: GraphNode, cb: PipelineCallbacks, ownerEntityId?: string): Node | null {
   if (gn.type === 'sim') {
     return {
       id: gn.id,
@@ -126,13 +142,17 @@ export function toPipelineRenderNode(gn: GraphNode, cb: PipelineCallbacks): Node
       // input-image line an image-bearing Frame can show.
       height: gn.height ?? 480,
       data: {
-        shotIndex: gn.data.shotIndex as number,
+        shotIndex: gn.data.shotIndex as number | undefined,
         prompt: (gn.data.prompt as string) ?? '',
         editPrompt: (gn.data.editPrompt as string) ?? '',
         aspectRatio: gn.data.aspectRatio as string | undefined,
         url: gn.data.url as string | undefined,
         localPath: gn.data.localPath as string | undefined,
+        mediaId: gn.data.mediaId as string | undefined,
+        attachTo: gn.data.attachTo as string | undefined,
+        ownerEntityId,
         onUpdate: cb.onFrameUpdate,
+        onCityChanged: cb.onCityChanged,
       },
     };
   }
@@ -246,7 +266,16 @@ export function pipelineToGraphNode(n: Node): GraphNode | null {
       position: n.position,
       width: n.width,
       height: n.height,
-      data: { shotIndex: d.shotIndex, prompt: d.prompt, editPrompt: d.editPrompt, aspectRatio: d.aspectRatio, url: d.url, localPath: d.localPath },
+      data: {
+        shotIndex: d.shotIndex,
+        prompt: d.prompt,
+        editPrompt: d.editPrompt,
+        aspectRatio: d.aspectRatio,
+        url: d.url,
+        localPath: d.localPath,
+        mediaId: d.mediaId,
+        attachTo: d.attachTo,
+      },
     };
   }
   if (n.type === 'video') {
@@ -325,23 +354,33 @@ function connectedEntityReferenceImages(nodeId: string, edges: Edge[], byId: Map
 // of connectedEntityReferenceImages's result, since a connected Agent/
 // Location with zero existing photos yet should still show its port as
 // "live," not fall back to looking exactly like nothing's wired at all.
-// Frame's image:in port -- the actual files of whatever image-producing
-// nodes are wired in (another Frame, a scratch Image, or an entity-attached
-// Image, whose file lives in that entity's media record). Order follows
+// An Image node's image:in port -- the actual files of the other Image
+// nodes wired in. Order follows
 // edge order; a node wired to itself, or one with nothing generated yet,
 // contributes nothing.
+// An Image node's current picture: kept on the node (url/localPath), or
+// saved in an agent's/place's media (mediaId) -- looked up there. Nothing
+// if that media has since been deleted.
+function frameImage(d: FrameNodeData, historyData: HistoryData): { imageUrl?: string; imagePath?: string } {
+  if (d.mediaId) {
+    const pool = d.attachTo ? historyData.media[d.attachTo] ?? [] : Object.values(historyData.media).flat();
+    const m = pool.find((x) => x.id === d.mediaId);
+    return m ? { imageUrl: city.fileUrl(m.url), imagePath: m.local_path } : {};
+  }
+  return { imageUrl: d.url ? visuals.fileUrl(d.url) : undefined, imagePath: d.localPath };
+}
+
+function entityName(historyData: HistoryData, id: string | undefined): string | undefined {
+  if (!id) return undefined;
+  return historyData.characters.find((c) => c.id === id)?.name ?? historyData.places.find((p) => p.id === id)?.name;
+}
+
 function connectedInputImagePaths(nodeId: string, edges: Edge[], byId: Map<string, Node>, historyData: HistoryData): string[] {
   const paths: string[] = [];
   for (const e of edges) {
     if (e.target !== nodeId || e.targetHandle !== 'image:in' || e.source === nodeId) continue;
     const source = byId.get(e.source);
-    let path: string | undefined;
-    if (source?.type === 'frame' || source?.type === 'scratch-image') {
-      path = (source.data as { localPath?: string }).localPath;
-    } else if (source?.type === 'image') {
-      const d = source.data as ImageNodeData;
-      path = d.mediaId ? historyData.media[d.entityId]?.find((m) => m.id === d.mediaId)?.local_path : undefined;
-    }
+    const path = source?.type === 'frame' ? frameImage(source.data as FrameNodeData, historyData).imagePath : undefined;
     if (path) paths.push(path);
   }
   return paths;
@@ -432,9 +471,9 @@ export function enrichPipelineNodes(nodes: Node[], edges: Edge[], historyData: H
       let sourceImagePath: string | undefined;
       let sourceImageUrl: string | undefined;
       if (source?.type === 'frame') {
-        const d = source.data as FrameNodeData;
-        sourceImagePath = d.localPath;
-        sourceImageUrl = d.url ? visuals.fileUrl(d.url) : undefined;
+        const img = frameImage(source.data as FrameNodeData, historyData);
+        sourceImagePath = img.imagePath;
+        sourceImageUrl = img.imageUrl;
       }
       const merged = mergeStyles(connectedStyles(n.id, edges, byId));
       return {
@@ -454,39 +493,13 @@ export function enrichPipelineNodes(nodes: Node[], edges: Edge[], historyData: H
           mergedStyleReferenceImages: merged.styleReferenceImages,
           mergedEntityReferenceImages: entityRefs,
           inputImagePaths: connectedInputImagePaths(n.id, edges, byId, historyData),
+          ...frameImage(n.data as FrameNodeData, historyData),
+          attachName: entityName(historyData, (n.data as FrameNodeData).attachTo ?? (n.data as FrameNodeData).ownerEntityId),
           hasAgentRef: hasEdge(n.id, 'agent:in', edges),
           hasPlaceRef: hasEdge(n.id, 'place:in', edges),
           hasStyleRef: hasEdge(n.id, 'style:in', edges),
           hasImageRef: hasEdge(n.id, 'image:in', edges),
         },
-      };
-    }
-
-    // ImageNode (entity-attached) additionally takes agent:in/place:in
-    // reference connections; ScratchImageNode has no such ports (a
-    // scratch board's freeform image has nothing of its own to attach
-    // agent/location context to), so it only gets the style merge.
-    if (n.type === 'image') {
-      const merged = mergeStyles(connectedStyles(n.id, edges, byId));
-      const entityRefs = connectedEntityReferenceImages(n.id, edges, byId, historyData);
-      return {
-        ...n,
-        data: {
-          ...n.data,
-          mergedStylePrompt: merged.stylePrompt,
-          mergedStyleReferenceImages: merged.styleReferenceImages,
-          mergedEntityReferenceImages: entityRefs,
-          hasAgentRef: hasEdge(n.id, 'agent:in', edges),
-          hasPlaceRef: hasEdge(n.id, 'place:in', edges),
-          hasStyleRef: hasEdge(n.id, 'style:in', edges),
-        },
-      };
-    }
-    if (n.type === 'scratch-image') {
-      const merged = mergeStyles(connectedStyles(n.id, edges, byId));
-      return {
-        ...n,
-        data: { ...n.data, mergedStylePrompt: merged.stylePrompt, mergedStyleReferenceImages: merged.styleReferenceImages, hasStyleRef: hasEdge(n.id, 'style:in', edges) },
       };
     }
 

@@ -19,7 +19,7 @@ export interface VideoNodeData extends Record<string, unknown> {
   hasStyleRef?: boolean;
   aspectRatio?: AspectRatio;
   prompt: string;
-  // Self-contained, like FrameNode/ScratchImageNode -- a generated clip
+  // Self-contained, like an Image node's own result -- a generated clip
   // belongs to this node/the treatment it's part of, not to any one
   // entity's media history.
   url?: string;

@@ -3,9 +3,11 @@
 // accepts (text-to-image, image edit, image-to-video, reference-to-video --
 // verified against their published schemas) and the local provider maps to
 // a pixel size (visuals/providers/local.py).
-export type AspectRatio = '16:9' | '9:16';
+export type AspectRatio = '16:9' | '9:16' | '1:1';
 
-export function AspectSelect({ value, onChange }: { value: AspectRatio; onChange: (v: AspectRatio) => void }) {
+// `square` adds 1:1 -- the image models take it; the video models only do
+// 16:9 and 9:16, so the Video node leaves it off.
+export function AspectSelect({ value, onChange, square = false }: { value: AspectRatio; onChange: (v: AspectRatio) => void; square?: boolean }) {
   return (
     <select
       className="node-select node-aspect-select nodrag"
@@ -15,6 +17,7 @@ export function AspectSelect({ value, onChange }: { value: AspectRatio; onChange
     >
       <option value="16:9">16:9 landscape</option>
       <option value="9:16">9:16 portrait</option>
+      {square && <option value="1:1">1:1 square</option>}
     </select>
   );
 }

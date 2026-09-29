@@ -18,7 +18,7 @@ import type { PipelineCallbacks } from './pipeline';
 // yet -- good enough for "don't land a new Frame on top of you," not
 // meant to be pixel-exact. Media nodes' floor comes straight from
 // FrameNode/ImageNode/VideoNode's own NodeShell minWidth/minHeight.
-const MEDIA_NODE_TYPES = new Set(['frame', 'image', 'video', 'scratch-image']);
+const MEDIA_NODE_TYPES = new Set(['frame', 'video']);
 const WIDE_NODE_TYPES = new Set(['sim', 'treatment', 'style']);
 
 function nodeFootprint(n: Node): { width: number; height: number } {
@@ -30,11 +30,11 @@ function nodeFootprint(n: Node): { width: number; height: number } {
 }
 
 // Frame/Video generations no longer attach to any entity (self-contained,
-// like ScratchImage -- see FrameNode.tsx/VideoNode.tsx), so this hook no
+// kept on the node -- see FrameNode.tsx/VideoNode.tsx), so this hook no
 // longer needs an onDataRefresh callback: nothing it produces changes
 // HistoryData/cityData anymore. Image/Style still do their own
 // onDataRefresh calls where they're wired (useAddNodeActions.ts /
-// EntityCanvas.tsx's onImageUpdate), unrelated to this hook.
+// an Image node saving into an entity's media, via onCityChanged).
 export function usePipelineCallbacks(
   setNodes: (fn: (prev: Node[] | null) => Node[] | null) => void,
   setEdges: (fn: (prev: Edge[]) => Edge[]) => void,
@@ -95,7 +95,7 @@ export function usePipelineCallbacks(
   }, [setNodes]);
 
   // Frame/Video no longer attach their generated media to any entity (see
-  // FrameNode.tsx/VideoNode.tsx -- self-contained now, like ScratchImage),
+  // FrameNode.tsx/VideoNode.tsx -- kept on the node unless an Image is set to save to an entity),
   // so their own generations have nothing left to refresh onDataRefresh
   // for; only Image (still entity-attached, per-agent/per-place) and
   // Style still trigger it, elsewhere.

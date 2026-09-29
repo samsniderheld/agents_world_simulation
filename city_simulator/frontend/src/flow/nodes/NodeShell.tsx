@@ -9,7 +9,7 @@ interface NodeShellProps {
   error?: boolean;
   wide?: boolean;
   onExpand?: () => void;
-  // Overrides the default resize floor -- Frame/Image/Video/ScratchImage
+  // Overrides the default resize floor -- Image/Video
   // pass a larger one so the drag handles can't shrink the node past what
   // their .node-media-box (locked at min 512x288, see nodes.css) needs;
   // without this, min-width/min-height on the box would fight the node's

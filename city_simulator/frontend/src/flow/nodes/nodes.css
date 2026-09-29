@@ -128,7 +128,7 @@
   cursor: zoom-in;
 }
 
-/* Frame/Image/Video/ScratchImage's generated media -- unlike .node-thumb
+/* Image/Video nodes' generated media -- unlike .node-thumb
    (a small fixed-size crop used where the image is secondary to prompt/
    controls), these nodes exist to show a picture, so the preview fills
    the node's current width. Fixed at 16:9 via aspect-ratio rather than

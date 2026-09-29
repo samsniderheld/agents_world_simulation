@@ -31,7 +31,9 @@ export interface AddNodeActionsOptions {
   // own Save has a real saved character in hand.
   onOpenNewAgentModal: (position?: XYPosition) => void;
   pipeline: PipelineCallbacks;
-  onImageUpdate: (nodeId: string, patch: { prompt?: string; url?: string; localPath?: string }) => void;
+  // The agent/place whose own canvas this is, if any: a new Image node
+  // saves its results to that entity's media by default.
+  ownerEntityId?: string;
   onMusicUpdate: (nodeId: string, patch: { prompt?: string; negativePrompt?: string; url?: string }) => void;
 }
 
@@ -47,7 +49,7 @@ export function useAddNodeActions({
   onStyleCreated,
   onOpenNewAgentModal,
   pipeline,
-  onImageUpdate,
+  ownerEntityId,
   onMusicUpdate,
 }: AddNodeActionsOptions) {
   const addToCanvas = useCallback(
@@ -120,11 +122,18 @@ export function useAddNodeActions({
           ];
         if (type === 'text-viewer') return [...list, { ...base, type, data: {} }];
         if (type === 'frame') {
-          // Numbering continues from however many Frame nodes are
-          // already on canvas, so a manually-added shot doesn't collide
-          // with (or precede) whatever a Storyboard already created.
-          const shotIndex = list.filter((n) => n.type === 'frame').length;
-          return [...list, { ...base, type, data: { shotIndex, prompt: '', onUpdate: pipeline.onFrameUpdate } }];
+          // The Image node. No shotIndex (that's for storyboard shots), and
+          // on an agent's/place's own canvas it saves to that entity's media.
+          return [
+            ...list,
+            {
+              ...base,
+              type,
+              width: 540,
+              height: 480,
+              data: { prompt: '', attachTo: ownerEntityId, ownerEntityId, onUpdate: pipeline.onFrameUpdate, onCityChanged: pipeline.onCityChanged },
+            },
+          ];
         }
         if (type === 'population') {
           return [
@@ -143,7 +152,7 @@ export function useAddNodeActions({
         return [...list, { ...base, type, data: { prompt: '', onUpdate: pipeline.onVideoUpdate } }];
       });
     },
-    [setNodes, pipeline],
+    [setNodes, pipeline, ownerEntityId],
   );
 
   // Styles live in the global library (visuals/styles.py), not the graph
@@ -222,19 +231,17 @@ export function useAddNodeActions({
     [data, setNodes, onExpandAgent, onExpandPlace, onRemoveMissing, onDataRefresh],
   );
 
-  // scratch-image/scratch-music are ungrounded (no citystate entity), so
-  // they're valid to drop on any canvas, not just a Scratch board.
+  // scratch-music is ungrounded (no citystate entity), so it's valid to
+  // drop on any canvas, not just a Scratch board.
   const addScratchNode = useCallback(
-    (type: 'scratch-image' | 'scratch-music', position?: XYPosition) => {
+    (type: 'scratch-music', position?: XYPosition) => {
       setNodes((prev) => {
         const list = prev ?? [];
         const pos = position ?? gridPosition(list.length, { columns: 4, cellWidth: 280, cellHeight: 240 });
-        const id = newNodeId(type);
-        if (type === 'scratch-image') return [...list, { id, type, position: pos, data: { prompt: '', onUpdate: onImageUpdate } }];
-        return [...list, { id, type, position: pos, data: { prompt: '', negativePrompt: '', onUpdate: onMusicUpdate } }];
+        return [...list, { id: newNodeId(type), type, position: pos, data: { prompt: '', negativePrompt: '', onUpdate: onMusicUpdate } }];
       });
     },
-    [setNodes, onImageUpdate, onMusicUpdate],
+    [setNodes, onMusicUpdate],
   );
 
   return { addToCanvas, addPipelineNode, addStyleNode, addNewAgent, placeAgentNode, addScratchNode, PIPELINE_TYPES };

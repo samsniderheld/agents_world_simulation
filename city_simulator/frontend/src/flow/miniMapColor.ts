@@ -13,9 +13,6 @@ export function miniMapNodeColor(n: Node): string {
     case 'treatment':
       return 'var(--port-narrative)';
     case 'frame':
-    case 'image':
-    case 'scratch-image':
-      return 'var(--port-media)';
     case 'video':
       return 'var(--port-media)';
     case 'style':

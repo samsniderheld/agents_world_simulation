@@ -17,7 +17,6 @@ import { AgentNode } from '../flow/nodes/AgentNode';
 import { FrameNode } from '../flow/nodes/FrameNode';
 import { LocationNode } from '../flow/nodes/LocationNode';
 import { MissingNode } from '../flow/nodes/MissingNode';
-import { ScratchImageNode, type ScratchImageNodeData } from '../flow/nodes/ScratchImageNode';
 import { ScratchMusicNode, type ScratchMusicNodeData } from '../flow/nodes/ScratchMusicNode';
 import { PopulationNode } from '../flow/nodes/PopulationNode';
 import { SimulationNode } from '../flow/nodes/SimulationNode';
@@ -26,7 +25,7 @@ import { StyleNode } from '../flow/nodes/StyleNode';
 import { TextViewerNode } from '../flow/nodes/TextViewerNode';
 import { TreatmentNode } from '../flow/nodes/TreatmentNode';
 import { VideoNode } from '../flow/nodes/VideoNode';
-import { enrichPipelineNodes, pipelineToGraphNode, toPipelineRenderNode } from '../flow/pipeline';
+import { enrichPipelineNodes, migrateImageNode, pipelineToGraphNode, toPipelineRenderNode } from '../flow/pipeline';
 import { reconcile } from '../flow/reconcile';
 import { scratchToGraphNode, toScratchRenderNode } from '../flow/scratchNodeKit';
 import { DRAG_MIME, SideDrawer, type DrawerSection } from '../flow/SideDrawer';
@@ -50,12 +49,11 @@ const nodeTypes = {
   style: StyleNode,
   storyboard: StoryboardNode,
   'text-viewer': TextViewerNode,
-  'scratch-image': ScratchImageNode,
   'scratch-music': ScratchMusicNode,
 };
 
 const PIPELINE_TYPES = new Set(['population', 'sim', 'treatment', 'frame', 'video', 'style', 'storyboard', 'text-viewer']);
-const SCRATCH_TYPES = new Set(['scratch-image', 'scratch-music']);
+const SCRATCH_TYPES = new Set(['scratch-music']);
 
 // A Storyboard's own inner canvas -- ungrounded like a Scratch board (no
 // owning agent/place), but seeded at creation with Agent/Location
@@ -84,9 +82,6 @@ function StoryboardCanvasInner({
   const [edges, setEdges] = useState<Edge[]>([]);
   const initializedFor = useRef<string | null>(null);
 
-  const onImageUpdate = useCallback((nodeId: string, patch: Partial<ScratchImageNodeData>) => {
-    setNodes((prev) => (prev ? prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, ...patch } } : n)) : prev));
-  }, []);
   const onMusicUpdate = useCallback((nodeId: string, patch: Partial<ScratchMusicNodeData>) => {
     setNodes((prev) => (prev ? prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, ...patch } } : n)) : prev));
   }, []);
@@ -140,7 +135,6 @@ function StoryboardCanvasInner({
     onStyleCreated: refreshStyles,
     onOpenNewAgentModal: (position) => setNewAgentModal({ position }),
     pipeline,
-    onImageUpdate,
     onMusicUpdate,
   });
 
@@ -158,10 +152,12 @@ function StoryboardCanvasInner({
     const key = `${doc.rev}:${cityData?.generated_at ?? 'none'}`;
     if (initializedFor.current === key && nodes) return;
     initializedFor.current = key;
+    // Older freeform-image nodes load as the one Image node.
+    const docNodes = doc.nodes.map((n) => migrateImageNode(n));
 
-    const agentRecon = reconcile(doc.nodes.filter((n) => n.type === 'agent'), agentIds, (n) => n.data.characterId as string);
-    const placeRecon = reconcile(doc.nodes.filter((n) => n.type === 'location'), placeIds, (n) => n.data.placeId as string);
-    const alreadyMissing = doc.nodes.filter((n) => n.type === 'missing');
+    const agentRecon = reconcile(docNodes.filter((n) => n.type === 'agent'), agentIds, (n) => n.data.characterId as string);
+    const placeRecon = reconcile(docNodes.filter((n) => n.type === 'location'), placeIds, (n) => n.data.placeId as string);
+    const alreadyMissing = docNodes.filter((n) => n.type === 'missing');
     const danglingAsMissing: GraphNode[] = [...agentRecon.missing, ...placeRecon.missing].map((n) => ({
       id: n.id,
       type: 'missing',
@@ -174,11 +170,11 @@ function StoryboardCanvasInner({
           .filter((n): n is Node => n !== null)
       : [];
 
-    const pipelineGraphNodes = doc.nodes.filter((n) => PIPELINE_TYPES.has(n.type));
+    const pipelineGraphNodes = docNodes.filter((n) => PIPELINE_TYPES.has(n.type));
     const builtPipeline = pipelineGraphNodes.map((gn) => toPipelineRenderNode(gn, pipeline)).filter((n): n is Node => n !== null);
 
-    const scratchGraphNodes = doc.nodes.filter((n) => SCRATCH_TYPES.has(n.type));
-    const builtScratch = scratchGraphNodes.map((gn) => toScratchRenderNode(gn, onImageUpdate, onMusicUpdate)).filter((n): n is Node => n !== null);
+    const scratchGraphNodes = docNodes.filter((n) => SCRATCH_TYPES.has(n.type));
+    const builtScratch = scratchGraphNodes.map((gn) => toScratchRenderNode(gn, onMusicUpdate)).filter((n): n is Node => n !== null);
 
     const allBuilt = [...builtEntity, ...builtPipeline, ...builtScratch];
     const nodeIds = new Set(allBuilt.map((n) => n.id));
@@ -237,7 +233,7 @@ function StoryboardCanvasInner({
       e.preventDefault();
       const position = screenToFlowPosition({ x: e.clientX, y: e.clientY });
       const [kind, ...rest] = payload.split(':');
-      if (kind === 'scratch') addScratchNode(rest[0] as 'scratch-image' | 'scratch-music', position);
+      if (kind === 'scratch') addScratchNode('scratch-music', position);
       else if (kind === 'style' && rest[0] === 'new') addStyleNode(position);
       else if (kind === 'style') addStyleNode(position, styles.find((s) => s.id === rest[0]));
       else if (kind === 'pipeline') addPipelineNode(rest[0] as 'sim' | 'treatment' | 'video' | 'text-viewer' | 'frame' | 'storyboard' | 'population', position);
@@ -257,12 +253,11 @@ function StoryboardCanvasInner({
       id: 'nodes',
       label: 'Nodes',
       items: [
-        { id: 'image', label: '+ Image', dragPayload: 'scratch:scratch-image', onAdd: () => addScratchNode('scratch-image') },
         { id: 'music', label: '+ Music', dragPayload: 'scratch:scratch-music', onAdd: () => addScratchNode('scratch-music') },
         { id: 'population', label: 'Population', sublabel: 'a new resident + portraits for N locations', dragPayload: 'pipeline:population', onAdd: () => addPipelineNode('population') },
         { id: 'sim', label: 'Simulation', dragPayload: 'pipeline:sim', onAdd: () => addPipelineNode('sim') },
         { id: 'treatment', label: 'Treatment', dragPayload: 'pipeline:treatment', onAdd: () => addPipelineNode('treatment') },
-        { id: 'frame', label: 'Frame', dragPayload: 'pipeline:frame', onAdd: () => addPipelineNode('frame') },
+        { id: 'image', label: 'Image', dragPayload: 'pipeline:frame', onAdd: () => addPipelineNode('frame') },
         { id: 'storyboard', label: 'Storyboard', dragPayload: 'pipeline:storyboard', onAdd: () => addPipelineNode('storyboard') },
         { id: 'video', label: 'Video', dragPayload: 'pipeline:video', onAdd: () => addPipelineNode('video') },
         { id: 'text-viewer', label: 'Text', sublabel: 'view a Treatment\'s text', dragPayload: 'pipeline:text-viewer', onAdd: () => addPipelineNode('text-viewer') },

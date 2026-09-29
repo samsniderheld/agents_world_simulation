@@ -1,4 +1,4 @@
-// Self-contained, like ScratchImageNode/FrameNode -- a generated clip
+// Self-contained, like an Image node's own result -- a generated clip
 // belongs to the Video node/treatment it's part of, not to any one
 // entity's media history, so this no longer attaches via city.addMedia().
 import { useState } from 'react';
