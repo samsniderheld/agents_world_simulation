@@ -359,3 +359,19 @@ export interface SavedGraph {
   root: GraphBody;
   storyboards: Record<string, GraphBody>;
 }
+
+// GET /api/history/population -- history/population.py's job status.
+export interface PopulationStatus {
+  phase: 'idle' | 'running' | 'done' | 'error';
+  error: string | null;
+  total: number;
+  done: number;
+  current: string;
+  log: string[];
+}
+
+// A Style node's prompt + reference images, as the Population node sends it.
+export interface PopulationStyle {
+  prompt: string;
+  reference_images: string[];
+}

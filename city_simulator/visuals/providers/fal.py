@@ -6,6 +6,7 @@ submit/status/result endpoints this wraps.
 
 import base64
 import mimetypes
+import threading
 import time
 
 import requests
@@ -46,7 +47,16 @@ def _to_data_uri(path: str, default_mime: str = "application/octet-stream") -> s
 
 class FalProvider(Provider):
     def __init__(self):
-        self._session = requests.Session()
+        # One requests.Session per thread: the Population node runs several
+        # generations at once through this one (memoized) provider, and a
+        # Session isn't guaranteed safe to share across threads.
+        self._local = threading.local()
+
+    @property
+    def _session(self) -> requests.Session:
+        if not hasattr(self._local, "session"):
+            self._local.session = requests.Session()
+        return self._local.session
 
     def _headers(self) -> dict:
         return {"Authorization": f"Key {_require_api_key()}", "Content-Type": "application/json"}

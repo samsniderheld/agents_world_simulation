@@ -98,9 +98,8 @@ def _style_prompt(body: dict) -> str:
 
 def _style_reference_images(body: dict) -> list:
     """Style reference images are a distinct concept from `image_paths`
-    (which means "edit/animate this exact image" -- see Director's
-    storyboard and Studio's reference-image flow, both of which already
-    depend on that meaning) -- so they're merged into the same
+    (which means "edit/animate this exact image" -- a Frame's edit and a
+    Video's source frame depend on that meaning) -- so they're merged into the same
     image_paths list the edit model already accepts, rather than
     replacing or renaming that field."""
     return list(body.get("image_paths") or []) + list(body.get("style_reference_images") or [])

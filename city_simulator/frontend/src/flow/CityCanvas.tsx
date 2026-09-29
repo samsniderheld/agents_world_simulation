@@ -31,6 +31,7 @@ import { LocationNode } from './nodes/LocationNode';
 import { MissingNode } from './nodes/MissingNode';
 import { ScratchImageNode, type ScratchImageNodeData } from './nodes/ScratchImageNode';
 import { ScratchMusicNode, type ScratchMusicNodeData } from './nodes/ScratchMusicNode';
+import { PopulationNode } from './nodes/PopulationNode';
 import { SimulationNode } from './nodes/SimulationNode';
 import { StoryboardNode } from './nodes/StoryboardNode';
 import { StyleNode } from './nodes/StyleNode';
@@ -56,6 +57,7 @@ const nodeTypes = {
   location: LocationNode,
   missing: MissingNode,
   sim: SimulationNode,
+  population: PopulationNode,
   treatment: TreatmentNode,
   frame: FrameNode,
   video: VideoNode,
@@ -72,7 +74,7 @@ const nodeTypes = {
 // canvas now (per the requirement that no node type be scoped to
 // "wherever it happened to make the most obvious sense"), so this same
 // set applies here, in EntityCanvas, and in ScratchScreen alike.
-const PIPELINE_TYPES = new Set(['sim', 'treatment', 'frame', 'video', 'style', 'storyboard', 'text-viewer']);
+const PIPELINE_TYPES = new Set(['population', 'sim', 'treatment', 'frame', 'video', 'style', 'storyboard', 'text-viewer']);
 const SCRATCH_TYPES = new Set(['scratch-image', 'scratch-music']);
 
 function CanvasInner({ cityId, data, onDataRefresh }: { cityId: string; data: HistoryData; onDataRefresh: () => void }) {
@@ -101,7 +103,7 @@ function CanvasInner({ cityId, data, onDataRefresh }: { cityId: string; data: Hi
     (storyboardId: string) => navigate({ kind: 'storyboard', storyboardId, from: { kind: 'city', cityId } }),
     [cityId],
   );
-  const pipeline = usePipelineCallbacks(setNodes, setEdges, onExpandStoryboard);
+  const pipeline = usePipelineCallbacks(setNodes, setEdges, onExpandStoryboard, onDataRefresh);
   const { isHidden } = useHiddenEntities(cityId);
   const { styles, refresh: refreshStyles, remove: removeStyle } = useStylesLibrary();
   const [newAgentModal, setNewAgentModal] = useState<{ position?: XYPosition } | null>(null);
@@ -230,7 +232,7 @@ function CanvasInner({ cityId, data, onDataRefresh }: { cityId: string; data: Hi
       e.preventDefault();
       const position = screenToFlowPosition({ x: e.clientX, y: e.clientY });
       const [kind, ...rest] = payload.split(':');
-      if (kind === 'pipeline') addPipelineNode(rest[0] as 'sim' | 'treatment' | 'video' | 'text-viewer' | 'frame' | 'storyboard', position);
+      if (kind === 'pipeline') addPipelineNode(rest[0] as 'sim' | 'treatment' | 'video' | 'text-viewer' | 'frame' | 'storyboard' | 'population', position);
       else if (kind === 'style' && rest[0] === 'new') addStyleNode(position);
       else if (kind === 'style') addStyleNode(position, styles.find((s) => s.id === rest[0]));
       else if (kind === 'scratch') addScratchNode(rest[0] as 'scratch-image' | 'scratch-music', position);
@@ -250,6 +252,7 @@ function CanvasInner({ cityId, data, onDataRefresh }: { cityId: string; data: Hi
       id: 'nodes',
       label: 'Nodes',
       items: [
+        { id: 'population', label: 'Population', sublabel: 'a new resident + portraits for N locations', dragPayload: 'pipeline:population', onAdd: () => addPipelineNode('population') },
         { id: 'sim', label: 'Simulation', dragPayload: 'pipeline:sim', onAdd: () => addPipelineNode('sim') },
         { id: 'treatment', label: 'Treatment', dragPayload: 'pipeline:treatment', onAdd: () => addPipelineNode('treatment') },
         { id: 'frame', label: 'Frame', dragPayload: 'pipeline:frame', onAdd: () => addPipelineNode('frame') },

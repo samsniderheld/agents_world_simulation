@@ -19,6 +19,7 @@ import { LocationNode } from '../flow/nodes/LocationNode';
 import { MissingNode } from '../flow/nodes/MissingNode';
 import { ScratchImageNode, type ScratchImageNodeData } from '../flow/nodes/ScratchImageNode';
 import { ScratchMusicNode, type ScratchMusicNodeData } from '../flow/nodes/ScratchMusicNode';
+import { PopulationNode } from '../flow/nodes/PopulationNode';
 import { SimulationNode } from '../flow/nodes/SimulationNode';
 import { StoryboardNode } from '../flow/nodes/StoryboardNode';
 import { StyleNode } from '../flow/nodes/StyleNode';
@@ -42,6 +43,7 @@ const nodeTypes = {
   location: LocationNode,
   missing: MissingNode,
   sim: SimulationNode,
+  population: PopulationNode,
   treatment: TreatmentNode,
   frame: FrameNode,
   video: VideoNode,
@@ -52,7 +54,7 @@ const nodeTypes = {
   'scratch-music': ScratchMusicNode,
 };
 
-const PIPELINE_TYPES = new Set(['sim', 'treatment', 'frame', 'video', 'style', 'storyboard', 'text-viewer']);
+const PIPELINE_TYPES = new Set(['population', 'sim', 'treatment', 'frame', 'video', 'style', 'storyboard', 'text-viewer']);
 const SCRATCH_TYPES = new Set(['scratch-image', 'scratch-music']);
 
 // A Storyboard's own inner canvas -- ungrounded like a Scratch board (no
@@ -124,7 +126,7 @@ function StoryboardCanvasInner({
     [storyboardId, from],
   );
 
-  const pipeline = usePipelineCallbacks(setNodes, setEdges, onExpandStoryboard);
+  const pipeline = usePipelineCallbacks(setNodes, setEdges, onExpandStoryboard, onCityDataRefresh);
   const { isHidden } = useHiddenEntities(activeCityId);
   const { styles, refresh: refreshStyles, remove: removeStyle } = useStylesLibrary();
   const [newAgentModal, setNewAgentModal] = useState<{ position?: XYPosition } | null>(null);
@@ -238,7 +240,7 @@ function StoryboardCanvasInner({
       if (kind === 'scratch') addScratchNode(rest[0] as 'scratch-image' | 'scratch-music', position);
       else if (kind === 'style' && rest[0] === 'new') addStyleNode(position);
       else if (kind === 'style') addStyleNode(position, styles.find((s) => s.id === rest[0]));
-      else if (kind === 'pipeline') addPipelineNode(rest[0] as 'sim' | 'treatment' | 'video' | 'text-viewer' | 'frame' | 'storyboard', position);
+      else if (kind === 'pipeline') addPipelineNode(rest[0] as 'sim' | 'treatment' | 'video' | 'text-viewer' | 'frame' | 'storyboard' | 'population', position);
       else if (kind === 'agent' && rest[0] === 'new') addNewAgent(position);
       else if (kind === 'agent') addToCanvas({ id: rest[0], kind: 'agent' }, position);
       else if (kind === 'location') addToCanvas({ id: rest[0], kind: 'location' }, position);
@@ -257,6 +259,7 @@ function StoryboardCanvasInner({
       items: [
         { id: 'image', label: '+ Image', dragPayload: 'scratch:scratch-image', onAdd: () => addScratchNode('scratch-image') },
         { id: 'music', label: '+ Music', dragPayload: 'scratch:scratch-music', onAdd: () => addScratchNode('scratch-music') },
+        { id: 'population', label: 'Population', sublabel: 'a new resident + portraits for N locations', dragPayload: 'pipeline:population', onAdd: () => addPipelineNode('population') },
         { id: 'sim', label: 'Simulation', dragPayload: 'pipeline:sim', onAdd: () => addPipelineNode('sim') },
         { id: 'treatment', label: 'Treatment', dragPayload: 'pipeline:treatment', onAdd: () => addPipelineNode('treatment') },
         { id: 'frame', label: 'Frame', dragPayload: 'pipeline:frame', onAdd: () => addPipelineNode('frame') },

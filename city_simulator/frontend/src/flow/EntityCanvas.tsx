@@ -18,6 +18,7 @@ import { LocationNode } from './nodes/LocationNode';
 import { MissingNode } from './nodes/MissingNode';
 import { ScratchImageNode, type ScratchImageNodeData } from './nodes/ScratchImageNode';
 import { ScratchMusicNode, type ScratchMusicNodeData } from './nodes/ScratchMusicNode';
+import { PopulationNode } from './nodes/PopulationNode';
 import { SimulationNode } from './nodes/SimulationNode';
 import { StoryboardNode } from './nodes/StoryboardNode';
 import { StyleNode } from './nodes/StyleNode';
@@ -44,6 +45,7 @@ const nodeTypes = {
   location: LocationNode,
   missing: MissingNode,
   sim: SimulationNode,
+  population: PopulationNode,
   treatment: TreatmentNode,
   frame: FrameNode,
   video: VideoNode,
@@ -55,7 +57,7 @@ const nodeTypes = {
   'scratch-music': ScratchMusicNode,
 };
 
-const PIPELINE_TYPES = new Set(['sim', 'treatment', 'frame', 'video', 'style', 'storyboard', 'text-viewer']);
+const PIPELINE_TYPES = new Set(['population', 'sim', 'treatment', 'frame', 'video', 'style', 'storyboard', 'text-viewer']);
 const SCRATCH_TYPES = new Set(['scratch-image', 'scratch-music']);
 
 function toImageRenderNode(gn: GraphNode, entityId: string, mediaById: Map<string, MediaItem>, onUpdate: ImageNodeData['onUpdate']): Node | null {
@@ -157,7 +159,7 @@ function CanvasInner({
     },
     [cityId, entityId, scope],
   );
-  const pipeline = usePipelineCallbacks(setNodes, setEdges, onExpandStoryboard);
+  const pipeline = usePipelineCallbacks(setNodes, setEdges, onExpandStoryboard, onCityDataRefresh);
   const { isHidden } = useHiddenEntities(cityId);
   const { styles, refresh: refreshStyles, remove: removeStyle } = useStylesLibrary();
   const [newAgentModal, setNewAgentModal] = useState<{ position?: XYPosition } | null>(null);
@@ -328,7 +330,7 @@ function CanvasInner({
       const [kind, ...rest] = payload.split(':');
       if (kind === 'image' && rest[0] === 'new') addImageNode(position);
       else if (kind === 'media') addExistingMedia(rest[0], position);
-      else if (kind === 'pipeline') addPipelineNode(rest[0] as 'sim' | 'treatment' | 'video' | 'text-viewer' | 'frame' | 'storyboard', position);
+      else if (kind === 'pipeline') addPipelineNode(rest[0] as 'sim' | 'treatment' | 'video' | 'text-viewer' | 'frame' | 'storyboard' | 'population', position);
       else if (kind === 'style' && rest[0] === 'new') addStyleNode(position);
       else if (kind === 'style') addStyleNode(position, styles.find((s) => s.id === rest[0]));
       else if (kind === 'scratch') addScratchNode(rest[0] as 'scratch-image' | 'scratch-music', position);
@@ -349,6 +351,7 @@ function CanvasInner({
       label: 'Nodes',
       items: [
         { id: 'new-image', label: '+ Image', dragPayload: 'image:new', onAdd: () => addImageNode() },
+        { id: 'population', label: 'Population', sublabel: 'a new resident + portraits for N locations', dragPayload: 'pipeline:population', onAdd: () => addPipelineNode('population') },
         { id: 'sim', label: 'Simulation', dragPayload: 'pipeline:sim', onAdd: () => addPipelineNode('sim') },
         { id: 'treatment', label: 'Treatment', dragPayload: 'pipeline:treatment', onAdd: () => addPipelineNode('treatment') },
         { id: 'frame', label: 'Frame', dragPayload: 'pipeline:frame', onAdd: () => addPipelineNode('frame') },

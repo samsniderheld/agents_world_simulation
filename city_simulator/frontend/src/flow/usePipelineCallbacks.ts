@@ -43,6 +43,8 @@ export function usePipelineCallbacks(
   // from the caller (each canvas already owns its own onExpandAgent/
   // onExpandPlace the same way, see entityNodeKit.ts's callers).
   onExpandStoryboard: (storyboardId: string) => void,
+  // Reload the canvas's city data (a Population run added residents/photos).
+  onCityChanged: () => void = () => {},
 ): PipelineCallbacks {
   const onTicksChange = useCallback((nodeId: string, ticks: number) => {
     setNodes((prev) => (prev ? prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, ticks } } : n)) : prev));
@@ -54,6 +56,10 @@ export function usePipelineCallbacks(
 
   const onStartTimeChange = useCallback((nodeId: string, startTime: string) => {
     setNodes((prev) => (prev ? prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, startTime } } : n)) : prev));
+  }, [setNodes]);
+
+  const onPopulationChange = useCallback((nodeId: string, patch: { count?: number }) => {
+    setNodes((prev) => (prev ? prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, ...patch } } : n)) : prev));
   }, [setNodes]);
 
   const onDirectiveChange = useCallback((nodeId: string, directive: string) => {
@@ -293,6 +299,8 @@ export function usePipelineCallbacks(
     onTreatmentModelChange,
     onCreateStoryboard,
     onExpandStoryboard,
+    onPopulationChange,
+    onCityChanged,
     onFrameUpdate,
     onVideoUpdate,
     onStyleLoaded,

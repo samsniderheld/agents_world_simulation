@@ -11,6 +11,7 @@ import type { AgentNodeData } from './nodes/AgentNode';
 import type { FrameNodeData } from './nodes/FrameNode';
 import type { ImageNodeData } from './nodes/ImageNode';
 import type { LocationNodeData } from './nodes/LocationNode';
+import type { PopulationNodeData } from './nodes/PopulationNode';
 import type { SimulationNodeData } from './nodes/SimulationNode';
 import type { StoryboardNodeData } from './nodes/StoryboardNode';
 import type { StyleNodeData } from './nodes/StyleNode';
@@ -40,6 +41,8 @@ export interface PipelineCallbacks {
     styleNames: string[],
   ) => void;
   onExpandStoryboard: (storyboardId: string) => void;
+  onPopulationChange: (nodeId: string, patch: { count?: number }) => void;
+  onCityChanged: () => void;
   onFrameUpdate: (nodeId: string, patch: Partial<FrameNodeData>) => void;
   onVideoUpdate: (nodeId: string, patch: Partial<VideoNodeData>) => void;
   onStyleLoaded: (nodeId: string, style: Style) => void;
@@ -173,6 +176,21 @@ export function toPipelineRenderNode(gn: GraphNode, cb: PipelineCallbacks): Node
     // same way Video's sourceImagePath has no state here either.
     return { id: gn.id, type: 'text-viewer', position: gn.position, width: gn.width, height: gn.height, data: {} };
   }
+  if (gn.type === 'population') {
+    return {
+      id: gn.id,
+      type: 'population',
+      position: gn.position,
+      width: gn.width ?? 340,
+      height: gn.height,
+      data: {
+        // older nodes stored separate characters/locations counts
+        count: (gn.data.count as number) ?? (gn.data.characters as number) ?? 5,
+        onChange: cb.onPopulationChange,
+        onCityChanged: cb.onCityChanged,
+      },
+    };
+  }
   if (gn.type === 'storyboard') {
     return {
       id: gn.id,
@@ -242,6 +260,10 @@ export function pipelineToGraphNode(n: Node): GraphNode | null {
   if (n.type === 'text-viewer') {
     return { id: n.id, type: 'text-viewer', position: n.position, width: n.width, height: n.height, data: {} };
   }
+  if (n.type === 'population') {
+    const d = n.data as PopulationNodeData;
+    return { id: n.id, type: 'population', position: n.position, width: n.width, height: n.height, data: { count: d.count } };
+  }
   if (n.type === 'storyboard') {
     const d = n.data as StoryboardNodeData;
     return {
@@ -256,9 +278,9 @@ export function pipelineToGraphNode(n: Node): GraphNode | null {
   return null;
 }
 
-function connectedStyles(nodeId: string, edges: Edge[], byId: Map<string, Node>): Style[] {
+function connectedStyles(nodeId: string, edges: Edge[], byId: Map<string, Node>, handle = 'style:in'): Style[] {
   return edges
-    .filter((e) => e.target === nodeId && e.targetHandle === 'style:in')
+    .filter((e) => e.target === nodeId && e.targetHandle === handle)
     .map((e) => byId.get(e.source))
     .filter((n): n is Node => Boolean(n && n.type === 'style'))
     .map((n) => (n.data as StyleNodeData).style)
@@ -465,6 +487,25 @@ export function enrichPipelineNodes(nodes: Node[], edges: Edge[], historyData: H
       return {
         ...n,
         data: { ...n.data, mergedStylePrompt: merged.stylePrompt, mergedStyleReferenceImages: merged.styleReferenceImages, hasStyleRef: hasEdge(n.id, 'style:in', edges) },
+      };
+    }
+
+    if (n.type === 'population') {
+      const style = (handle: string) => {
+        const merged = mergeStyles(connectedStyles(n.id, edges, byId, handle));
+        return merged.stylePrompt || merged.styleReferenceImages?.length
+          ? { prompt: merged.stylePrompt ?? '', reference_images: merged.styleReferenceImages ?? [] }
+          : undefined;
+      };
+      return {
+        ...n,
+        data: {
+          ...n.data,
+          characterStyle: style('character-style:in'),
+          locationStyle: style('location-style:in'),
+          hasCharacterStyle: hasEdge(n.id, 'character-style:in', edges),
+          hasLocationStyle: hasEdge(n.id, 'location-style:in', edges),
+        },
       };
     }
 

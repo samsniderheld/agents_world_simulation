@@ -12,7 +12,9 @@ const ALLOWED: Record<string, string[]> = {
   'run:out': ['run:in'],
   'shots:out': ['shot:in'],
   'image:out': ['image:in'],
-  'style:out': ['style:in'],
+  // 'character-style:in' / 'location-style:in' are the Population node's
+  // two style slots (portraits vs. exterior photos).
+  'style:out': ['style:in', 'character-style:in', 'location-style:in'],
   'treatment:out': ['text:in'],
 };
 

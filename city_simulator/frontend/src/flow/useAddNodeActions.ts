@@ -35,7 +35,7 @@ export interface AddNodeActionsOptions {
   onMusicUpdate: (nodeId: string, patch: { prompt?: string; negativePrompt?: string; url?: string }) => void;
 }
 
-const PIPELINE_TYPES = new Set(['sim', 'treatment', 'frame', 'video', 'style', 'storyboard']);
+const PIPELINE_TYPES = new Set(['sim', 'treatment', 'frame', 'video', 'style', 'storyboard', 'population']);
 
 export function useAddNodeActions({
   data,
@@ -67,7 +67,7 @@ export function useAddNodeActions({
   );
 
   const addPipelineNode = useCallback(
-    (type: 'sim' | 'treatment' | 'video' | 'text-viewer' | 'frame' | 'storyboard', position?: XYPosition) => {
+    (type: 'sim' | 'treatment' | 'video' | 'text-viewer' | 'frame' | 'storyboard' | 'population', position?: XYPosition) => {
       setNodes((prev) => {
         const list = prev ?? [];
         const pos =
@@ -125,6 +125,12 @@ export function useAddNodeActions({
           // with (or precede) whatever a Storyboard already created.
           const shotIndex = list.filter((n) => n.type === 'frame').length;
           return [...list, { ...base, type, data: { shotIndex, prompt: '', onUpdate: pipeline.onFrameUpdate } }];
+        }
+        if (type === 'population') {
+          return [
+            ...list,
+            { ...base, type, width: 340, data: { count: 5, onChange: pipeline.onPopulationChange, onCityChanged: pipeline.onCityChanged } },
+          ];
         }
         if (type === 'storyboard') {
           return [

@@ -11,7 +11,7 @@ from agents import jobs as agents_jobs
 from citystate import store as citystate
 from jsonutil import json_response
 
-from . import characters
+from . import characters, population
 from . import jobs
 
 bp = Blueprint("history", __name__, url_prefix="/api/history")
@@ -43,6 +43,8 @@ def generate():
     place, requiring `confirm_overwrite` first, same as the old single-city
     behavior. Without it: always creates a brand new city -- nothing is
     being destroyed, so no confirmation applies."""
+    if population.is_running():
+        return json_response({"ok": False, "error": "a Population node is adding to the city -- wait for it or stop it"}, status=409)
     body = request.get_json(silent=True) or {}
     city_id = body.get("city_id") or None
 
@@ -149,3 +151,39 @@ def save_character():
     # a full history finished generating (or the server started).
     agents_jobs.set_history_roster(citystate.get())
     return json_response({"character": saved})
+
+
+# ---- the Population node (population.py) ----------------------------------
+
+@bp.post("/population")
+def start_population():
+    """Body: {"count": N, "character_style": {...}, "location_style": {...}}
+    -- N locations each get a new resident; each style {"prompt",
+    "reference_images"} is optional. See population.py."""
+    if jobs.get_status().get("phase") == "running":
+        return json_response({"ok": False, "error": "a city is being generated -- wait for it to finish"}, status=409)
+    body = request.get_json(silent=True) or {}
+    try:
+        count = int(body.get("count") or 0)
+    except (TypeError, ValueError):
+        return json_response({"ok": False, "error": "count must be a number"}, status=400)
+    ok, error = population.start(
+        count,
+        character_style=body.get("character_style") or None,
+        location_style=body.get("location_style") or None,
+        # same roster refresh POST /characters does, so new residents show
+        # up as addable Agent nodes right away
+        on_characters_added=lambda: agents_jobs.set_history_roster(citystate.get()),
+    )
+    return json_response({"ok": ok, "error": error}, status=200 if ok else 409)
+
+
+@bp.get("/population")
+def population_status():
+    return json_response(population.get_status())
+
+
+@bp.post("/population/stop")
+def stop_population():
+    population.stop()
+    return json_response({"ok": True})

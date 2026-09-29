@@ -13,6 +13,8 @@ import type {
   HistoryData,
   JobStatus,
   MediaItem,
+  PopulationStatus,
+  PopulationStyle,
   ProviderCapabilities,
   SavedGraph,
   SavedGraphSummary,
@@ -331,6 +333,22 @@ export const graph = {
     if (!res.ok) throw new Error(body.error ?? `${res.status} ${res.statusText}`);
     return body as GraphDoc;
   },
+};
+
+// ---- the Population node (/api/history/population) -- history/population.py
+
+export const populationApi = {
+  start: (params: { count: number; characterStyle?: PopulationStyle; locationStyle?: PopulationStyle }) =>
+    request<{ ok: boolean; error: string | null }>('/api/history/population', {
+      method: 'POST',
+      body: json({
+        count: params.count,
+        character_style: params.characterStyle,
+        location_style: params.locationStyle,
+      }),
+    }),
+  status: () => request<PopulationStatus>('/api/history/population'),
+  stop: () => request<{ ok: boolean }>('/api/history/population/stop', { method: 'POST' }),
 };
 
 // ---- saved graphs (/api/graph-library) -- see citystate/graph_library.py ---
