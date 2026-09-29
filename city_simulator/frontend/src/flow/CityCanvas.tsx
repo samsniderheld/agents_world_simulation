@@ -14,6 +14,7 @@ import {
   useReactFlow,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import { useEdgeReconnect } from './useEdgeReconnect';
 import { canvasInteractionProps } from './canvasInteraction';
 import { history } from '../api/client';
 import type { Character, GraphNode, HistoryData, Place } from '../api/types';
@@ -190,6 +191,7 @@ function CanvasInner({ cityId, data, onDataRefresh }: { cityId: string; data: Hi
     if (!checkValidConnection(c.sourceHandle, c.targetHandle)) return;
     setEdges((eds) => addEdge(c, eds));
   }, []);
+  const edgeReconnect = useEdgeReconnect(setEdges);
 
   const onNodeClick: NodeMouseHandler = useCallback((_, node) => {
     if (node.type === 'agent') setSelection({ kind: 'agent', characterId: (node.data as { character: Character }).character.id });
@@ -307,6 +309,7 @@ function CanvasInner({ cityId, data, onDataRefresh }: { cityId: string; data: Hi
           onNodeDoubleClick={onNodeDoubleClick}
           onPaneClick={() => setSelection({ kind: 'city' })}
           {...canvasInteractionProps}
+          {...edgeReconnect}
           fitView
           proOptions={{ hideAttribution: true }}
         >

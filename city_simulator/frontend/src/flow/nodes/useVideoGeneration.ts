@@ -9,11 +9,16 @@ export function useVideoGeneration() {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function generate(prompt: string, imagePath: string, stylePrompt?: string): Promise<{ url: string; localPath: string } | null> {
+  async function generate(
+    prompt: string,
+    imagePath: string,
+    stylePrompt?: string,
+    aspectRatio: string = '16:9',
+  ): Promise<{ url: string; localPath: string } | null> {
     setError(null);
     setPending(true);
     try {
-      const start = await visuals.generateVideo({ prompt, imagePath, stylePrompt });
+      const start = await visuals.generateVideo({ prompt, imagePath, stylePrompt, options: { aspect_ratio: aspectRatio } });
       if (!start.ok) {
         setError(start.error ?? 'failed to start');
         return null;

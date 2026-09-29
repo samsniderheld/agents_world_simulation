@@ -3,6 +3,7 @@ import type { DragEvent } from 'react';
 import type { Connection, Edge, Node, NodeMouseHandler, XYPosition } from '@xyflow/react';
 import { addEdge, applyEdgeChanges, applyNodeChanges, Background, BackgroundVariant, Controls, MiniMap, ReactFlow, ReactFlowProvider, useReactFlow } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import { useEdgeReconnect } from '../flow/useEdgeReconnect';
 import { canvasInteractionProps } from '../flow/canvasInteraction';
 import { history } from '../api/client';
 import type { Character, GraphNode, HistoryData, Place } from '../api/types';
@@ -208,6 +209,7 @@ function StoryboardCanvasInner({
     if (!checkValidConnection(c.sourceHandle, c.targetHandle)) return;
     setEdges((eds) => addEdge(c, eds));
   }, []);
+  const edgeReconnect = useEdgeReconnect(setEdges);
 
   const notOnCanvasAgents = (() => {
     if (!nodes || !cityData) return [];
@@ -310,6 +312,7 @@ function StoryboardCanvasInner({
           isValidConnection={isValidConnection}
           onNodeDoubleClick={onNodeDoubleClick}
           {...canvasInteractionProps}
+          {...edgeReconnect}
           fitView
           proOptions={{ hideAttribution: true }}
         >

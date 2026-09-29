@@ -37,6 +37,7 @@ export function useHiddenEntities(cityId: string | undefined): {
   hiddenIds: Set<string>;
   isHidden: (id: string) => boolean;
   toggle: (id: string) => void;
+  setHidden: (ids: string[], hidden: boolean) => void;
 } {
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(() => (cityId ? readHidden(cityId) : new Set()));
 
@@ -62,7 +63,24 @@ export function useHiddenEntities(cityId: string | undefined): {
     [cityId],
   );
 
+  // Hide or show many at once (the Gallery's "Hide all" / "Show all").
+  const setHidden = useCallback(
+    (ids: string[], hidden: boolean) => {
+      if (!cityId) return;
+      setHiddenIds((prev) => {
+        const next = new Set(prev);
+        for (const id of ids) {
+          if (hidden) next.add(id);
+          else next.delete(id);
+        }
+        writeHidden(cityId, next);
+        return next;
+      });
+    },
+    [cityId],
+  );
+
   const isHidden = useCallback((id: string) => hiddenIds.has(id), [hiddenIds]);
 
-  return { hiddenIds, isHidden, toggle };
+  return { hiddenIds, isHidden, toggle, setHidden };
 }

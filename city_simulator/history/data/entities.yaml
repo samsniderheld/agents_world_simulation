@@ -213,41 +213,108 @@ roles:
 
 # place_type -> list of valid era ids, or null for "any era"
 place_types:
-  Tavern/Bar: null
-  Restaurant: null
-  General Store/Shop: null
+  # Which eras a place of this type can be *founded* in (null = any era). A
+  # place founded earlier can still stand in a later era -- a 1720 general
+  # store can survive into the 1950s as an old establishment; this only
+  # decides what's newly opened when. Era ids: dutch_colonial 1624-64,
+  # english_colonial 1664-1783, early_republic 1783-1825, antebellum
+  # 1825-61, gilded_age 1861-1900, progressive 1900-17, prohibition
+  # 1920-33, depression_war 1933-59.
+
+  # --- drink, food, lodging
+  Tavern/Bar: [dutch_colonial, english_colonial, early_republic, antebellum, gilded_age, progressive, depression_war]
+  Inn: [dutch_colonial, english_colonial]
+  Coffee House: [english_colonial, early_republic]
+  Speakeasy: [prohibition]
+  Cocktail Lounge: [depression_war]
+  Brewery: [dutch_colonial, english_colonial, early_republic, antebellum, gilded_age, progressive, depression_war]
+  Restaurant: [antebellum, gilded_age, progressive, prohibition, depression_war]
+  Diner/Automat: [progressive, prohibition, depression_war]
+  Hotel/Boarding House: [early_republic, antebellum, gilded_age, progressive, prohibition, depression_war]
+
+  # --- trade and shops
+  Trading Post: [dutch_colonial, english_colonial]
+  General Store/Shop: [dutch_colonial, english_colonial, early_republic, antebellum]
+  Grocery/Corner Store: [gilded_age, progressive, prohibition, depression_war]
+  Supermarket: [depression_war]
   Market: null
-  Church/House of Worship: null
-  Theater/Hall: [early_republic, antebellum, gilded_age, progressive, prohibition, depression_war]
-  Hotel/Boarding House: null
-  Newspaper/Print Shop: [early_republic, antebellum, gilded_age, progressive, prohibition, depression_war]
+  Department Store: [gilded_age, progressive, prohibition, depression_war]
+  Pawnshop: [antebellum, gilded_age, progressive, prohibition, depression_war]
+  Garage/Filling Station: [prohibition, depression_war]
+
+  # --- work and money
+  Craftsman's Workshop: [dutch_colonial, english_colonial, early_republic, antebellum]
+  Factory/Mill: [antebellum, gilded_age, progressive, prohibition, depression_war]
   Shipyard/Dock/Warehouse: null
   Bank/Counting House: null
-  Tenement/Residence: [antebellum, gilded_age, progressive, prohibition, depression_war]
+  Union Hall: [gilded_age, progressive, prohibition, depression_war]
+  Newspaper/Print Shop: [english_colonial, early_republic, antebellum, gilded_age, progressive, prohibition, depression_war]
+  Radio Station: [prohibition, depression_war]
+
+  # --- entertainment and vice
+  Theater/Hall: [early_republic, antebellum, gilded_age, progressive, prohibition, depression_war]
+  Dance Hall: [gilded_age, progressive, prohibition]
+  Nickelodeon: [progressive]
+  Movie Palace: [prohibition, depression_war]
+  Nightclub/Jazz Club: [prohibition, depression_war]
+  Pool Hall: [gilded_age, progressive, prohibition, depression_war]
+  Policy Shop/Gambling Den: [gilded_age, progressive, prohibition, depression_war]
+
+  # --- homes
+  Brownstone/Townhouse: [antebellum, gilded_age]
+  Tenement/Residence: [antebellum, gilded_age, progressive, prohibition]
+  Apartment House: [prohibition, depression_war]
+  Housing Project: [depression_war]
+
+  # --- civic life
+  Church/House of Worship: null
+  School: null
   Park/Public Square: null
   Government/Civic Building: null
-  Factory/Mill: [gilded_age, progressive, prohibition, depression_war]
-  Speakeasy: [prohibition]
-  Department Store: [gilded_age, progressive, prohibition, depression_war]
-  Social/Fraternal Club: null
-  School: null
+  Fort/Garrison: [dutch_colonial, english_colonial]
+  Hospital: [antebellum, gilded_age, progressive, prohibition, depression_war]
+  Social/Fraternal Club: [english_colonial, early_republic, antebellum, gilded_age, progressive, prohibition, depression_war]
 
 place_type_nouns:
   Tavern/Bar: tavern
+  Inn: inn
+  Coffee House: coffee house
+  Speakeasy: speakeasy
+  Cocktail Lounge: cocktail lounge
+  Brewery: brewery
   Restaurant: restaurant
-  General Store/Shop: general store
-  Market: market
-  Church/House of Worship: church
-  Theater/Hall: theater
+  Diner/Automat: diner
   Hotel/Boarding House: hotel
-  Newspaper/Print Shop: print shop
+  Trading Post: trading post
+  General Store/Shop: general store
+  Grocery/Corner Store: grocery
+  Supermarket: supermarket
+  Market: market
+  Department Store: department store
+  Pawnshop: pawnshop
+  Garage/Filling Station: garage
+  Craftsman's Workshop: workshop
+  Factory/Mill: mill
   Shipyard/Dock/Warehouse: shipyard
-  Bank/Counting House: counting house
+  Bank/Counting House: bank
+  Union Hall: union hall
+  Newspaper/Print Shop: print shop
+  Radio Station: radio station
+  Theater/Hall: theater
+  Dance Hall: dance hall
+  Nickelodeon: nickelodeon
+  Movie Palace: movie palace
+  Nightclub/Jazz Club: nightclub
+  Pool Hall: pool hall
+  Policy Shop/Gambling Den: policy shop
+  Brownstone/Townhouse: brownstone
   Tenement/Residence: tenement
+  Apartment House: apartment house
+  Housing Project: housing project
+  Church/House of Worship: church
+  School: schoolhouse
   Park/Public Square: public square
   Government/Civic Building: civic hall
-  Factory/Mill: mill
-  Speakeasy: speakeasy
-  Department Store: department store
+  Fort/Garrison: fort
+  Hospital: hospital
   Social/Fraternal Club: social club
-  School: schoolhouse

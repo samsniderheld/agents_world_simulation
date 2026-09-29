@@ -56,7 +56,16 @@ def _grammar_place_name(place_type: str, domain: str, founder_surname: str, rng:
     if style == "works":
         return f"{founder_surname} {rng.choice(_PRODUCTS)} Works"
     if style == "civic":
-        return f"{rng.choice(_SAINTS_VIRTUES)}" if "Church" in place_type else f"{founder_surname} {place_type.split('/')[0]}"
+        if "Church" in place_type:
+            return rng.choice(_SAINTS_VIRTUES)
+        if place_type.startswith("Fort"):
+            return f"Fort {founder_surname}"
+        if place_type == "Housing Project":
+            return f"{founder_surname} Houses"  # how NYC's projects are actually named
+        return f"{founder_surname} {place_type.split('/')[0]}"
+    if style == "call_letters":
+        letters = "".join(c for c in founder_surname.upper() if c.isalpha())[:3].ljust(3, "X")
+        return f"W{letters}"
     if style == "press":
         # domain may itself start with "the" (e.g. "the vote") -- strip it
         # before title-casing so this doesn't produce "The The Vote Sentinel".

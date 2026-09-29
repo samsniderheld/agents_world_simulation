@@ -22,7 +22,13 @@ export function toScratchRenderNode(
       // shrink-to-fits its own content independently of its siblings.
       width: gn.width ?? 540,
       height: gn.height ?? 430,
-      data: { prompt: (gn.data.prompt as string) ?? '', url: gn.data.url as string | undefined, localPath: gn.data.localPath as string | undefined, onUpdate: onImageUpdate },
+      data: {
+        prompt: (gn.data.prompt as string) ?? '',
+        aspectRatio: gn.data.aspectRatio as string | undefined,
+        url: gn.data.url as string | undefined,
+        localPath: gn.data.localPath as string | undefined,
+        onUpdate: onImageUpdate,
+      },
     };
   }
   if (gn.type === 'scratch-music') {
@@ -46,7 +52,7 @@ export function toScratchRenderNode(
 export function scratchToGraphNode(n: Node): GraphNode | null {
   if (n.type === 'scratch-image') {
     const d = n.data as ScratchImageNodeData;
-    return { id: n.id, type: 'scratch-image', position: n.position, width: n.width, height: n.height, data: { prompt: d.prompt, url: d.url, localPath: d.localPath } };
+    return { id: n.id, type: 'scratch-image', position: n.position, width: n.width, height: n.height, data: { prompt: d.prompt, aspectRatio: d.aspectRatio, url: d.url, localPath: d.localPath } };
   }
   if (n.type === 'scratch-music') {
     const d = n.data as ScratchMusicNodeData;

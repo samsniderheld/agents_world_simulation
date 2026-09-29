@@ -26,7 +26,7 @@ function NotFoundState() {
 export function GalleryScreen({ cityId }: { cityId: string }) {
   const [data, setData] = useState<HistoryData | null | undefined>(undefined);
   const historyStatus = useJobStore((s) => s.historyStatus);
-  const { isHidden, toggle } = useHiddenEntities(cityId);
+  const { isHidden, toggle, setHidden } = useHiddenEntities(cityId);
 
   // Same "activate then read" requirement as CityCanvas/AgentScreen --
   // GET-style reads implicitly operate on whichever city is active
@@ -53,7 +53,7 @@ export function GalleryScreen({ cityId }: { cityId: string }) {
   return (
     <div className="gallery-screen">
       <section className="gallery-section">
-        <h2 className="gallery-section-title">Agents ({data.characters.length})</h2>
+        <SectionHeader title="Agents" ids={data.characters.map((c) => c.id)} isHidden={isHidden} setHidden={setHidden} />
         {data.characters.length === 0 ? (
           <div className="canvas-empty">No agents yet.</div>
         ) : (
@@ -92,7 +92,7 @@ export function GalleryScreen({ cityId }: { cityId: string }) {
       </section>
 
       <section className="gallery-section">
-        <h2 className="gallery-section-title">Locations ({data.places.length})</h2>
+        <SectionHeader title="Locations" ids={data.places.map((p) => p.id)} isHidden={isHidden} setHidden={setHidden} />
         {data.places.length === 0 ? (
           <div className="canvas-empty">No locations yet.</div>
         ) : (
@@ -132,6 +132,40 @@ export function GalleryScreen({ cityId }: { cityId: string }) {
           </div>
         )}
       </section>
+    </div>
+  );
+}
+
+// A section's title with its counts, plus one button that hides every card
+// in it from the canvas drawers -- or, once they're all hidden, shows them
+// all again.
+function SectionHeader({
+  title,
+  ids,
+  isHidden,
+  setHidden,
+}: {
+  title: string;
+  ids: string[];
+  isHidden: (id: string) => boolean;
+  setHidden: (ids: string[], hidden: boolean) => void;
+}) {
+  const hiddenCount = ids.filter(isHidden).length;
+  const allHidden = ids.length > 0 && hiddenCount === ids.length;
+  return (
+    <div className="gallery-section-header">
+      <h2 className="gallery-section-title">
+        {title} ({ids.length}){hiddenCount > 0 && ` · ${hiddenCount} hidden`}
+      </h2>
+      {ids.length > 0 && (
+        <button
+          className="node-run-btn gallery-section-toggle"
+          title={allHidden ? 'Show all of these in the canvas drawers again' : 'Hide all of these from the canvas drawers'}
+          onClick={() => setHidden(ids, !allHidden)}
+        >
+          {allHidden ? 'Show all' : 'Hide all'}
+        </button>
+      )}
     </div>
   );
 }

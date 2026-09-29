@@ -82,7 +82,31 @@
   stroke-width: 1.5px;
 }
 
-.react-flow__edge.selected .react-flow__edge-path,
 .react-flow__edge:hover .react-flow__edge-path {
   stroke: var(--port-entity);
+}
+
+/* Selected is distinct from hover, so a clicked cord still reads as
+   selected after the mouse moves away -- Delete/Backspace removes it.
+   Set through React Flow's own variable: clicking a cord also focuses it,
+   and React Flow's :focus rule outranks a plain .selected selector. */
+.react-flow {
+  --xy-edge-stroke-selected: var(--accent);
+}
+
+.react-flow__edge.selected .react-flow__edge-path,
+.react-flow__edge:focus .react-flow__edge-path {
+  stroke-width: 2.5px;
+}
+
+/* The grab points at each end of a cord (useEdgeReconnect.ts) -- invisible
+   by default, shown as dots on a hovered or selected cord so it's clear
+   where to grab to detach or move it. */
+.react-flow__edge:hover .react-flow__edgeupdater,
+.react-flow__edge.selected .react-flow__edgeupdater {
+  fill: var(--accent);
+  fill-opacity: 0.35;
+  stroke: var(--accent);
+  stroke-width: 1px;
+  cursor: grab;
 }

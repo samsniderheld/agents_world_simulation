@@ -57,20 +57,44 @@ place_name_words:
 # place_type -> which naming pattern _grammar_place_name uses for it.
 naming_style:
   Tavern/Bar: tavern
+  Inn: tavern
+  Coffee House: tavern
   Speakeasy: tavern
-  Restaurant: surname_possessive
-  General Store/Shop: surname_possessive
-  Market: surname_possessive
-  Department Store: surname_possessive
+  Cocktail Lounge: tavern
+  Nightclub/Jazz Club: tavern
+  Dance Hall: tavern
+  Pool Hall: tavern
+  Theater/Hall: tavern
+  Social/Fraternal Club: tavern
+  Brewery: firm
+  Trading Post: firm
   Bank/Counting House: firm
   Shipyard/Dock/Warehouse: firm
+  Craftsman's Workshop: works
   Factory/Mill: works
+  Restaurant: surname_possessive
+  Diner/Automat: surname_possessive
+  Hotel/Boarding House: surname_possessive
+  General Store/Shop: surname_possessive
+  Grocery/Corner Store: surname_possessive
+  Supermarket: surname_possessive
+  Market: surname_possessive
+  Department Store: surname_possessive
+  Pawnshop: surname_possessive
+  Garage/Filling Station: surname_possessive
+  Nickelodeon: surname_possessive
+  Movie Palace: surname_possessive
   Church/House of Worship: civic
   Park/Public Square: civic
   Government/Civic Building: civic
   School: civic
-  Theater/Hall: tavern
-  Social/Fraternal Club: tavern
-  Hotel/Boarding House: surname_possessive
+  Hospital: civic
+  Union Hall: civic
+  Fort/Garrison: civic
+  Housing Project: civic
   Newspaper/Print Shop: press
+  Radio Station: call_letters
   Tenement/Residence: address
+  Brownstone/Townhouse: address
+  Apartment House: address
+  Policy Shop/Gambling Den: address

@@ -3,6 +3,7 @@ import type { Node, NodeProps } from '@xyflow/react';
 import { visuals } from '../../api/client';
 import { pollVisualsUntilDone } from '../../api/pollVisuals';
 import { useLightboxStore } from '../../state/lightboxStore';
+import { AspectSelect, type AspectRatio } from './AspectSelect';
 import { NodeShell } from './NodeShell';
 import { Port } from './Port';
 
@@ -19,7 +20,8 @@ export interface ScratchImageNodeData extends Record<string, unknown> {
   // mergedStylePrompt, so the port still shows "connected" even when the
   // linked Style has no prompt text (reference images only, or blank).
   hasStyleRef?: boolean;
-  onUpdate: (nodeId: string, patch: { prompt?: string; url?: string; localPath?: string }) => void;
+  aspectRatio?: AspectRatio;
+  onUpdate: (nodeId: string, patch: { prompt?: string; aspectRatio?: AspectRatio; url?: string; localPath?: string }) => void;
 }
 
 export type ScratchImageNodeType = Node<ScratchImageNodeData, 'scratch-image'>;
@@ -39,7 +41,12 @@ export function ScratchImageNode({ id, data, selected }: NodeProps<ScratchImageN
     setError(null);
     setPending(true);
     try {
-      const start = await visuals.generateImage({ prompt, stylePrompt: data.mergedStylePrompt, styleReferenceImages: data.mergedStyleReferenceImages });
+      const start = await visuals.generateImage({
+        prompt,
+        stylePrompt: data.mergedStylePrompt,
+        styleReferenceImages: data.mergedStyleReferenceImages,
+        options: { aspect_ratio: data.aspectRatio ?? '16:9' },
+      });
       if (!start.ok) {
         setError(start.error ?? 'failed to start');
         return;
@@ -81,6 +88,7 @@ export function ScratchImageNode({ id, data, selected }: NodeProps<ScratchImageN
       {data.mergedStylePrompt && <div className="node-subtitle">style: {data.mergedStylePrompt}</div>}
       {error && <div className="node-error-text">{error}</div>}
       <div className="node-controls">
+        <AspectSelect value={data.aspectRatio ?? '16:9'} onChange={(v) => data.onUpdate(id, { aspectRatio: v })} />
         <button className="node-run-btn" disabled={pending || !prompt.trim()} onClick={generate}>
           {pending ? 'generating…' : data.url ? '↻ regenerate' : '▶ generate'}
         </button>

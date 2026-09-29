@@ -126,6 +126,7 @@ export function toPipelineRenderNode(gn: GraphNode, cb: PipelineCallbacks): Node
         shotIndex: gn.data.shotIndex as number,
         prompt: (gn.data.prompt as string) ?? '',
         editPrompt: (gn.data.editPrompt as string) ?? '',
+        aspectRatio: gn.data.aspectRatio as string | undefined,
         url: gn.data.url as string | undefined,
         localPath: gn.data.localPath as string | undefined,
         onUpdate: cb.onFrameUpdate,
@@ -141,6 +142,7 @@ export function toPipelineRenderNode(gn: GraphNode, cb: PipelineCallbacks): Node
       height: gn.height ?? 430,
       data: {
         prompt: (gn.data.prompt as string) ?? '',
+        aspectRatio: gn.data.aspectRatio as string | undefined,
         url: gn.data.url as string | undefined,
         localPath: gn.data.localPath as string | undefined,
         onUpdate: cb.onVideoUpdate,
@@ -226,12 +228,12 @@ export function pipelineToGraphNode(n: Node): GraphNode | null {
       position: n.position,
       width: n.width,
       height: n.height,
-      data: { shotIndex: d.shotIndex, prompt: d.prompt, editPrompt: d.editPrompt, url: d.url, localPath: d.localPath },
+      data: { shotIndex: d.shotIndex, prompt: d.prompt, editPrompt: d.editPrompt, aspectRatio: d.aspectRatio, url: d.url, localPath: d.localPath },
     };
   }
   if (n.type === 'video') {
     const d = n.data as VideoNodeData;
-    return { id: n.id, type: 'video', position: n.position, width: n.width, height: n.height, data: { prompt: d.prompt, url: d.url, localPath: d.localPath } };
+    return { id: n.id, type: 'video', position: n.position, width: n.width, height: n.height, data: { prompt: d.prompt, aspectRatio: d.aspectRatio, url: d.url, localPath: d.localPath } };
   }
   if (n.type === 'style') {
     const d = n.data as StyleNodeData;

@@ -4,7 +4,8 @@
 // Figma-style: dragging on empty canvas draws a selection box (anything it
 // touches is selected; Delete/Backspace removes the selection), so panning
 // moves to two-finger scroll, Space + drag, or the middle/right mouse
-// button. Pinch or ⌘/Ctrl + scroll zooms.
+// button. Pinch or ⌘/Ctrl + scroll zooms. Click a cord to select it, or drag
+// either end of it to move it to another port or drop it to remove it.
 import { SelectionMode } from '@xyflow/react';
 
 export const canvasInteractionProps = {
@@ -13,4 +14,7 @@ export const canvasInteractionProps = {
   panOnDrag: [1, 2],
   panOnScroll: true,
   deleteKeyCode: ['Backspace', 'Delete'],
+  // Grab radius for a cord's end (see useEdgeReconnect.ts); React Flow's
+  // default of 10px is fiddly to hit.
+  reconnectRadius: 16,
 };

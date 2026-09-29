@@ -15,11 +15,17 @@ export function useImageGeneration(entityId: string) {
     prompt: string,
     tag = '',
     style?: { stylePrompt?: string; styleReferenceImages?: string[] },
+    aspectRatio: string = '16:9',
   ): Promise<MediaItem | null> {
     setError(null);
     setPending(true);
     try {
-      const start = await visuals.generateImage({ prompt, stylePrompt: style?.stylePrompt, styleReferenceImages: style?.styleReferenceImages });
+      const start = await visuals.generateImage({
+        prompt,
+        stylePrompt: style?.stylePrompt,
+        styleReferenceImages: style?.styleReferenceImages,
+        options: { aspect_ratio: aspectRatio },
+      });
       if (!start.ok) {
         setError(start.error ?? 'failed to start');
         return null;

@@ -56,6 +56,10 @@ creation order instead, a figure from a later era could end up renaming a
 place before an earlier era's figure had even founded it — the schedule
 sort is what keeps a place's `history` reading as a real timeline.
 
+Each event is resolved in the era its *year* falls in (`eras.era_for_year`), not the era its
+figure was born into: a figure born in 1850 who opens a place in 1870 opens a Gilded Age kind of
+place, built in Gilded Age style, and the event is filed under the Gilded Age.
+
 ```
 Phase 1 — schedule (no Place is touched yet)
 ┌─────────────────────────────────────────────────────────────────┐
@@ -337,7 +341,9 @@ loaded once by `config.py`. All *content* — era
 definitions, 10 domains and 10 factions per era (`entities.yaml`, looked
 up by `domains_for_era()`/`factions_for_era()` so a figure only ever gets
 a domain/rival/ally that actually fits its own era), roles/place-types and
-which eras each is valid in, name word lists per era, event templates and
+which eras each is valid in (a place type can only be *founded* in its own eras -- no general stores
+opening in the 1950s, no taverns during Prohibition -- though an older one can survive into a later era),
+name word lists per era, event templates and
 their word pools, each era's real architectural style/material/feature
 word pools plus each place_type's building scale (`architecture.yaml`),
 character bio templates — lives in the matching `data/*.yaml` file, not in

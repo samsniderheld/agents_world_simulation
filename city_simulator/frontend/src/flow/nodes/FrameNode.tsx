@@ -3,6 +3,7 @@ import type { Node, NodeProps } from '@xyflow/react';
 import { visuals } from '../../api/client';
 import { pollVisualsUntilDone } from '../../api/pollVisuals';
 import { useLightboxStore } from '../../state/lightboxStore';
+import { AspectSelect, type AspectRatio } from './AspectSelect';
 import { NodeShell } from './NodeShell';
 import { Port } from './Port';
 import { useProviderCapabilities } from './useProviderCapabilities';
@@ -22,6 +23,8 @@ export interface FrameNodeData extends Record<string, unknown> {
   // ("make it night, add rain") rather than a fresh generation. Persisted
   // so it survives a reload like the main prompt does.
   editPrompt?: string;
+  // Sent with both generate and edit (see AspectSelect).
+  aspectRatio?: AspectRatio;
   // Resolved by pipeline.ts's enrichPipelineNodes() from any connected
   // Style node(s) -- merged (per the design's rule: prompts joined with
   // ", ", reference arrays concatenated) since more than one can feed
@@ -47,7 +50,7 @@ export interface FrameNodeData extends Record<string, unknown> {
   // line ahead of the style/agent/place references.
   inputImagePaths?: string[];
   hasImageRef?: boolean;
-  onUpdate: (nodeId: string, patch: { prompt?: string; editPrompt?: string; url?: string; localPath?: string }) => void;
+  onUpdate: (nodeId: string, patch: { prompt?: string; editPrompt?: string; aspectRatio?: AspectRatio; url?: string; localPath?: string }) => void;
 }
 
 export type FrameNodeType = Node<FrameNodeData, 'frame'>;
@@ -67,12 +70,13 @@ export function FrameNode({ id, data, selected }: NodeProps<FrameNodeType>) {
   // image, so editing is greyed out rather than failing at submit time.
   const capabilities = useProviderCapabilities();
   const canEdit = capabilities?.supports_reference_images !== false;
+  const aspect = data.aspectRatio ?? '16:9';
 
   async function run(kind: 'generate' | 'edit', params: Parameters<typeof visuals.generateImage>[0], patch: { prompt?: string; editPrompt?: string }) {
     setError(null);
     setPending(kind);
     try {
-      const start = await visuals.generateImage(params);
+      const start = await visuals.generateImage({ ...params, options: { aspect_ratio: aspect } });
       if (!start.ok) {
         setError(start.error ?? 'failed to start');
         return;
@@ -146,6 +150,7 @@ export function FrameNode({ id, data, selected }: NodeProps<FrameNodeType>) {
         </div>
       )}
       <div className="node-controls">
+        <AspectSelect value={aspect} onChange={(v) => data.onUpdate(id, { aspectRatio: v })} />
         <button className="node-run-btn" disabled={pending !== null || !prompt.trim()} onClick={onGenerate}>
           {pending === 'generate' ? 'generating…' : data.url ? '↻ regenerate' : '▶ generate'}
         </button>

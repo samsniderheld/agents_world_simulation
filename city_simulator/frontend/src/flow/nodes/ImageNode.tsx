@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { Node, NodeProps } from '@xyflow/react';
 import { city } from '../../api/client';
 import { useLightboxStore } from '../../state/lightboxStore';
+import { AspectSelect, type AspectRatio } from './AspectSelect';
 import { NodeShell } from './NodeShell';
 import { Port } from './Port';
 import { useImageGeneration } from './useImageGeneration';
@@ -29,7 +30,8 @@ export interface ImageNodeData extends Record<string, unknown> {
   hasAgentRef?: boolean;
   hasPlaceRef?: boolean;
   hasStyleRef?: boolean;
-  onUpdate: (nodeId: string, patch: { prompt?: string; mediaId?: string; mediaUrl?: string }) => void;
+  aspectRatio?: AspectRatio;
+  onUpdate: (nodeId: string, patch: { prompt?: string; aspectRatio?: AspectRatio; mediaId?: string; mediaUrl?: string }) => void;
 }
 
 export type ImageNodeType = Node<ImageNodeData, 'image'>;
@@ -48,7 +50,7 @@ export function ImageNode({ id, data, selected }: NodeProps<ImageNodeType>) {
     const media = await generate(prompt, '', {
       stylePrompt: data.mergedStylePrompt,
       styleReferenceImages: [...(data.mergedStyleReferenceImages ?? []), ...(data.mergedEntityReferenceImages ?? [])],
-    });
+    }, data.aspectRatio ?? '16:9');
     if (media) data.onUpdate(id, { prompt, mediaId: media.id, mediaUrl: city.fileUrl(media.url) });
   }
 
@@ -75,6 +77,7 @@ export function ImageNode({ id, data, selected }: NodeProps<ImageNodeType>) {
       {data.mergedStylePrompt && <div className="node-subtitle">style: {data.mergedStylePrompt}</div>}
       {error && <div className="node-error-text">{error}</div>}
       <div className="node-controls">
+        <AspectSelect value={data.aspectRatio ?? '16:9'} onChange={(v) => data.onUpdate(id, { aspectRatio: v })} />
         <button className="node-run-btn" disabled={pending || !prompt.trim()} onClick={onGenerate}>
           {pending ? 'generating…' : data.mediaId ? '↻ regenerate' : '▶ generate'}
         </button>

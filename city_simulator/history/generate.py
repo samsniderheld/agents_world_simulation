@@ -21,7 +21,7 @@ from . import events
 from . import llm
 from . import log as history_log
 from . import summary
-from .eras import ERAS
+from .eras import ERAS, era_for_year
 
 
 def generate(seed=None, figures_per_era=None, events_per_figure=None):
@@ -66,9 +66,13 @@ def generate(seed=None, figures_per_era=None, events_per_figure=None):
     all_places = []
     all_events = []
 
-    for year, figure, era in schedule:
+    for year, figure, _birth_era in schedule:
         if not figure.alive:
             continue
+        # The era this event actually happens in -- not the figure's birth
+        # era it was scheduled under. A figure born in 1850 who opens a place
+        # in 1870 opens a Gilded Age kind of place, in Gilded Age style.
+        era = era_for_year(year)
 
         template = events.pick_event_template(figure, all_places, rng)
         gospel_text, place, is_new_place = events.resolve_event(
@@ -100,7 +104,6 @@ def generate(seed=None, figures_per_era=None, events_per_figure=None):
     # Deaths don't touch Place state, so they're safe to resolve in a final
     # pass regardless of order -- each figure just needs one, some time
     # after their last scheduled life event.
-    era_by_id = {era.id: era for era in ERAS}
     for figure in all_figures:
         if not figure.alive:
             continue
@@ -108,7 +111,7 @@ def generate(seed=None, figures_per_era=None, events_per_figure=None):
         if last_year >= config.MAX_YEAR:
             continue
         death_year = min(last_year + rng.randint(1, 10), config.MAX_YEAR)
-        era = era_by_id[figure.era_id]
+        era = era_for_year(death_year)  # the era they die in, not the one they were born in
         gospel_text = events.resolve_death(figure, death_year, era, rng)
         all_events.append({
             "id": entities.new_id("evt_"), "era_id": era.id, "year": death_year,

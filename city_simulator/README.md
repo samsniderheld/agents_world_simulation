@@ -122,6 +122,12 @@ from every canvas's "add" drawer without touching anything already placed
 belongs to no city (`/scratch/default`). Esc or the breadcrumb always goes
 up one level -- back to wherever you came from.
 
+Editing the graph: drag on empty canvas to box-select, Delete/Backspace
+removes the selection; two-finger scroll or Space + drag pans, pinch or
+⌘ + scroll zooms. Click a cord to select it (it turns yellow). Hover a cord
+to see the grab dots at its ends: drag one onto another compatible port to
+move the cord, or drop it anywhere else to remove it.
+
 Node types, and how they wire together (`frontend/src/flow/edgeRules.ts`
 is the one table of allowed connections; port colors follow
 `flow/nodes/portTypes.ts`):

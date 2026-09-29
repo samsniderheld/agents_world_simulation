@@ -3,6 +3,7 @@ import type { DragEvent } from 'react';
 import type { Connection, Edge, Node, NodeMouseHandler, XYPosition } from '@xyflow/react';
 import { addEdge, applyEdgeChanges, applyNodeChanges, Background, BackgroundVariant, Controls, MiniMap, ReactFlow, ReactFlowProvider, useReactFlow } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import { useEdgeReconnect } from './useEdgeReconnect';
 import { canvasInteractionProps } from './canvasInteraction';
 import { city } from '../api/client';
 import type { Character, GraphNode, HistoryData, MediaItem, Place } from '../api/types';
@@ -71,14 +72,14 @@ function toImageRenderNode(gn: GraphNode, entityId: string, mediaById: Map<strin
     // fits its own content independently of its siblings.
     width: gn.width ?? 540,
     height: gn.height ?? 430,
-    data: { entityId, prompt: (gn.data.prompt as string) ?? media?.prompt ?? '', mediaId, mediaUrl: media ? city.fileUrl(media.url) : undefined, onUpdate },
+    data: { entityId, prompt: (gn.data.prompt as string) ?? media?.prompt ?? '', aspectRatio: gn.data.aspectRatio as string | undefined, mediaId, mediaUrl: media ? city.fileUrl(media.url) : undefined, onUpdate },
   };
 }
 
 function imageToGraphNode(n: Node): GraphNode | null {
   if (n.type !== 'image') return null;
   const d = n.data as ImageNodeData;
-  return { id: n.id, type: 'image', position: n.position, width: n.width, height: n.height, data: { prompt: d.prompt, mediaId: d.mediaId } };
+  return { id: n.id, type: 'image', position: n.position, width: n.width, height: n.height, data: { prompt: d.prompt, aspectRatio: d.aspectRatio, mediaId: d.mediaId } };
 }
 
 // This entity's own drill-in canvas, with the *same* full node palette
@@ -277,6 +278,7 @@ function CanvasInner({
     if (!checkValidConnection(c.sourceHandle, c.targetHandle)) return;
     setEdges((eds) => addEdge(c, eds));
   }, []);
+  const edgeReconnect = useEdgeReconnect(setEdges);
   // Nothing to navigate to from here (see noExpand above) -- clicks just
   // don't do anything special, unlike CityCanvas's onNodeClick/dblclick.
   const onNodeClick: NodeMouseHandler = useCallback(() => {}, []);
@@ -414,6 +416,7 @@ function CanvasInner({
           isValidConnection={isValidConnection}
           onNodeClick={onNodeClick}
           {...canvasInteractionProps}
+          {...edgeReconnect}
           fitView
           proOptions={{ hideAttribution: true }}
         >

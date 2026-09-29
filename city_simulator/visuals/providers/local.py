@@ -31,6 +31,7 @@ from .. import storage
 from .base import Provider
 
 _MAX_UNTILED_SIDE = 1024  # switch the VAE from slicing to tiling above this
+_ASPECT_SIZES = {"16:9": (1280, 720), "9:16": (720, 1280), "1:1": (1024, 1024)}  # (width, height)
 
 
 class LocalProvider(Provider):
@@ -104,8 +105,12 @@ class LocalProvider(Provider):
 
         pipe = self._load()
 
-        height = int(options.get("height", 1024))
-        width = int(options.get("width", 1024))
+        # The nodes send fal's `aspect_ratio` ("16:9" / "9:16"); this model
+        # takes pixel sizes, so map it -- multiples of 16, and no more pixels
+        # than the 1024x1024 default. An explicit width/height still wins.
+        default_w, default_h = _ASPECT_SIZES.get(options.get("aspect_ratio"), (1024, 1024))
+        height = int(options.get("height", default_h))
+        width = int(options.get("width", default_w))
         if max(height, width) > _MAX_UNTILED_SIDE:
             pipe.vae.enable_tiling()
         else:

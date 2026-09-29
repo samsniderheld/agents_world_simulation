@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { Node, NodeProps } from '@xyflow/react';
 import { visuals } from '../../api/client';
+import { AspectSelect, type AspectRatio } from './AspectSelect';
 import { NodeShell } from './NodeShell';
 import { Port } from './Port';
 import { useVideoGeneration } from './useVideoGeneration';
@@ -16,13 +17,14 @@ export interface VideoNodeData extends Record<string, unknown> {
   // mergedStylePrompt, so the port still shows "connected" even when the
   // linked Style has no prompt text (reference images only, or blank).
   hasStyleRef?: boolean;
+  aspectRatio?: AspectRatio;
   prompt: string;
   // Self-contained, like FrameNode/ScratchImageNode -- a generated clip
   // belongs to this node/the treatment it's part of, not to any one
   // entity's media history.
   url?: string;
   localPath?: string;
-  onUpdate: (nodeId: string, patch: { prompt?: string; url?: string; localPath?: string }) => void;
+  onUpdate: (nodeId: string, patch: { prompt?: string; aspectRatio?: AspectRatio; url?: string; localPath?: string }) => void;
 }
 
 export type VideoNodeType = Node<VideoNodeData, 'video'>;
@@ -36,7 +38,7 @@ export function VideoNode({ id, data, selected }: NodeProps<VideoNodeType>) {
 
   async function onGenerate() {
     if (!data.sourceImagePath) return;
-    const result = await generate(prompt, data.sourceImagePath, data.mergedStylePrompt);
+    const result = await generate(prompt, data.sourceImagePath, data.mergedStylePrompt, data.aspectRatio ?? '16:9');
     if (result) data.onUpdate(id, { prompt, url: result.url, localPath: result.localPath });
   }
 
@@ -70,6 +72,7 @@ export function VideoNode({ id, data, selected }: NodeProps<VideoNodeType>) {
       />
       {error && <div className="node-error-text">{error}</div>}
       <div className="node-controls">
+        <AspectSelect value={data.aspectRatio ?? '16:9'} onChange={(v) => data.onUpdate(id, { aspectRatio: v })} />
         <button className="node-run-btn" disabled={pending || noSource || !prompt.trim()} onClick={onGenerate}>
           {pending ? 'generating…' : data.url ? '↻ regenerate' : '▶ generate'}
         </button>

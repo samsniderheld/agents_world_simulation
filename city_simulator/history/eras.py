@@ -27,3 +27,9 @@ class Era:
 
 ERAS = [Era(**e) for e in _RAW["eras"]]
 ERAS_BY_ID = {era.id: era for era in ERAS}
+
+
+def era_for_year(year: int) -> Era:
+    """The era a given year falls in. A year in a gap between eras (1917-20)
+    belongs to the one before it; one past the last era, to the last."""
+    return next((era for era in reversed(ERAS) if era.start_year <= year), ERAS[0])
