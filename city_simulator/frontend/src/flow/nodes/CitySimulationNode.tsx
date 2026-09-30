@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { UIEvent } from 'react';
 import type { Node, NodeProps } from '@xyflow/react';
 import { agentsApi } from '../../api/client';
-import type { AgentEvent } from '../../api/types';
+import type { AgentEvent, CityZoomOptions, CityZoomResult } from '../../api/types';
 import { eventLine } from '../../inspector/format';
 import { useJobStore } from '../../state/jobStore';
 import { NodeShell } from './NodeShell';
@@ -33,6 +33,8 @@ export interface CitySimulationNodeData extends Record<string, unknown> {
   placeId?: string;
   placeName?: string;
   onChange: (nodeId: string, patch: Partial<CitySimulationNodeData>) => void;
+  // Creates a pre-wired Simulation node for a zoomed-in scene.
+  onZoomIn: (nodeId: string, result: CityZoomResult) => void;
 }
 
 export type CitySimulationNodeType = Node<CitySimulationNodeData, 'citysim'>;
@@ -159,6 +161,8 @@ export function CitySimulationNode({ id, data, selected, height }: NodeProps<Cit
 
   const statusError = cityRunning || !isCityRun ? null : agentsState?.status.error;
   const paused = Boolean(agentsState?.meta?.paused);
+  // Zoom in from a finished or paused CITY run.
+  const canZoom = isCityRun && (!globallyRunning || paused);
   const notable = (isCityRun ? (agentsState?.meta?.notable as NotableResident[] | undefined) : undefined) ?? [];
 
   async function promote(name: string) {
@@ -288,6 +292,8 @@ export function CitySimulationNode({ id, data, selected, height }: NodeProps<Cit
 
       {(error || statusError) && <div className="node-error-text">{error || statusError}</div>}
 
+      {canZoom && <ZoomIn nodeId={id} onZoomIn={data.onZoomIn} />}
+
       {visibleEvents.length > 0 && (
         <div className="node-log nowheel" ref={logRef} onScroll={onLogScroll} style={{ maxHeight: height ? undefined : 240 }}>
           {visibleEvents.map((e, i) => (
@@ -333,5 +339,99 @@ function TierRow(props: {
         onBlur={props.onModelCommit}
       />
     </div>
+  );
+}
+
+// Pick a place and a window of ticks from the CITY run, and get a SCENE
+// Simulation node wired with whoever was there (background residents are
+// promoted to saved characters first), starting at that place and time.
+function ZoomIn({ nodeId, onZoomIn }: { nodeId: string; onZoomIn: (nodeId: string, result: CityZoomResult) => void }) {
+  const [open, setOpen] = useState(false);
+  const [options, setOptions] = useState<CityZoomOptions | null>(null);
+  const [place, setPlace] = useState('');
+  const [from, setFrom] = useState(0);
+  const [to, setTo] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  async function load() {
+    setMessage(null);
+    try {
+      const res = await agentsApi.cityZoomOptions();
+      setOptions(res);
+      setPlace(res.places[0]?.name ?? '');
+      setFrom(0);
+      setTo(Math.max(0, res.ticks - 1));
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  async function create() {
+    if (!place) return;
+    setBusy(true);
+    setMessage(null);
+    try {
+      const result = await agentsApi.cityZoom({ place, tickFrom: from, tickTo: Math.max(from, to), startedAt: options?.started_at });
+      onZoomIn(nodeId, result);
+      setMessage(
+        `scene created: ${result.agent_names.length} people` +
+          (result.promoted.length ? `, ${result.promoted.join(', ')} now saved characters` : ''),
+      );
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <details
+      className="node-subtitle"
+      open={open}
+      onToggle={(e) => {
+        const isOpen = (e.target as HTMLDetailsElement).open;
+        setOpen(isOpen);
+        if (isOpen && !options) load();
+      }}
+    >
+      <summary>zoom into a scene</summary>
+      {options && options.places.length === 0 && <div>nobody was anywhere on the map</div>}
+      {options && options.places.length > 0 && (
+        <>
+          <div className="node-controls">
+            <select className="node-select" value={place} onChange={(e) => setPlace(e.target.value)}>
+              {options.places.map((p) => (
+                <option key={p.name} value={p.name}>
+                  {p.name} ({p.heroes} heroes, {p.people} people)
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="node-controls">
+            <span>from</span>
+            <select className="node-select" value={from} onChange={(e) => setFrom(Number(e.target.value))}>
+              {options.times.map((t, i) => (
+                <option key={i} value={i}>
+                  {t}
+                </option>
+              ))}
+            </select>
+            <span>to</span>
+            <select className="node-select" value={to} onChange={(e) => setTo(Number(e.target.value))}>
+              {options.times.map((t, i) => (
+                <option key={i} value={i} disabled={i < from}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button className="node-run-btn" disabled={busy || !place} onClick={create}>
+            {busy ? 'creating…' : '▶ create scene'}
+          </button>
+        </>
+      )}
+      {message && <div>{message}</div>}
+    </details>
   );
 }

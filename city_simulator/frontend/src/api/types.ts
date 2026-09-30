@@ -389,3 +389,32 @@ export interface PopulationStyle {
   prompt: string;
   reference_images: string[];
 }
+
+// GET /api/agents/city/zoom -- what a CITY run can be zoomed into.
+export interface CityZoomOptions {
+  started_at: string;
+  places: { name: string; place_id: string; heroes: number; people: number }[];
+  ticks: number;
+  times: string[];
+  tick_minutes: number;
+  start_time: string;
+}
+
+// POST /api/agents/city/zoom -- a SCENE run's cast, place and time for one
+// place and window of a CITY run (agents/city/zoom.py). `characters` are
+// background residents just promoted to saved characters.
+export interface CityZoomResult {
+  started_at: string;
+  place: string;
+  place_id: string | null;
+  tick_from: number;
+  tick_to: number;
+  start_time: string;
+  tick_minutes: number;
+  ticks: number;
+  directive: string | null;
+  agent_names: string[];
+  agent_ids: string[];
+  characters: Character[];
+  promoted: string[];
+}

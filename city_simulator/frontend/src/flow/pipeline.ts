@@ -6,7 +6,7 @@
 // on which node happens to be processed first in a .map() pass.
 import type { Edge, Node } from '@xyflow/react';
 import { city, visuals } from '../api/client';
-import type { GraphNode, HistoryData, Style } from '../api/types';
+import type { CityZoomResult, GraphNode, HistoryData, Style } from '../api/types';
 import type { AgentNodeData } from './nodes/AgentNode';
 import type { CitySimulationNodeData } from './nodes/CitySimulationNode';
 import type { FrameNodeData } from './nodes/FrameNode';
@@ -44,6 +44,12 @@ export interface PipelineCallbacks {
   onExpandStoryboard: (storyboardId: string) => void;
   onPopulationChange: (nodeId: string, patch: { count?: number }) => void;
   onCitySimChange: (nodeId: string, patch: Partial<CitySimulationNodeData>) => void;
+  // City Simulation "zoom in": adds a pre-wired Simulation node (plus the
+  // cast's Agent nodes and the Location) next to the City node. The work
+  // happens in useAddNodeActions, which registers itself here.
+  onZoomIn: (cityNodeId: string, result: CityZoomResult) => void;
+  registerZoomHandler: (handler: ((cityNodeId: string, result: CityZoomResult) => void) | null) => void;
+  onTreatmentCityChange: (nodeId: string, patch: { cityPlace?: string; cityTickFrom?: string; cityTickTo?: string }) => void;
   onCityChanged: () => void;
   onFrameUpdate: (nodeId: string, patch: Partial<FrameNodeData>) => void;
   onPhotoUpdate: (nodeId: string, patch: Partial<PhotoNodeData>) => void;
@@ -96,7 +102,7 @@ export function toPipelineRenderNode(gn: GraphNode, cb: PipelineCallbacks, owner
       position: gn.position,
       width: gn.width,
       height: gn.height,
-      data: { ...citySimSettings(gn.data), agentNames: [], onChange: cb.onCitySimChange },
+      data: { ...citySimSettings(gn.data), agentNames: [], onChange: cb.onCitySimChange, onZoomIn: cb.onZoomIn },
     };
   }
   if (gn.type === 'sim') {
@@ -147,6 +153,10 @@ export function toPipelineRenderNode(gn: GraphNode, cb: PipelineCallbacks, owner
         // exposed them before.
         provider: (gn.data.provider as string) ?? '',
         model: (gn.data.model as string) ?? '',
+        cityPlace: (gn.data.cityPlace as string) ?? '',
+        cityTickFrom: (gn.data.cityTickFrom as string) ?? '',
+        cityTickTo: (gn.data.cityTickTo as string) ?? '',
+        onCityChange: cb.onTreatmentCityChange,
         candidates: [],
         onSubjectChange: cb.onSubjectChange,
         onGenerated: cb.onTreatmentGenerated,
@@ -305,7 +315,16 @@ export function pipelineToGraphNode(n: Node): GraphNode | null {
       position: n.position,
       width: n.width,
       height: n.height,
-      data: { subjectId: d.subjectId, text: d.text, shots: d.shots, provider: d.provider, model: d.model },
+      data: {
+        subjectId: d.subjectId,
+        text: d.text,
+        shots: d.shots,
+        provider: d.provider,
+        model: d.model,
+        cityPlace: d.cityPlace,
+        cityTickFrom: d.cityTickFrom,
+        cityTickTo: d.cityTickTo,
+      },
     };
   }
   if (n.type === 'frame') {
@@ -499,6 +518,7 @@ export function enrichPipelineNodes(nodes: Node[], edges: Edge[], historyData: H
       } else if (source?.type === 'sim' || source?.type === 'citysim') {
         candidates = connectedAgents(source.id, 'agents:in', edges, byId);
       }
+      const fromCity = source?.type === 'citysim';
       // Extra cast/setting context from the Treatment's own agent:in/
       // place:in ports -- independent of `candidates` (who the run:in
       // transcript says was involved) or `run:in` itself; a character or
@@ -517,6 +537,7 @@ export function enrichPipelineNodes(nodes: Node[], edges: Edge[], historyData: H
         data: {
           ...n.data,
           candidates,
+          fromCity,
           agentIds: contextAgents.map((a) => a.id),
           placeIds: contextPlaces.map((p) => p.id),
           styleIds: contextStyles.map((s) => s.id),

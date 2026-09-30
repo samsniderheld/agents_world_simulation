@@ -132,6 +132,7 @@ function StoryboardCanvasInner({
   const { addToCanvas, addPipelineNode, addStyleNode, addNewAgent, placeAgentNode, addScratchNode } = useAddNodeActions({
     data: cityData ?? null,
     setNodes,
+    setEdges,
     onExpandAgent,
     onExpandPlace,
     onRemoveMissing,

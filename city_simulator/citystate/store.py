@@ -443,13 +443,17 @@ def add_character(character: dict) -> dict:
         return character
 
 
-def append_agent_run(run_record: dict) -> None:
+def append_agent_run(run_record: dict, slices: dict = None) -> None:
     """Splits `run_record`'s events per agent and patches each
     participating agent's own agent.json (their "runs" list gains this
     run's own event slice; their "plans" list gains any "plan"-kind events
     from it). Quietly does nothing if there's no active city -- an agent
     run against the hardcoded noir cast has nowhere to persist to, and
-    that's fine (matches the pre-split behavior)."""
+    that's fine (matches the pre-split behavior).
+
+    `slices` ({agent name: [event]}, CITY mode only) gives each agent's
+    slice directly instead of filtering `events` by agent -- a CITY hero's
+    slice also carries the lines background residents said to them."""
     with _lock:
         if not _loaded:
             _load_active()
@@ -468,7 +472,10 @@ def append_agent_run(run_record: dict) -> None:
             with open(path) as f:
                 data = json.load(f)
 
-            agent_events = [e for e in events if e.get("agent") == agent_meta["name"]]
+            if slices is not None:
+                agent_events = slices.get(agent_meta["name"], [])
+            else:
+                agent_events = [e for e in events if e.get("agent") == agent_meta["name"]]
             data.setdefault("runs", []).append({
                 "started_at": run_record.get("started_at"),
                 "meta": run_record.get("meta", {}),

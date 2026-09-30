@@ -21,6 +21,8 @@ import type {
   Style,
   Treatment,
   VisualsResult,
+  CityZoomOptions,
+  CityZoomResult,
 } from './types';
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -215,6 +217,12 @@ export const agentsApi = {
   cityResume: () => request<{ ok: boolean }>('/api/agents/city/resume', { method: 'POST' }),
   cityPromote: (name: string) =>
     request<{ ok: boolean; error: string | null }>('/api/agents/city/promote', { method: 'POST', body: json({ name }) }),
+  cityZoomOptions: () => request<CityZoomOptions>('/api/agents/city/zoom'),
+  cityZoom: (params: { place: string; tickFrom: number; tickTo: number; startedAt?: string }) =>
+    request<CityZoomResult>('/api/agents/city/zoom', {
+      method: 'POST',
+      body: json({ place: params.place, tick_from: params.tickFrom, tick_to: params.tickTo, started_at: params.startedAt }),
+    }),
   cityProfiles: () =>
     request<{ profiles: Record<string, { label: string; population_cap: number; hero_cap: number }>; detected: string }>(
       '/api/agents/city/profiles',
@@ -222,7 +230,16 @@ export const agentsApi = {
 
   generateTreatment: (
     agentId: string,
-    params?: { provider?: string; model?: string; agentIds?: string[]; placeIds?: string[] },
+    params?: {
+      provider?: string;
+      model?: string;
+      agentIds?: string[];
+      placeIds?: string[];
+      // CITY runs only: narrow the transcript to one place / window of ticks.
+      place?: string;
+      tickFrom?: number;
+      tickTo?: number;
+    },
   ) =>
     request<{ treatment: Treatment }>('/api/agents/treatment', {
       method: 'POST',
@@ -236,6 +253,9 @@ export const agentsApi = {
         // POST /treatment docstring).
         agent_ids: params?.agentIds,
         place_ids: params?.placeIds,
+        place: params?.place,
+        tick_from: params?.tickFrom,
+        tick_to: params?.tickTo,
       }),
     }),
 

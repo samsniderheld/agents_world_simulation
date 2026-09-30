@@ -87,6 +87,54 @@ def build_transcript(agent_records: dict, started_at: str) -> tuple:
     return log, sorted(agent_names), locations
 
 
+def build_city_transcript(agent_records: dict, started_at: str, place: str = None,
+                          tick_from: int = None, tick_to: int = None, max_lines: int = 300) -> tuple:
+    """build_transcript() for a CITY run (meta.mode "city"): the same
+    (log, agent_names, locations) result, built from the heroes' saved
+    slices -- their actions and dialogue, plus the lines background
+    residents spoke to them -- optionally narrowed to one place and/or a
+    window of ticks, and capped at `max_lines`, so a run of hundreds of
+    agents still makes a bounded prompt. Only people who actually appear in
+    the narrowed transcript are named in `agent_names`."""
+    events, seen = [], set()
+    for record in agent_records.values():
+        for run in (record or {}).get("runs", []):
+            if run.get("started_at") != started_at:
+                continue
+            for e in run.get("events", []):
+                key = e.get("seq") or (e.get("kind"), e.get("agent"), e.get("tick"), e.get("text"))
+                if key not in seen:
+                    seen.add(key)
+                    events.append(e)
+
+    def keep(e):
+        if e.get("kind") not in ("action", "dialogue"):
+            return False
+        if tick_from is not None and e.get("tick", 0) < tick_from:
+            return False
+        if tick_to is not None and e.get("tick", 0) > tick_to:
+            return False
+        where = e.get("location") if e["kind"] == "action" else e.get("place")
+        return place is None or where == place
+
+    narrative = sorted((e for e in events if keep(e)),
+                       key=lambda e: (e.get("tick", 0), 0 if e["kind"] == "action" else 1, e.get("seq") or 0))
+    narrative = narrative[:max_lines]
+    log, names, locations = [], [], []
+    for e in narrative:
+        where = e.get("location") if e["kind"] == "action" else e.get("place")
+        if e["kind"] == "action":
+            log.append(f"[{e.get('time', '')}] {e.get('agent')} ({where}): {e.get('text')}")
+        else:
+            log.append(f"[{e.get('time', '')}] {e.get('agent')}: {e.get('text')}")
+        for n in (e.get("agent"), e.get("listener")):
+            if n and n not in names:
+                names.append(n)
+        if where and where not in locations:
+            locations.append(where)
+    return log, sorted(names), locations
+
+
 NOIR_LOOK = (
     "moody film noir aesthetic: high-contrast black-and-white lighting, hard "
     "venetian-blind shadows, wet city streets, dramatic low-key lighting, "

@@ -70,6 +70,13 @@ def events():
     return json_response({"events": events, "next": total})
 
 
+def _opt_int(value):
+    try:
+        return int(value) if value not in (None, "") else None
+    except (TypeError, ValueError):
+        return None
+
+
 def _start_time(value):
     """Normalizes "7:30" / "07:30" to "07:30"; None for blank or invalid."""
     match = re.fullmatch(r"\s*(\d{1,2}):(\d{2})\s*", value or "")
@@ -211,6 +218,39 @@ def city_runs():
     return json_response({"runs": citystate.list_city_runs()})
 
 
+@bp.get("/city/zoom")
+def city_zoom_options():
+    """Places and tick times a CITY run can be zoomed into (the live run
+    while it's paused or just finished, else a saved one)."""
+    from .city import zoom
+    if jobs.current_mode() == "city" and jobs.get_status()["phase"] == "running" \
+            and not city_recorder.state()["meta"].get("paused"):
+        return json_response({"error": "pause or stop the CITY run to zoom in"}, status=409)
+    found = zoom.options(request.args.get("started_at") or None)
+    if found is None:
+        return json_response({"error": "there's no CITY run to zoom into yet"}, status=404)
+    return json_response(found)
+
+
+@bp.post("/city/zoom")
+def city_zoom():
+    """Resolve a place + window of ticks in a CITY run into a SCENE run's
+    cast, place and start time -- promoting background residents who were
+    there to saved characters first (agents/city/zoom.py)."""
+    from .city import zoom
+    body = request.get_json(silent=True) or {}
+    if not body.get("place"):
+        return json_response({"error": "place is required"}, status=400)
+    try:
+        result = zoom.zoom(body["place"], int(body.get("tick_from", 0)), int(body.get("tick_to", 0)),
+                           started_at=body.get("started_at") or None)
+    except ValueError as e:
+        return json_response({"error": str(e)}, status=400)
+    if result["promoted"]:
+        simulation.set_history_roster(citystate.get())   # SCENE's roster now includes them
+    return json_response(result)
+
+
 @bp.post("/treatment")
 def generate_treatment_for_agent():
     """Generates (and persists) a treatment for one agent's most recent
@@ -232,7 +272,16 @@ def generate_treatment_for_agent():
 
     latest = runs[-1]
     agent_records = {c["name"]: citystate.get_agent(c["id"]) for c in city.get("characters", [])}
-    log, agent_names, locations = treatment.build_transcript(agent_records, latest.get("started_at"))
+    # A run without a mode predates CITY mode: it's a SCENE run.
+    is_city = (latest.get("meta") or {}).get("mode", "scene") == "city"
+    if is_city:
+        # Heroes only (plus background lines said to them), optionally
+        # narrowed to one place / window of ticks, so the prompt stays bounded.
+        log, agent_names, locations = treatment.build_city_transcript(
+            agent_records, latest.get("started_at"), place=body.get("place") or None,
+            tick_from=_opt_int(body.get("tick_from")), tick_to=_opt_int(body.get("tick_to")))
+    else:
+        log, agent_names, locations = treatment.build_transcript(agent_records, latest.get("started_at"))
 
     # Resolve each bare location name build_transcript() found in the
     # transcript against its real place record, for its `architecture`
@@ -267,6 +316,10 @@ def generate_treatment_for_agent():
         {"name": name, "bio": characters_by_name[name].get("bio", "")}
         for name in agent_names if name in characters_by_name
     ]
+    if is_city:   # background residents who spoke: their one-line bios
+        residents = {r["name"]: r for r in citystate.get_background()}
+        cast_details += [{"name": n, "bio": residents[n].get("bio", "")}
+                         for n in agent_names if n not in characters_by_name and n in residents]
     seen_cast_names = {c["name"] for c in cast_details}
     for extra_agent_id in body.get("agent_ids") or []:
         character = characters_by_id.get(extra_agent_id)

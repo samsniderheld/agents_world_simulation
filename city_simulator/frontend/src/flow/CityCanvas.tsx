@@ -109,6 +109,7 @@ function CanvasInner({ cityId, data, onDataRefresh }: { cityId: string; data: Hi
   const { addToCanvas, addPipelineNode, addStyleNode, addNewAgent, placeAgentNode, addScratchNode } = useAddNodeActions({
     data,
     setNodes,
+    setEdges,
     onExpandAgent,
     onExpandPlace,
     onRemoveMissing,

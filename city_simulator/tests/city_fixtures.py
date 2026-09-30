@@ -68,8 +68,8 @@ class FakeStorage:
         runs = [s for s in self.city_runs if not started_at or s["started_at"] == started_at]
         return runs[-1] if runs else None
 
-    def append_agent_run(self, run_record):
-        self.appended.append(run_record)
+    def append_agent_run(self, run_record, slices=None):
+        self.appended.append((run_record, slices))
 
     def add_character(self, character):
         self.city["characters"].append(character)

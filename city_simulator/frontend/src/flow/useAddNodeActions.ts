@@ -3,10 +3,10 @@
 // with no city context at all (a Scratch board when nothing's ever been
 // activated) just gets empty Agents/Locations sections and a no-op
 // addNewAgent -- nothing here assumes a city exists.
-import { useCallback } from 'react';
-import type { Node, XYPosition } from '@xyflow/react';
+import { useCallback, useEffect } from 'react';
+import type { Edge, Node, XYPosition } from '@xyflow/react';
 import { stylesApi } from '../api/client';
-import type { Character, HistoryData, Style } from '../api/types';
+import type { Character, CityZoomResult, HistoryData, Style } from '../api/types';
 import { toEntityRenderNode } from './entityNodeKit';
 import { newNodeId } from './graphIds';
 import { gridPosition } from './layout';
@@ -15,6 +15,9 @@ import { citySimSettings, type PipelineCallbacks } from './pipeline';
 export interface AddNodeActionsOptions {
   data: HistoryData | null;
   setNodes: (fn: (prev: Node[] | null) => Node[] | null) => void;
+  // Needed by the City Simulation node's zoom-in, which wires the scene it
+  // creates.
+  setEdges: (fn: (prev: Edge[]) => Edge[]) => void;
   onExpandAgent: (id: string) => void;
   onExpandPlace: (id: string) => void;
   onRemoveMissing: (nodeId: string) => void;
@@ -42,6 +45,7 @@ const PIPELINE_TYPES = new Set(['sim', 'citysim', 'treatment', 'frame', 'video',
 export function useAddNodeActions({
   data,
   setNodes,
+  setEdges,
   onExpandAgent,
   onExpandPlace,
   onRemoveMissing,
@@ -103,7 +107,7 @@ export function useAddNodeActions({
             },
           ];
         if (type === 'citysim')
-          return [...list, { ...base, type, data: { ...citySimSettings(), agentNames: [], onChange: pipeline.onCitySimChange } }];
+          return [...list, { ...base, type, data: { ...citySimSettings(), agentNames: [], onChange: pipeline.onCitySimChange, onZoomIn: pipeline.onZoomIn } }];
         if (type === 'treatment')
           return [
             ...list,
@@ -114,6 +118,10 @@ export function useAddNodeActions({
                 candidates: [],
                 provider: '',
                 model: '',
+                cityPlace: '',
+                cityTickFrom: '',
+                cityTickTo: '',
+                onCityChange: pipeline.onTreatmentCityChange,
                 onSubjectChange: pipeline.onSubjectChange,
                 onGenerated: pipeline.onTreatmentGenerated,
                 onCreateStoryboard: pipeline.onCreateStoryboard,
@@ -248,6 +256,87 @@ export function useAddNodeActions({
     },
     [setNodes, onMusicUpdate],
   );
+
+  // A City Simulation node's zoom-in: the cast's Agent nodes and the
+  // Location (reusing any already on the canvas), and a Simulation node
+  // set to the zoomed start time and length, all wired together, laid out
+  // to the right of the City node. Residents promoted by the zoom aren't
+  // in `data` yet, so they come in with the result (same trick as
+  // placeAgentNode), then the city data is refreshed.
+  const addZoomScene = useCallback(
+    (cityNodeId: string, result: CityZoomResult) => {
+      if (!data) return;
+      const known = new Set(data.characters.map((c) => c.id));
+      const augmented: HistoryData = { ...data, characters: [...data.characters, ...result.characters.filter((c) => !known.has(c.id))] };
+      const simId = newNodeId('sim');
+      const newEdges: Edge[] = [];
+      setNodes((prev) => {
+        const list = prev ?? [];
+        const city = list.find((n) => n.id === cityNodeId);
+        const x0 = (city?.position.x ?? 0) + (city?.measured?.width ?? city?.width ?? 340) + 120;
+        const y0 = city?.position.y ?? 0;
+        const added: Node[] = [];
+        result.agent_ids.forEach((agentId, i) => {
+          const existing = list.find((n) => n.type === 'agent' && (n.data as { character: Character }).character.id === agentId);
+          let nodeId = existing?.id;
+          if (!existing) {
+            nodeId = `agent:${agentId}`;
+            const built = toEntityRenderNode(
+              { id: nodeId, type: 'agent', position: { x: x0, y: y0 + i * 190 }, data: { characterId: agentId } },
+              augmented, onExpandAgent, onExpandPlace, onRemoveMissing,
+            );
+            if (built) added.push(built);
+          }
+          newEdges.push({ id: `e:${nodeId}->${simId}`, source: nodeId!, sourceHandle: 'agent:out', target: simId, targetHandle: 'agents:in' });
+        });
+        if (result.place_id) {
+          const existing = list.find((n) => n.type === 'location' && (n.data as { place: { id: string } }).place.id === result.place_id);
+          let nodeId = existing?.id;
+          if (!existing) {
+            nodeId = `place:${result.place_id}`;
+            const built = toEntityRenderNode(
+              { id: nodeId, type: 'location', position: { x: x0, y: y0 - 220 }, data: { placeId: result.place_id } },
+              augmented, onExpandAgent, onExpandPlace, onRemoveMissing,
+            );
+            if (built) added.push(built);
+          }
+          newEdges.push({ id: `e:${nodeId}->${simId}`, source: nodeId!, sourceHandle: 'place:out', target: simId, targetHandle: 'place:in' });
+        }
+        added.push({
+          id: simId,
+          type: 'sim',
+          position: { x: x0 + 320, y: y0 },
+          data: {
+            ticks: result.ticks,
+            tickMinutes: result.tick_minutes,
+            startTime: result.start_time,
+            directive: result.directive ?? '',
+            provider: 'ollama',
+            chatModel: '',
+            verbose: true,
+            agentNames: [],
+            onTicksChange: pipeline.onTicksChange,
+            onTickMinutesChange: pipeline.onTickMinutesChange,
+            onStartTimeChange: pipeline.onStartTimeChange,
+            onDirectiveChange: pipeline.onDirectiveChange,
+            onProviderChange: pipeline.onProviderChange,
+            onChatModelChange: pipeline.onChatModelChange,
+            onVerboseChange: pipeline.onVerboseChange,
+          },
+        });
+        return [...list, ...added];
+      });
+      setEdges((prev) => [...prev, ...newEdges]);
+      if (result.characters.length) onDataRefresh?.();
+    },
+    [data, setNodes, setEdges, pipeline, onExpandAgent, onExpandPlace, onRemoveMissing, onDataRefresh],
+  );
+
+  const { registerZoomHandler } = pipeline;
+  useEffect(() => {
+    registerZoomHandler(addZoomScene);
+    return () => registerZoomHandler(null);
+  }, [registerZoomHandler, addZoomScene]);
 
   return { addToCanvas, addPipelineNode, addStyleNode, addNewAgent, placeAgentNode, addScratchNode, PIPELINE_TYPES };
 }

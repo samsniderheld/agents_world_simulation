@@ -82,14 +82,18 @@ def build_background(city: dict, count: int, seed: int, taken_names: set) -> lis
     if count <= 0:
         return []
     saved = citystate_background()
-    if len(saved) < count:
-        saved = pop.generate(city, count, seed, taken_names=taken_names, start=len(saved), existing=saved)
+    usable = sum(1 for r in saved if not r.get("promoted_to") and r["name"] not in taken_names)
+    if usable < count:
+        saved = pop.generate(city, len(saved) + count - usable, seed, taken_names=taken_names,
+                             start=len(saved), existing=saved)
         save_background(saved)
     active = {p["name"] for p in city.get("places", []) if p.get("status") == "active"}
     residents = []
-    for record in saved[:count]:
-        if record["name"] in taken_names:
-            continue
+    for record in saved:
+        if len(residents) >= count:
+            break
+        if record["name"] in taken_names or record.get("promoted_to"):
+            continue   # a hero this run, or already a saved character
         record = dict(record)
         for key in ("work", "haunt", "home"):      # a place that has since closed
             if record.get(key) and record[key] not in active:
@@ -227,8 +231,29 @@ async def _main(city, prof, backends, heroes, background, start, tick_minutes, t
         finally:
             world.finished = True
         recorder.log("status", world.tick, tier=None, text=f"finished after {world.tick} ticks")
+        if persist:
+            persist_heroes(world)
         storage.save_city_run(run_summary(world))
         return world
+
+
+def persist_heroes(world):
+    """Append each hero's events to their citystate record exactly as a
+    SCENE run does (same run shape, meta.mode "city"), so either mode's
+    MemoryStream.from_persisted() rehydrates them next time. Heroes who
+    aren't saved characters (promoted mid-run) have nowhere to go."""
+    info = recorder.run_info()
+    slices = recorder.hero_events()
+    heroes = [h for h in world.heroes if h.character_id]
+    if not heroes:
+        return
+    storage.append_agent_run({
+        "started_at": info["started_at"],
+        "meta": info["meta"],
+        "agents": [{"name": h.name} for h in heroes],
+        "events": [],
+    }, slices={h.name: slices.get(h.name, []) for h in heroes})
+    recorder.log("status", world.tick, tier=None, text=f"saved {len(heroes)} heroes' memories")
 
 
 def run_summary(world) -> dict:
@@ -251,7 +276,10 @@ def run_summary(world) -> dict:
         "positions": [[place_index.get(tick.get(n), -1) for n in names] for tick in positions],
         "background": {
             b.id: {"name": b.name, "occupation": b.occupation, "hero_interactions": b.hero_interactions,
-                   "acquaintances": dict(b.acquaintances.most_common(5)), "schedule": b.schedule_source}
+                   "acquaintances": dict(b.acquaintances.most_common(5)), "schedule": b.schedule_source,
+                   # A few memories, so zooming in later can seed a promoted
+                   # resident's SCENE memory with something.
+                   "recent": [[e.tick, e.kind, e.text] for e in list(b.memory.entries)[-5:]]}
             for b in world.background
         },
         "promoted": promoted,

@@ -126,6 +126,7 @@ function CanvasInner({
   const { addToCanvas, addPipelineNode, addStyleNode, addNewAgent, placeAgentNode, addScratchNode } = useAddNodeActions({
     data: cityData,
     setNodes,
+    setEdges,
     onExpandAgent: noExpand,
     onExpandPlace: noExpand,
     onRemoveMissing,
