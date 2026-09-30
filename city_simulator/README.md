@@ -16,7 +16,10 @@ generators, wired together on the canvas:
    place from that history — two agents only meet if history genuinely put
    them at the same place (or you convene them somewhere on purpose). A
    finished run can be turned into a film-noir video-vignette *treatment*
-   (cast, synopsis, storyboard).
+   (cast, synopsis, storyboard). Two modes: **SCENE** (a few residents, full
+   cognition each) and **CITY** (up to ~200 heroes with full cognition plus
+   up to 1000 schedule-driven background residents, on batched concurrent
+   LLM calls) -- see [`agents/README.md`](agents/README.md#modes).
 3. **Visuals** (`visuals/`) — image, video and music generation (fal.ai
    hosted models, or a local Z-Image Turbo pipeline on Apple Silicon)
    behind the Image, Frame, Video and Music nodes, with a reusable *style*
@@ -147,6 +150,7 @@ is the one table of allowed connections; port colors follow
 | **Location** | `place:out`; `style:in` | A place. |
 | **Population** | `character-style:in`, `location-style:in` | One number, N: picks N of the city's locations (ones with no resident first, then ones without an exterior photo, newest first) and gives each a new resident who belongs there -- grounded at that place, so their bio and life history come from its founder and recorded history -- with a square portrait, plus a square exterior photo of the place if it has none (1024×1024, the image model's smallest size). A Style wired into *char style* applies to every portrait, one wired into *place style* to every exterior. Everything is generated in parallel (6 at a time; one at a time with the local image provider), as a background job with progress and a stop button; images attach to each agent's/place's media. Locations aren't created -- a city's places come from its history. |
 | **Simulation** | `agents:in` (many), `place:in`; `run:out` | Runs a tick loop for the connected agents. A connected Location *convenes* them there instead of at their own grounding places. Ticks, a free-text directive to steer the interaction, provider/model, and a verbose/actions-and-dialogue-only log filter. |
+| **City Simulation** | `agents:in` (many: the heroes), `place:in`; `run:out` | CITY mode: the wired agents (or, with none wired, every resident) are heroes with full cognition, plus N background residents generated from the city's own data who follow daily schedules. Hardware profile (Mac/Ollama, RTX 5090 or H100 with vLLM) and per-tier provider/model, ticks/length/start, directive, a "persist hero memories" toggle. While running: pause/resume/stop, per-tick metrics (time per wave, requests, tok/s, failures), the residents most involved with the heroes (promote any of them to hero), and a heroes-only or everyone log. Paused or finished: *zoom into a scene* picks a place and time window and creates a Simulation node wired with whoever was there. |
 | **Treatment** | `run:in`, `agent:in`, `place:in`, `style:in`; `treatment:out`, `shots:out` | Turns the connected run's transcript into a film treatment (provider/model selectable). Connected Agents/Locations feed the LLM their real bios (with appearance/wardrobe) and architecture descriptions as `CAST:`/`SETTING:` context. "▶ create storyboard" creates a **Storyboard** node seeded with one Frame per parsed shot. |
 | **Storyboard** | `shots:in`, `agent:in`, `place:in`, `style:in` | A container with its own canvas (`/storyboard/<id>`): the seeded Frame nodes, laid out in one row, each already wired to whatever Agent/Location/Style the Treatment had connected -- the same connections are redrawn to the Storyboard node itself on the outer canvas. The node shows thumbnails of its generated frames. |
 | **Image** | `image:in`, `agent:in`, `place:in`, `shot:in`, `style:in`; `image:out` | The one image node. Generates from its prompt (16:9, 9:16 or square) with any wired Style, Agent/Location photos, and input Images as references; *edit image* changes the current picture with a second prompt. The result stays on the node, or -- with *save to ... media* ticked, the default on an agent's or place's own canvas -- goes into that entity's media (its thumbnail, media grid, and other images' references). Storyboards seed one per shot (header "Shot 03"). Older Frame, agent/place Image and freeform Image nodes load as this one. |
@@ -201,8 +205,12 @@ city_simulator/
     routes.py          Blueprint: /api/history/*
 
   agents/            the agent-simulation engine + its API
-    README.md          how the agents work: memory, reflection, planning, the tick loop
+    README.md          how the agents work: memory, reflection, planning, the tick
+                         loop, and the two modes (SCENE, CITY)
     config.py, llm.py, providers/ (ollama.py, claude.py, openai_compat.py)
+    gateway.py         CITY mode's async batched inference layer
+    city/              CITY mode: world.py (the wave loop), run.py, prompts.py,
+                         tiers.py, population.py, zoom.py, recorder.py, bench.py
     agent.py, memory.py, planning.py, reflection.py, world.py
     recorder.py, display.py, textutil.py
     simulation.py      run(), roster_from_history()
@@ -235,6 +243,9 @@ city_simulator/
     graph_store.py     one JSON document per canvas scope
     graph_routes.py    Blueprints: /api/graph/*, /api/graph-library/*
     graph_library.py   named saved graphs (data/library/<id>.json)
+
+  tests/             python3 -m unittest discover -s tests -t .  (stdlib only;
+                       includes the SCENE regression snapshot)
 ```
 
 `history/`, `agents/`, `visuals/`, and `citystate/` are plain Python
@@ -328,6 +339,17 @@ the agent roster from the active city at startup) all call through
 | `citystate/graph_library.py` | citystate | The *Saved graphs* library (`/api/graph-library/*`): named bundles of a canvas's nodes/edges plus every Storyboard's inner canvas, under `data/library/`. Opaque like `graph_store.py`; `frontend/src/flow/useGraphLibrary.ts` does the capture on save and the id remapping on load. |
 | `hardware.py` | history, agents | Detects available memory (Apple unified memory or NVIDIA VRAM) so each config can size its chat model to the machine it's running on. |
 | `jsonutil.py` | all | Shared `json_response()` helper every blueprint uses. |
+
+## Tests and benchmark
+
+```bash
+python3 -m unittest discover -s tests -t .   # everything, against stub LLMs; nothing touches your cities
+python3 -m agents.city.bench                 # CITY at 50/200/500/1000 agents on a stub server
+```
+
+`tests/test_scene_regression.py` snapshots a SCENE run (event sequence and
+every prompt, against a deterministic stub): if it fails, SCENE's behaviour
+changed. Re-record deliberately with `UPDATE_GOLDEN=1`.
 
 ## Extending
 

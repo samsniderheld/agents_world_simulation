@@ -14,6 +14,26 @@ node in the UI (`POST /api/agents/run`), runs on a background thread, and
 streams every event to the frontend live. Afterward, a Treatment node can
 turn that run into a film treatment with a shot list.
 
+## Modes
+
+There are two ways to run the simulation. They share one job slot (only one
+run of either mode at a time), the same characters, and the same persisted
+memories.
+
+| | SCENE | CITY |
+|---|---|---|
+| Node | Simulation | City Simulation |
+| Cast | a few hand-picked residents | up to ~200 **heroes** (the wired-in residents, or all of them) plus up to 1000 **background** residents |
+| Cognition | every agent: memory stream, reflection, decomposed planning, dialogue | heroes: the same; background: a daily schedule, a small ring-buffer memory, the LLM only for schedules and lines spoken to heroes |
+| Inference | `llm.py`, sync calls from threads | `gateway.py`, batched async calls, one wave at a time |
+| Code | the rest of this package | `city/` and `gateway.py` |
+| Run request | `POST /api/agents/run` (mode `"scene"`, the default) | the same endpoint with `mode: "city"` |
+
+A persisted run's `meta.mode` says which it was; a run from before modes
+existed has none and is treated as SCENE. Everything from "An agent" to
+"Treatments" below describes SCENE mode; CITY mode has its own section after
+it, and SCENE works exactly as described whether or not CITY is ever used.
+
 ## An agent
 
 An `Agent` (`agent.py`) is an identity plus a memory stream:
@@ -297,6 +317,155 @@ A run still makes a lot of calls: every action, observation, and
 conversation adds memories, and each agent's queued memories cost two
 calls per phase. Expect small local models to take a while per tick.
 
+## CITY mode
+
+A mass simulation: heroes with full cognition, and a crowd of background
+residents who make the city feel inhabited without costing an LLM call
+each per tick. It runs at reduced scale on the default local Ollama on a Mac
+and at full scale against a GPU server (vLLM, SGLang, llama.cpp, MLX).
+
+### Tiers
+
+**Heroes** are saved characters -- the ones wired into the City Simulation
+node, or every generated resident if none are. `CityHero` is a SCENE
+`Agent`: same identity paragraph, plan fields and `MemoryStream` semantics
+(`CityMemoryStream` keeps the scoring formula and persisted shape, but its
+memories are scored in the tick's batched memory wave, and relevance is
+vectorised with numpy when it's installed). A CITY run appends each hero's
+events to their record exactly as SCENE does, so either mode remembers the
+other's runs (the node's "persist hero memories" toggle, on by default).
+
+**Background residents** come from `city/population.py`: names from
+`history/data/names.yaml`, jobs that fit the city's active places (a
+bartender works at a bar, a longshoreman at the docks), a haunt, a home, a
+day or night shift, and a one-line bio from `history/grammar.py`. No LLM
+calls, and deterministic from the seed; they're saved once per city in
+`citystate/data/cities/<id>/background.json` and reused. Each gets one JSON
+schedule per sim-day from the model (`[{start, end, activity, place}]`,
+validated against the active places; up to the profile's
+`llm_schedule_cap`, residents near the heroes first) or an occupation
+template, and follows it with no further calls. Their memory is a ring
+buffer of 40 entries with heuristic importance, retrieved by recency plus
+name/keyword overlap.
+
+**Promotion**: a background resident who has dealt with heroes 3 times, or
+one picked from the node's list, becomes a hero at the end of the tick. Their
+ring buffer becomes `MemoryNode`s (one embedding batch), and they plan from
+the next tick.
+
+### One CITY tick
+
+Each wave gathers every request it needs, sends them in one batch, and
+applies the results; all state changes happen between waves on one event
+loop, so nothing needs a lock.
+
+```
+CityWorld.step()                                            (city/world.py)
+  │
+  ├─ PLAN        heroes without a plan -> plan for the rest of the run
+  │              background, first tick of each sim-day -> one JSON schedule
+  ├─ DECOMPOSE   heroes entering a plan item -> {actions, where} (JSON)
+  │              background -> the schedule block for this time of day
+  ├─ ENCOUNTERS  group everyone by place; per place up to 3 pairs, nobody
+  │              in two (hero-hero, then hero-background, then background)
+  │              background-background: settled in Python, no LLM
+  ├─ REACT       one call per hero encounter -> TALK / REACT / CONTINUE
+  ├─ DIALOGUE    every conversation advances one line per batch, in
+  │              lockstep, up to 6 lines or [END]; background speakers
+  │              use the background model
+  ├─ MEMORY      every hero memory from this tick: one importance call per
+  │              hero + one embed_many for all of them
+  ├─ REFLECT     heroes over the threshold: focal-point wave, insight wave
+  └─ PROMOTE     background residents who've earned it (or were picked)
+```
+
+Every hero call's prompt names only the people relevant to it (who's
+there, who they're talking to, who they know best) and keeps SCENE's rule
+against inventing named people. The directive applies to heroes, and to a
+background resident only when it names them, their job, or everyone.
+
+### Inference: `gateway.py`
+
+One asyncio loop per run, one `httpx.AsyncClient`. `generate_many()` and
+`embed_many()` send a wave's requests concurrently, capped per server by an
+AIMD limiter (a 429/503/timeout halves the allowance, successes grow it back),
+with retries, backoff and jitter; a request that still fails comes back as a
+typed failure for that agent only. Structured calls send a JSON schema
+natively where the server supports it (Ollama `format`, vLLM/SGLang
+`response_format`, llama.cpp `json_schema`), otherwise in the prompt, with
+one repair attempt. Prompts are four parts -- shared city prefix, tier
+instructions, identity, the call itself -- and batches are submitted sorted
+by prefix so prefix-caching servers reuse their KV cache.
+
+### Hardware profiles
+
+`hardware.py`'s `CITY_PROFILES` (the node's hardware picker; "auto"
+detects):
+
+| Profile | Backend | Hero / background model | In flight | Agents | Hero cap | LLM schedules/day |
+|---|---|---|---|---|---|---|
+| `mac` | Ollama | `llama3.1:8b` / `llama3.2:3b` | 4 (8 with 48 GB+) | 200 | 30 | 40 |
+| `rtx5090` | vLLM | `Qwen/Qwen3-30B-A3B-Instruct-2507` / `Qwen/Qwen3-4B-Instruct-2507` | 128 | 1000 | 200 | 1000 |
+| `h100` | vLLM | `openai/gpt-oss-120b` / `Qwen/Qwen3-8B` | 256 | 2000 | 200 | 2000 |
+
+The node can override each tier's provider and model. A tier whose model
+isn't available falls back to the hero model (on the Mac: pull
+`llama3.2:3b` for a faster background tier). For vLLM, `CITY_HERO_BASE_URL`
+and `CITY_BACKGROUND_BASE_URL` point the tiers at their servers (default:
+`OPENAI_COMPAT_BASE_URL`). `./start_ollama.sh` starts Ollama with
+`OLLAMA_NUM_PARALLEL` from the profile and `OLLAMA_MAX_LOADED_MODELS=2`, so
+both tiers stay loaded. Embeddings always come from Ollama's
+`nomic-embed-text`.
+
+### Zooming in: CITY -> SCENE
+
+1. Run a City Simulation, then pause or stop it (or come back to a finished
+   one -- its summary is saved in `citystate/data/cities/<id>/city_runs/`).
+2. Open *zoom into a scene* on the node, pick a place and a window of ticks,
+   and click *create scene*.
+3. `city/zoom.py` finds who was at that place in that window (heroes first,
+   up to 8). Background residents among them are promoted to saved
+   characters: a cheap LLM call writes a proper dossier (appearance and
+   wardrobe included), and their last CITY memories go into their new
+   record so SCENE's memory stream starts with something.
+4. The canvas gets a Simulation node, with those residents' Agent nodes and
+   the Location wired in, set to the window's start time and length and the
+   CITY run's directive. Run it for full cognition on that moment.
+
+### Treatments of CITY runs
+
+A Treatment wired to a City Simulation node builds its transcript from the
+heroes only (their actions and dialogue, plus lines background residents
+said to them), optionally narrowed on the node to one place and a range of
+ticks, and capped in length. SCENE runs are treated exactly as before.
+
+### Watching a run
+
+The live log is a ring buffer with level of detail: heroes get every event;
+background residents get moves, encounters and promotions, plus one
+`tick_summary` per tick (occupancy by place). `GET /api/agents/events`
+pages with a `seq` cursor and filters (`tier=hero|background|all`, `kinds`,
+`agent`, `place`, `limit`); for SCENE runs it answers exactly as before.
+Every tick ends with a `metrics` event -- wall time per wave, requests,
+tokens, retries, failures, tok/s, calls per agent per tier -- which the node
+shows. `POST /api/agents/city/pause`, `/resume`, `/promote` control a
+running CITY run.
+
+### Benchmark and tests
+
+```bash
+python3 -m agents.city.bench                  # 50/200/500/1000 agents on the stub server
+python3 -m agents.city.bench --real --profile mac --agents 50 --ticks 2
+python3 -m unittest discover -s tests -t .    # includes the SCENE regression snapshot
+```
+
+On the stub server (0.05 s per request, 64 in flight, 16 ticks of 90
+minutes), background residents average 0.08-0.12 LLM calls per tick, and a
+tick's time tracks the ideal number of round trips: 0.6 s at 50 agents, 0.9 s
+at 1000. `tests/test_scene_regression.py` snapshots a five-agent SCENE run
+(event sequence and every prompt) against a deterministic stub; it has
+passed unchanged through every CITY change.
+
 ## Files
 
 | File | Role |
@@ -315,13 +484,24 @@ calls per phase. Expect small local models to take a while per tick.
 | `config.py` | Every tunable number, and model selection by hardware |
 | `jobs.py` | The background thread and its status |
 | `routes.py` | The `/api/agents/*` blueprint |
+| `gateway.py` | CITY's async inference layer: batching, AIMD limiter, retries, JSON schemas |
+| `city/world.py` | The CITY tick loop: waves, encounters, lockstep dialogue, promotion |
+| `city/run.py` | CITY entry point: profile, backends, heroes, background, persistence, run summary |
+| `city/prompts.py` | CITY prompts, schemas and parsers, in prefix-cache order |
+| `city/tiers.py` | `CityHero` / `CityMemoryStream`, `BackgroundAgent` / `RingMemory`, schedules |
+| `city/population.py` | Seeded, LLM-free background residents and template schedules |
+| `city/zoom.py` | Zooming from a CITY run into a SCENE run |
+| `city/recorder.py` | CITY's ring-buffered, level-of-detail event log |
+| `city/stub_server.py`, `city/bench.py` | A fake LLM server; the headless benchmark |
+| `city/config.py` | CITY-only tunables |
 
 ## Deliberate simplifications
 
 - No map: a location is a name, and moving is instant.
 - One level of plan decomposition instead of recursive.
 - A conversation starts only when a reaction's text contains a talk-ish
-  word, and runs a fixed 6 lines rather than ending on its own.
+  word, and is written in one call: up to 6 lines, ending early if it
+  reaches a natural close.
 - One conversation per agent per tick.
 - If no city exists at all, `simulation.py` falls back to a hardcoded
   five-person noir cast at a bar (`AGENT_ROSTER`). Those agents have no
