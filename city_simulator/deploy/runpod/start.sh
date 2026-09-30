@@ -22,6 +22,11 @@ export OLLAMA_MODELS="${OLLAMA_MODELS:-$WS/ollama-models}"
 # to ~/.cache, which RunPod wipes on restart -- keep them on the volume so the
 # slow first-start compile only happens once.
 export VLLM_CACHE_ROOT="${VLLM_CACHE_ROOT:-$WS/vllm-cache}"
+# vLLM's just-in-time kernel builds look for ninja and nvcc on PATH: put the
+# venv's tools and the CUDA toolkit there (vLLM is started by full path, so
+# the venv isn't otherwise "activated").
+export PATH="$WS/vllm-venv/bin:/usr/local/cuda/bin:$PATH"
+[ -d /usr/local/cuda ] && export CUDA_HOME="${CUDA_HOME:-/usr/local/cuda}"
 LOGS="$WS/logs"; mkdir -p "$LOGS"
 
 up() { curl -s -o /dev/null "$1"; }
@@ -49,7 +54,7 @@ else
       grep -E "EngineCore.*(Error|error|Exception|raise |No such file|not found|Traceback)" "$LOGS/vllm.log" \
         | grep -v "WARNING" | tail -n 25 || true
       echo; echo "The end of the log:"; tail -n 8 "$LOGS/vllm.log"
-      echo; echo "Common fixes: apt-get install -y build-essential python3-dev (Python.h / C compiler);"
+      echo; echo "Common fixes: apt-get install -y build-essential python3-dev ninja-build (Python.h / C compiler / ninja);"
       echo "VLLM_USE_DEEP_GEMM=0 bash $0 (DeepGEMM kernel build fails); VLLM_GPU_UTIL=0.7 (memory)."
       echo; echo "GPU right now:"; nvidia-smi --query-gpu=name,memory.used,memory.total,driver_version --format=csv
       exit 1

@@ -22,10 +22,10 @@ SUDO=""; [ "$(id -u)" -ne 0 ] && SUDO="sudo"
 
 echo "== system packages"
 $SUDO apt-get update -y
-# build-essential + python3-dev: vLLM compiles small Triton/DeepGEMM kernels at
-# startup, which needs a C compiler and Python.h.
+# build-essential + python3-dev + ninja: vLLM builds some GPU kernels just in
+# time at startup, which needs a C compiler, Python.h and the ninja build tool.
 $SUDO apt-get install -y --no-install-recommends curl git ca-certificates zstd python3-venv python3-dev \
-  build-essential lsof
+  build-essential ninja-build lsof
 
 echo "== Node 20 (to build the frontend)"
 if ! command -v node >/dev/null || [ "$(node -v | tr -d v | cut -d. -f1)" -lt 20 ]; then
@@ -41,6 +41,12 @@ if [ ! -x "$WS/vllm-venv/bin/vllm" ]; then
   python3 -m venv "$WS/vllm-venv"
   "$WS/vllm-venv/bin/pip" install -U pip
   "$WS/vllm-venv/bin/pip" install vllm
+fi
+"$WS/vllm-venv/bin/pip" install -q ninja     # also inside the venv, which start.sh puts on PATH
+if ! command -v nvcc >/dev/null && [ ! -x /usr/local/cuda/bin/nvcc ]; then
+  echo "WARNING: no CUDA compiler (nvcc) found. vLLM may fail to build its kernels at startup;"
+  echo "use a RunPod PyTorch template whose tag ends in '-devel', or start vLLM with"
+  echo "VLLM_EXTRA_ARGS=--enforce-eager."
 fi
 
 echo "== the app's venv ($WS/app-venv)"
