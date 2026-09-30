@@ -123,7 +123,14 @@ async def _preflight(gw: Gateway, backends: dict) -> list:
             try:
                 listed[key] = await gw.available_models(b)
             except Exception as e:
-                raise RuntimeError(f"Could not reach the {tier} tier's {b.provider} server at {b.base_url}: {e}")
+                hint = {
+                    "openai": " Set OPENAI_COMPAT_BASE_URL in city_simulator/.env to your server (vLLM: "
+                              "http://localhost:8000/v1, SGLang: :30000, mlx_lm.server: :8080) and restart the app"
+                              f"{'; or CITY_' + tier.upper() + '_BASE_URL for this tier' if tier else ''}.",
+                    "ollama": " Is Ollama running (./start_ollama.sh)?",
+                }.get(b.provider, "")
+                raise RuntimeError(f"Could not reach the {tier} tier's {b.provider} server at {b.base_url} "
+                                   f"({type(e).__name__}).{hint}")
         models = [m for m in listed[key] if "embed" not in m]
         if b.provider == "claude" or _has_model(models, b.model):
             continue
