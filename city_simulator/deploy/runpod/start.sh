@@ -7,6 +7,7 @@
 #   VLLM_GPU_UTIL      default 0.80 -- the share of GPU memory vLLM takes;
 #                      the rest is for Ollama (~6 GB)
 #   VLLM_MAX_LEN       default 8192 -- context length
+#   VLLM_WAIT_MIN      default 25 -- minutes to wait for vLLM to come up
 #   WORKSPACE          default /workspace
 set -euo pipefail
 
@@ -32,9 +33,27 @@ else
   nohup "$WS/vllm-venv/bin/vllm" serve "$VLLM_MODEL" --port 8000 \
     --max-model-len "${VLLM_MAX_LEN:-8192}" --gpu-memory-utilization "${VLLM_GPU_UTIL:-0.80}" \
     > "$LOGS/vllm.log" 2>&1 &
+  VLLM_PID=$!
   echo -n "vLLM: starting $VLLM_MODEL (log: $LOGS/vllm.log) "
-  for _ in $(seq 1 180); do up http://localhost:8000/v1/models && break; echo -n "."; sleep 5; done
-  up http://localhost:8000/v1/models && echo " up" || { echo " not up after 15 min -- see $LOGS/vllm.log"; exit 1; }
+  WAIT_MIN="${VLLM_WAIT_MIN:-25}"
+  for _ in $(seq 1 $((WAIT_MIN * 12))); do
+    up http://localhost:8000/v1/models && break
+    if ! kill -0 "$VLLM_PID" 2>/dev/null; then
+      echo; echo "vLLM exited during startup. The end of its log:"; echo
+      tail -n 40 "$LOGS/vllm.log"
+      echo; echo "GPU right now:"; nvidia-smi --query-gpu=name,memory.used,memory.total,driver_version --format=csv
+      exit 1
+    fi
+    echo -n "."; sleep 5
+  done
+  if up http://localhost:8000/v1/models; then
+    echo " up"
+  else
+    echo; echo "vLLM still isn't answering after $WAIT_MIN min (it's still running as pid $VLLM_PID)."
+    echo "Last log lines:"; tail -n 15 "$LOGS/vllm.log"
+    echo "If it's still loading/compiling, wait and rerun this script; it'll pick it up."
+    exit 1
+  fi
 fi
 
 if up http://localhost:8420/; then
