@@ -239,6 +239,10 @@ site is `https://<pod-id>-8420.proxy.runpod.net`; the browser asks for the
 user and password once. Editing a pod's ports restarts it, so run
 `setup.sh` and `start.sh` again afterwards.
 
+**After a `git pull`** on the pod: `pkill -f app.py; bash city_simulator/deploy/runpod/start.sh`
+-- it rebuilds the frontend if its source changed and restarts the app; then
+hard-refresh the browser.
+
 **After a pod restart** everything outside `/workspace` is gone: rerun
 `setup.sh` (a few minutes -- it only reinstalls system packages; venvs and
 models are kept), then `start.sh`. **Stop the pod** when you're done --

@@ -77,8 +77,17 @@ else
   fi
 fi
 
+# The browser gets frontend/'s built copy (static/dist, not in git): rebuild
+# it whenever the source is newer -- e.g. after a git pull.
+DIST="$APP_DIR/static/dist/index.html"
+if [ ! -f "$DIST" ] || [ -n "$(find "$APP_DIR/frontend/src" "$APP_DIR/frontend/package.json" -newer "$DIST" -print -quit)" ]; then
+  echo "Frontend: source changed, rebuilding..."
+  (cd "$APP_DIR/frontend" && npm ci --no-audit --no-fund >/dev/null && npm run build >/dev/null) \
+    && echo "Frontend: rebuilt (hard-refresh the browser)" || echo "Frontend: build FAILED -- run: cd $APP_DIR/frontend && npm run build"
+fi
+
 if up http://localhost:8420/; then
-  echo "App: already running"
+  echo "App: already running (after a git pull, restart it: pkill -f app.py; then rerun this script)"
 else
   (cd "$APP_DIR" && nohup "$WS/app-venv/bin/python" app.py > "$LOGS/app.log" 2>&1 &)
   sleep 3
