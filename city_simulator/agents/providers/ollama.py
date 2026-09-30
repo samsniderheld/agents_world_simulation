@@ -73,6 +73,20 @@ class OllamaProvider(Provider):
         if model_name not in available and base not in available_bases:
             raise RuntimeError(f"Model '{model_name}' is not pulled. Run: ollama pull {model_name}")
 
+    def embed_many(self, texts: list, model: str = None) -> list:
+        """Embedding vectors for several texts in one request (Ollama's
+        /api/embed takes a list). Falls back to one request per text on an
+        Ollama too old to have that endpoint."""
+        resp = requests.post(
+            f"{config.OLLAMA_HOST}/api/embed",
+            json={"model": model or config.EMBED_MODEL, "input": texts},
+            timeout=120,
+        )
+        if resp.status_code == 404:
+            return [self.embed(t, model=model) for t in texts]
+        resp.raise_for_status()
+        return resp.json()["embeddings"]
+
     def embed(self, text: str, model: str = None) -> list:
         """Return an embedding vector for `text`."""
         resp = requests.post(

@@ -8,24 +8,6 @@ _PREAMBLE_STARTS = (
 )
 
 
-def first_spoken_line(text: str) -> str:
-    """Given a chat completion that's supposed to be a single line of
-    dialogue, drop any trailing meta-commentary paragraph a model tacks on
-    (e.g. 'This line feels like a natural continuation...') and return just
-    the spoken line.
-    """
-    for para in text.split("\n\n"):
-        para = para.strip()
-        if not para:
-            continue
-        if para.startswith("(") and para.endswith(")"):
-            continue
-        if para.lower().startswith(("this line", "note:", "this feels", "this response")):
-            continue
-        return para
-    return text.strip()
-
-
 def cast_constraint(agent_name: str, known_names: list) -> str:
     """A prompt line telling the LLM exactly who else exists in the
     simulation, so it doesn't invent a new named character (e.g. a

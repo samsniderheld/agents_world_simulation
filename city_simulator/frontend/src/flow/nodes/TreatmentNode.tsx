@@ -154,6 +154,7 @@ export function TreatmentNode({ id, data, selected }: NodeProps<TreatmentNodeTyp
           <option value="">Server default</option>
           <option value="ollama">Ollama (local)</option>
           <option value="claude">Claude (API)</option>
+          <option value="openai">OpenAI-compatible (MLX / vLLM / SGLang)</option>
         </select>
       </div>
       <div className="node-controls">

@@ -1,10 +1,11 @@
-"""The Agent: identity + memory stream + perceive/react/converse behavior."""
+"""The Agent: identity + memory stream + perceive/react behavior.
+(Conversations are written whole by world.py's _run_conversation.)"""
 
 from . import display
 from . import llm
 from . import recorder
 from .memory import MemoryStream
-from .textutil import cast_constraint, directive_block, first_spoken_line
+from .textutil import cast_constraint, directive_block
 
 
 class Agent:
@@ -98,32 +99,3 @@ class Agent:
             print(display.continue_line(self.name, color))
         recorder.log("continue", tick, agent=self.name)
         return False
-
-    def converse_turn(self, other: "Agent", history: list, tick: int, directive: str = None) -> str:
-        """Generate this agent's next line in an ongoing conversation.
-        `directive` is the Simulation node's free-text scene guidance, if
-        any (see textutil.directive_block) -- dialogue is the single
-        clearest place a user's "guide how they're interacting" note
-        should actually land."""
-        focal = f"a conversation with {other.name}"
-        memories = self.memory.retrieve(f"{other.name}: {focal}", tick, k=5)
-        memory_text = "\n".join(f"- {m.description}" for m in memories) or "(none yet)"
-        convo_text = "\n".join(history) or "(conversation just started)"
-
-        prompt = (
-            f"{self.identity_summary()}\n"
-            f"{directive_block(directive)}\n"
-            f"What {self.name} remembers about {other.name} and related things:\n{memory_text}\n\n"
-            f"Conversation so far:\n{convo_text}\n\n"
-            f"{self.name} is speaking directly to {other.name} right now, face to "
-            f"face -- the memories above may mention other people, but the person "
-            f"in front of {self.name} is {other.name} and no one else. If "
-            f"{self.name} addresses them by name, it must be \"{other.name}\"; "
-            "never substitute a different name from memory.\n\n"
-            f"Write {self.name}'s next line of dialogue only (no name prefix, "
-            "one or two sentences). If the conversation feels finished, "
-            "write a natural closing line. Output ONLY the spoken words -- "
-            "no stage directions, no commentary about the conversation."
-        )
-        reply = llm.complete(prompt, temperature=0.8)
-        return first_spoken_line(reply)

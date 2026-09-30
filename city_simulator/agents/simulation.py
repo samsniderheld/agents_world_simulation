@@ -176,6 +176,8 @@ def run(ticks: int = 8, provider: str = None, chat_model: str = None, embed_mode
     if chat_model:
         if config.PROVIDER == "claude":
             config.CLAUDE_MODEL = chat_model
+        elif config.PROVIDER == "openai":
+            config.OPENAI_COMPAT_MODEL = chat_model
         else:
             config.CHAT_MODEL = chat_model
     if embed_model:
@@ -202,7 +204,7 @@ def run(ticks: int = 8, provider: str = None, chat_model: str = None, embed_mode
         ],
         meta={
             "provider": config.PROVIDER,
-            "chat_model": config.CLAUDE_MODEL if config.PROVIDER == "claude" else config.CHAT_MODEL,
+            "chat_model": {"claude": config.CLAUDE_MODEL, "openai": config.OPENAI_COMPAT_MODEL}.get(config.PROVIDER, config.CHAT_MODEL),
             "embed_model": config.EMBED_MODEL,
             "context_tokens": config.CHAT_CONTEXT_TOKENS, "ticks": ticks,
             # Kept with the run so a later treatment of it knows what the

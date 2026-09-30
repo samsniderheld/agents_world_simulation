@@ -81,9 +81,18 @@ themselves, every agent's runs, every entity's media, *and the canvases*
    ```bash
    export ANTHROPIC_API_KEY=...
    ```
+   The picker also offers **OpenAI-compatible (MLX / vLLM / SGLang)**
+   (`agents/providers/openai_compat.py`), for a faster local server that
+   batches many requests at once. Start one, then point the app at it:
+   ```bash
+   mlx_lm.server --model mlx-community/Meta-Llama-3.1-8B-Instruct-4bit   # port 8080, the default
+   # or: vllm serve <model>                          -> OPENAI_COMPAT_BASE_URL=http://localhost:8000/v1
+   # or: python -m sglang.launch_server --model-path <model>  -> http://localhost:30000/v1
+   ```
    Memory retrieval still needs Ollama's embedding model either way --
-   Claude has no embeddings endpoint, so picking it only swaps out the
-   chat/dialogue/planning calls, not `nomic-embed-text`.
+   neither Claude nor these servers are used for embeddings, so picking
+   one only swaps out the chat/dialogue/planning calls, not
+   `nomic-embed-text`.
 7. Run it:
    ```bash
    python3 app.py
@@ -193,7 +202,7 @@ city_simulator/
 
   agents/            the agent-simulation engine + its API
     README.md          how the agents work: memory, reflection, planning, the tick loop
-    config.py, llm.py, providers/ (ollama.py, claude.py)
+    config.py, llm.py, providers/ (ollama.py, claude.py, openai_compat.py)
     agent.py, memory.py, planning.py, reflection.py, world.py
     recorder.py, display.py, textutil.py
     simulation.py      run(), roster_from_history()

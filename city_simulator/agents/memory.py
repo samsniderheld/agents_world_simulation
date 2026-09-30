@@ -3,11 +3,21 @@ paper. Every observation, reflection, and plan an agent produces is stored
 here as a `MemoryNode`, and `MemoryStream.retrieve` scores nodes by a
 weighted sum of recency, importance, and relevance to pull back whatever is
 contextually useful for the next LLM call.
+
+New memories are *queued*, not scored on the spot: add() stores the node
+right away (so it's already part of the stream) and flush() -- which the
+world calls at the end of each phase of a tick -- scores everything queued
+in one importance-rating call and one embedding request. Rating and
+embedding each memory the moment it was added was two sequential model
+calls per memory, the single biggest cost of a tick. Until its flush, a
+queued node counts as middling importance (5) with no relevance signal.
 """
 
 from dataclasses import dataclass, field
 import itertools
 import math
+import re
+import threading
 
 from . import display
 from . import llm
@@ -58,6 +68,9 @@ class MemoryStream:
     def __init__(self):
         self.nodes: list[MemoryNode] = []
         self.importance_since_reflection = 0.0
+        # Queued by add(), scored by flush(): (node, needs_rating, agent_name, color, verbose).
+        self._pending: list = []
+        self._lock = threading.Lock()
 
     @classmethod
     def from_persisted(cls, agent_record: dict) -> "MemoryStream":
@@ -121,47 +134,49 @@ class MemoryStream:
     def add(self, description: str, kind: str = "observation", tick: int = 0,
              importance: float = None, evidence: list = None,
              agent_name: str = "", color: str = "", verbose: bool = False) -> MemoryNode:
-        if importance is None:
-            importance = self._rate_importance(description)
-        embedding = llm.embed(description)
-        evidence = evidence or []
+        """Store a memory now; its importance (unless given) and embedding
+        are filled in by the next flush()."""
         node = MemoryNode(
             id=next(_id_counter),
             kind=kind,
             description=description,
             created_tick=tick,
             last_accessed_tick=tick,
-            importance=importance,
-            embedding=embedding,
-            evidence=evidence,
+            importance=importance if importance is not None else 5.0,
+            embedding=[],
+            evidence=evidence or [],
         )
-        self.nodes.append(node)
-        if kind == "observation":
-            self.importance_since_reflection += importance
-        if verbose:
-            print(display.memory_line(agent_name, color, kind, importance, description))
-        # embedding/evidence ride along on the persisted event too -- this is
-        # what makes from_persisted() below able to reconstruct a real
-        # MemoryStream from a past run without any re-embedding calls.
-        recorder.log("memory", tick, agent=agent_name or None,
-                     memory_kind=kind, importance=importance, text=description,
-                     embedding=embedding, evidence=evidence)
+        with self._lock:
+            self.nodes.append(node)
+            self._pending.append((node, importance is None, agent_name, color, verbose))
         return node
 
-    def _rate_importance(self, description: str) -> float:
-        prompt = (
-            "On a scale of 1 to 10, where 1 is purely mundane "
-            "(e.g., brushing teeth, making a bed) and 10 is "
-            "extremely poignant (e.g., a breakup, a college acceptance), "
-            "rate the likely poignancy of the following event or thought.\n\n"
-            f"Event: {description}\n\n"
-            "Respond with a single integer from 1 to 10 and nothing else."
-        )
-        reply = llm.complete(prompt, temperature=0.0)
-        digits = "".join(c for c in reply if c.isdigit())
-        if not digits:
-            return 5.0
-        return max(1.0, min(10.0, float(digits[:2])))
+    def flush(self):
+        """Score every queued memory: one importance call for all the ones
+        that need rating, one embedding request for all of them. Then count
+        observations toward reflection and log each memory event, exactly
+        as add() used to one at a time."""
+        with self._lock:
+            pending, self._pending = self._pending, []
+        if not pending:
+            return
+        to_rate = [node for node, needs_rating, *_ in pending if needs_rating]
+        if to_rate:
+            for node, rating in zip(to_rate, _rate_importance_batch([n.description for n in to_rate])):
+                node.importance = rating
+        for (node, *_), vector in zip(pending, llm.embed_many([n.description for n, *_ in pending])):
+            node.embedding = vector
+        for node, _, agent_name, color, verbose in pending:
+            if node.kind == "observation":
+                self.importance_since_reflection += node.importance
+            if verbose:
+                print(display.memory_line(agent_name, color, node.kind, node.importance, node.description))
+            # embedding/evidence ride along on the persisted event too -- this
+            # is what makes from_persisted() able to reconstruct a real
+            # MemoryStream from a past run without any re-embedding calls.
+            recorder.log("memory", node.created_tick, agent=agent_name or None,
+                         memory_kind=node.kind, importance=node.importance, text=node.description,
+                         embedding=node.embedding, evidence=node.evidence)
 
     def retrieve(self, query: str, tick: int, k: int = RETRIEVAL_TOP_K,
                  kinds: tuple = None) -> list:
@@ -211,3 +226,30 @@ class MemoryStream:
     def recent(self, n: int, kinds: tuple = None) -> list:
         pool = self.nodes if not kinds else [x for x in self.nodes if x.kind in kinds]
         return pool[-n:]
+
+
+def _rate_importance_batch(descriptions: list) -> list:
+    """Rate each description 1-10 in a single LLM call. A missing or
+    unparseable rating falls back to 5 (middling), as the single-item
+    version always did."""
+    listing = "\n".join(f"{i}. {d}" for i, d in enumerate(descriptions, 1))
+    prompt = (
+        "On a scale of 1 to 10, where 1 is purely mundane "
+        "(e.g., brushing teeth, making a bed) and 10 is "
+        "extremely poignant (e.g., a breakup, a college acceptance), "
+        "rate the likely poignancy of each of the following events or thoughts.\n\n"
+        f"{listing}\n\n"
+        "Reply with one line per item, exactly in the form \"<item number>. <rating>\" -- "
+        "a single integer rating from 1 to 10 -- and nothing else."
+    )
+    reply = llm.complete(prompt, temperature=0.0)
+    ratings = {}
+    for line in reply.splitlines():
+        m = re.match(r"^\s*(\d+)\s*[.):-]\s*(\d+)", line)
+        if m:
+            ratings[int(m.group(1))] = max(1.0, min(10.0, float(m.group(2))))
+    if not ratings and len(descriptions) == 1:
+        digits = "".join(c for c in reply if c.isdigit())
+        if digits:
+            ratings[1] = max(1.0, min(10.0, float(digits[:2])))
+    return [ratings.get(i, 5.0) for i in range(1, len(descriptions) + 1)]
