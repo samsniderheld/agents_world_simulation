@@ -451,6 +451,22 @@ tokens, retries, failures, tok/s, calls per agent per tier -- which the node
 shows. `POST /api/agents/city/pause`, `/resume`, `/promote` control a
 running CITY run.
 
+### Asking what's going on
+
+The City node's *what's going on in the city* panel has two tools, both
+answered by the run's hero model from what the run recorded
+(`city/insight.py`; `POST /api/agents/city/report`, `/city/ask`):
+
+- **City report**: a briefing -- the main storylines and who's in them, the
+  places with crowds and tension, the residents to watch. Asking again
+  passes the previous briefing, so the new one also says what changed.
+- **Ask the city**: a free-form question ("who knows about the payroll?"),
+  answered from the log lines that share the most names and words with it,
+  plus the latest ones, naming who said or did what, when and where.
+
+Both read the live run while it's in memory (running, paused or finished),
+or the latest saved run after a restart, cut to fit the model's context.
+
 ### Benchmark and tests
 
 ```bash
@@ -491,6 +507,7 @@ passed unchanged through every CITY change.
 | `city/tiers.py` | `CityHero` / `CityMemoryStream`, `BackgroundAgent` / `RingMemory`, schedules |
 | `city/population.py` | Seeded, LLM-free background residents and template schedules |
 | `city/zoom.py` | Zooming from a CITY run into a SCENE run |
+| `city/insight.py` | The city report and ask-the-city answers |
 | `city/recorder.py` | CITY's ring-buffered, level-of-detail event log |
 | `city/stub_server.py`, `city/bench.py` | A fake LLM server; the headless benchmark |
 | `city/config.py` | CITY-only tunables |

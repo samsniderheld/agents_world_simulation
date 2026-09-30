@@ -447,3 +447,13 @@ export interface CityZoomResult {
   characters: Character[];
   promoted: string[];
 }
+
+// POST /api/agents/city/report and /city/ask.
+export interface CityInsight {
+  text: string;
+  lines_used: number;
+  lines_total: number;
+  // "live" (the run in memory) or "saved" (the latest saved run, after a restart)
+  source: string;
+  started_at: string;
+}

@@ -23,6 +23,7 @@ import type {
   VisualsResult,
   CityZoomOptions,
   CityZoomResult,
+  CityInsight,
 } from './types';
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -221,6 +222,12 @@ export const agentsApi = {
   cityResume: () => request<{ ok: boolean }>('/api/agents/city/resume', { method: 'POST' }),
   cityPromote: (name: string) =>
     request<{ ok: boolean; error: string | null }>('/api/agents/city/promote', { method: 'POST', body: json({ name }) }),
+  // "What's going on in the city": a briefing, or a question answered from
+  // the current/latest CITY run's log (agents/city/insight.py).
+  cityReport: (previous?: string) =>
+    request<CityInsight>('/api/agents/city/report', { method: 'POST', body: json({ previous }) }),
+  cityAsk: (question: string) =>
+    request<CityInsight>('/api/agents/city/ask', { method: 'POST', body: json({ question }) }),
   cityZoomOptions: () => request<CityZoomOptions>('/api/agents/city/zoom'),
   cityZoom: (params: { place: string; tickFrom: number; tickTo: number; startedAt?: string }) =>
     request<CityZoomResult>('/api/agents/city/zoom', {

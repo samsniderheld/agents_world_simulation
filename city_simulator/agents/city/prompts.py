@@ -50,6 +50,39 @@ BACKGROUND_TIER = (
 )
 
 
+NARRATOR_TIER = (
+    "You are the city's observer: you read what the simulation recorded and explain it plainly and "
+    "accurately. Use only what the log shows -- never invent events, motives or people; say when the "
+    "log doesn't tell you."
+)
+
+
+def city_report(header: str, lines: list, previous: str = None) -> str:
+    """A briefing on the run so far (agents/city/insight.py)."""
+    earlier = (f"\nYour previous briefing, for comparison -- focus on what has changed since:\n{previous.strip()}\n"
+               if previous and previous.strip() else "")
+    return (
+        f"{header}\n\nThe run's log (oldest first; it may start mid-run):\n" + "\n".join(lines) + "\n"
+        f"{earlier}\n"
+        "Write a short briefing on what is going on in the city, under these headings:\n"
+        "STORYLINES: the 2-5 main threads, each one or two sentences naming who is involved and where.\n"
+        "PLACES: where the crowds and the tension are.\n"
+        "PEOPLE TO WATCH: residents becoming important, and why.\n"
+        + ("CHANGES: what is new since the previous briefing.\n" if earlier else "")
+        + "Be concrete and brief; plain text, no markdown."
+    )
+
+
+def city_question(header: str, lines: list, question: str) -> str:
+    """A question about the run, answered from the log (agents/city/insight.py)."""
+    return (
+        f"{header}\n\nWhat the run's log says that may be relevant (oldest first):\n" + "\n".join(lines) + "\n\n"
+        f"Question: {question}\n\n"
+        "Answer in a few sentences from the log alone, naming who said or did what, and when and where. "
+        "If the log doesn't answer it, say so and say what it does show. Plain text."
+    )
+
+
 def hero_identity(hero) -> str:
     return hero.identity_summary()
 

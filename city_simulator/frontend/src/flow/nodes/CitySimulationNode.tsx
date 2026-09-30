@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { UIEvent } from 'react';
 import type { Node, NodeProps } from '@xyflow/react';
 import { agentsApi, history } from '../../api/client';
-import type { AgentEvent, CityMetrics, CityZoomOptions, CityZoomResult } from '../../api/types';
+import type { AgentEvent, CityInsight, CityMetrics, CityZoomOptions, CityZoomResult } from '../../api/types';
 import { eventLine } from '../../inspector/format';
 import { useJobStore } from '../../state/jobStore';
 import { readHiddenIds } from '../useHiddenEntities';
@@ -365,6 +365,8 @@ export function CitySimulationNode({ id, data, selected, height }: NodeProps<Cit
         <Metrics m={agentsState.metrics} />
       )}
 
+      <CityInsightPanel />
+
       {canZoom && <ZoomIn nodeId={id} onZoomIn={data.onZoomIn} />}
 
       {(live || recent.length > 0) && (
@@ -563,5 +565,80 @@ function Metrics({ m }: { m: CityMetrics }) {
         </span>
       </div>
     </div>
+  );
+}
+
+// "What's going on in the city": a briefing on the current/latest CITY run
+// (each new one says what changed since the last), and free-form questions
+// answered from the run's log by the hero model.
+function CityInsightPanel() {
+  const [report, setReport] = useState<CityInsight | null>(null);
+  const [question, setQuestion] = useState('');
+  const [answer, setAnswer] = useState<CityInsight | null>(null);
+  const [busy, setBusy] = useState<'report' | 'ask' | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function runReport() {
+    setBusy('report');
+    setError(null);
+    try {
+      setReport(await agentsApi.cityReport(report?.text));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function runAsk() {
+    if (!question.trim()) return;
+    setBusy('ask');
+    setError(null);
+    try {
+      setAnswer(await agentsApi.cityAsk(question.trim()));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  const from = (r: CityInsight) =>
+    `from ${r.lines_used} of ${r.lines_total} log lines${r.source === 'saved' ? ' (the saved run)' : ''}`;
+
+  return (
+    <details className="node-subtitle">
+      <summary>what&rsquo;s going on in the city</summary>
+      <div className="node-controls">
+        <button className="node-run-btn" disabled={busy !== null} onClick={runReport}>
+          {busy === 'report' ? 'writing…' : report ? '▶ new report (what changed)' : '▶ city report'}
+        </button>
+      </div>
+      {report && (
+        <div className="city-insight nowheel">
+          {report.text}
+          <div className="city-insight-meta">{from(report)}</div>
+        </div>
+      )}
+      <div className="node-controls">
+        <input
+          className="node-select"
+          placeholder="Ask the city, e.g. “who knows about the payroll?”"
+          value={question}
+          onChange={(e) => setQuestion(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && runAsk()}
+        />
+        <button className="node-run-btn" disabled={busy !== null || !question.trim()} onClick={runAsk}>
+          {busy === 'ask' ? '…' : 'ask'}
+        </button>
+      </div>
+      {answer && (
+        <div className="city-insight nowheel">
+          {answer.text}
+          <div className="city-insight-meta">{from(answer)}</div>
+        </div>
+      )}
+      {error && <div className="node-error-text">{error}</div>}
+    </details>
   );
 }

@@ -224,6 +224,33 @@ def city_runs():
     return json_response({"runs": citystate.list_city_runs()})
 
 
+@bp.post("/city/report")
+def city_report():
+    """A briefing on the current or latest CITY run (agents/city/insight.py).
+    Pass the previous briefing as `previous` to hear what changed."""
+    from .city import insight
+    body = request.get_json(silent=True) or {}
+    try:
+        return json_response(insight.report(previous=body.get("previous") or None))
+    except ValueError as e:
+        return json_response({"error": str(e)}, status=400)
+    except RuntimeError as e:
+        return json_response({"error": str(e)}, status=502)
+
+
+@bp.post("/city/ask")
+def city_ask():
+    """A question about the current or latest CITY run, answered from its log."""
+    from .city import insight
+    body = request.get_json(silent=True) or {}
+    try:
+        return json_response(insight.ask(body.get("question") or ""))
+    except ValueError as e:
+        return json_response({"error": str(e)}, status=400)
+    except RuntimeError as e:
+        return json_response({"error": str(e)}, status=502)
+
+
 @bp.get("/city/zoom")
 def city_zoom_options():
     """Places and tick times a CITY run can be zoomed into (the live run
