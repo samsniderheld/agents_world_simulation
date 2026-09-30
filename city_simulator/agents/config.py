@@ -76,7 +76,9 @@ def _pick_tier(tiers: list, available_gb: float):
     return tiers[-1][1]
 
 
-CHAT_MODEL = _pick_tier(_CHAT_MODEL_TIERS, _AVAILABLE_GB)
+# OLLAMA_CHAT_MODEL (env or .env) skips the auto-pick -- e.g. on a cloud GPU
+# where vLLM holds most of the memory and Ollama should stay small.
+CHAT_MODEL = os.environ.get("OLLAMA_CHAT_MODEL") or _pick_tier(_CHAT_MODEL_TIERS, _AVAILABLE_GB)
 
 # Ollama's embedding model used for the memory stream's relevance scoring.
 EMBED_MODEL = "nomic-embed-text"

@@ -34,7 +34,8 @@ themselves, every agent's runs, every entity's media, *and the canvases*
 1. Install Ollama, then start it with the helper script (idempotent -- safe
    to run even if it's already up):
    ```bash
-   brew install ollama
+   brew install ollama                                  # macOS
+   # Linux: curl -fsSL https://ollama.com/install.sh | sh
    ./start_ollama.sh
    ```
    Stop it later with `./stop_ollama.sh`.
@@ -104,6 +105,73 @@ themselves, every agent's runs, every entity's media, *and the canvases*
    so the URL survives a restart and you can refresh an existing tab (it
    doesn't auto-open a browser). Frontend-only changes just need `npm run
    build` + a refresh; backend changes need the Flask process restarted.
+
+## Running on a cloud GPU
+
+For CITY mode at full scale (hundreds of agents): a Linux box with an NVIDIA
+GPU runs three things side by side -- **vLLM** (the chat model, for both
+CITY tiers and optionally SCENE and treatments), **Ollama** (memory
+embeddings and history generation, both small), and the app. An 80 GB card
+(H100, A100 80GB, H200) is the sweet spot. CITY mode against vLLM is built
+to the documented OpenAI-compatible API and tested against a stub server,
+not yet against real vLLM -- the first run will tell you if anything's off.
+
+1. **The box**: Ubuntu 22.04+ with the NVIDIA driver (most GPU images have
+   it; check `nvidia-smi`), Python 3.10+, Node 20+, git. Clone the repo and
+   check out this branch.
+2. **Ollama**, kept small so vLLM gets the GPU:
+   ```bash
+   curl -fsSL https://ollama.com/install.sh | sh     # installs and starts a service
+   ollama pull nomic-embed-text                      # memory embeddings (required)
+   ollama pull llama3.1:8b                           # history generation, Ollama SCENE runs
+   ```
+3. **vLLM**, in its own virtualenv (it pins its own torch/CUDA):
+   ```bash
+   python3 -m venv ~/vllm && ~/vllm/bin/pip install vllm
+   ~/vllm/bin/vllm serve Qwen/Qwen3-30B-A3B-Instruct-2507-FP8 \
+     --port 8000 --max-model-len 8192 --gpu-memory-utilization 0.80
+   ```
+   Wait for "Application startup complete" (the first start downloads
+   ~30 GB). `0.80` leaves room on the card for Ollama. A mixture-of-experts
+   model like this one is fast per token for its size, which is what a city
+   of agents needs. One server is enough: the background tier's own model
+   isn't served there, so CITY falls back to the same model for both tiers
+   (a status line in the run log says so). To give the background tier a
+   smaller model, start a second `vllm serve` on port 8001 with a lower
+   `--gpu-memory-utilization` and set `CITY_BACKGROUND_BASE_URL` below.
+4. **The app**:
+   ```bash
+   python3 -m venv .venv && source .venv/bin/activate
+   pip install -r requirements.txt
+   (cd frontend && npm install && npm run build)
+   cp .env.example .env
+   ```
+   and in `.env`:
+   ```bash
+   OPENAI_COMPAT_BASE_URL=http://localhost:8000/v1
+   OLLAMA_CHAT_MODEL=llama3.1:8b     # otherwise an 80 GB card auto-picks gpt-oss:120b in Ollama
+   FAL_KEY=...                       # only for image/video nodes
+   # CITY_BACKGROUND_BASE_URL=http://localhost:8001/v1   # if you run a second vLLM
+   ```
+   then `python3 app.py`.
+5. **Open it from your laptop.** The app only listens on localhost (it has
+   no login -- don't expose it publicly), so tunnel the port:
+   ```bash
+   ssh -L 8420:localhost:8420 you@your-gpu-box
+   ```
+   and browse to `http://localhost:8420`.
+6. **In the app**: on a City Simulation node, *hardware* auto-detects the
+   card (70 GB+ is the `h100` profile: up to 2000 agents, 256 requests in
+   flight; 24-70 GB is `rtx5090`: 1000 agents, 128 in flight). Leave the
+   tiers on *profile default* -- or type the served model name to skip the
+   fallback note. For Simulation and Treatment nodes, pick
+   **OpenAI-compatible** to use vLLM too.
+
+To measure the box before a real run (needs an active city):
+
+```bash
+python3 -m agents.city.bench --real --profile h100 --agents 200 1000 --ticks 4
+```
 
 Everything also works without Ollama running: the New City modal's "Use
 LLM" checkbox, unticked, falls back to pure-grammar names/prose, and

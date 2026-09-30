@@ -5,11 +5,15 @@ static file can't know on its own: which chat-model tier actually fits the
 machine this is running on (hardware.py).
 """
 
+import os
 from pathlib import Path
 
 import yaml
+from dotenv import load_dotenv
 
 import hardware
+
+load_dotenv(Path(__file__).parent.parent / ".env")
 
 _CONFIG_PATH = Path(__file__).parent / "data" / "config.yaml"
 
@@ -34,7 +38,8 @@ def _pick_tier(tiers: list, available_gb: float):
     return tiers[-1][1]
 
 
-CHAT_MODEL = _pick_tier(_CHAT_MODEL_TIERS, _AVAILABLE_GB)
+# OLLAMA_CHAT_MODEL (env or .env) skips the auto-pick, same as agents/config.py.
+CHAT_MODEL = os.environ.get("OLLAMA_CHAT_MODEL") or _pick_tier(_CHAT_MODEL_TIERS, _AVAILABLE_GB)
 CHAT_CONTEXT_TOKENS = _RAW["chat_context_tokens"]
 
 # --- History generation ---------------------------------------------------
