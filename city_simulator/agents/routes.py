@@ -64,8 +64,14 @@ def events():
     since = int(request.args.get("since", "0"))
     if jobs.current_mode() == "city":
         # `since` is a cursor (the last event's seq), not a list index.
-        events, cursor = city_recorder.snapshot(since, tier=request.args.get("tier") or "hero")
-        return json_response({"events": events, "next": cursor})
+        # Filters: tier=hero (default) | background | all, kinds=a,b,
+        # agent=, place=, limit= (default 500).
+        kinds = {k for k in (request.args.get("kinds") or "").split(",") if k} or None
+        page = city_recorder.query(
+            since, tier=request.args.get("tier") or "hero", kinds=kinds,
+            agent=request.args.get("agent") or None, place=request.args.get("place") or None,
+            limit=max(1, min(5000, int(request.args.get("limit") or 500))))
+        return json_response(page)
     events, total = recorder.snapshot(since)
     return json_response({"events": events, "next": total})
 

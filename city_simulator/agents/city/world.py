@@ -176,6 +176,7 @@ class CityWorld:
             await self._reflect_wave()
         async with self._wave("promote"):
             await self._promote_wave()
+        self._record_summary(len(hero_encounters), len(conversations))
         self._record_metrics(time.monotonic() - tick_started, len(hero_encounters), len(conversations))
         self.tick += 1
 
@@ -464,9 +465,10 @@ class CityWorld:
             h.memory.set_embedding(n, vector)
             if n.kind == "observation":
                 h.memory.importance_since_reflection += n.importance
+            # The embedding rides along as the node's compact float32 array;
+            # it becomes a JSON list only when the hero's slice is saved.
             recorder.log("memory", n.created_tick, agent=h.name, tier="hero", memory_kind=n.kind,
-                         importance=n.importance, text=n.description,
-                         embedding=[round(float(x), 6) for x in n.embedding], evidence=n.evidence)
+                         importance=n.importance, text=n.description, embedding=n.embedding, evidence=n.evidence)
 
     # --- REFLECT --------------------------------------------------------------------------------------
 
@@ -544,6 +546,24 @@ class CityWorld:
         ranked = sorted(self.background, key=lambda b: (-b.hero_interactions, -sum(b.acquaintances.values()), b.id))
         return [{"name": b.name, "occupation": b.occupation, "location": b.location_label(),
                  "hero_interactions": b.hero_interactions} for b in ranked[:n]]
+
+    def _record_summary(self, hero_encounters: int, conversations: int):
+        """The background tier's per-tick aggregate: who is where (the
+        busiest places), and how much happened."""
+        occupancy = []
+        for place, people in self._by_place.items():
+            if place.startswith("~"):
+                continue
+            heroes = sum(1 for p in people if p.tier == "hero")
+            occupancy.append({"place": place, "heroes": heroes, "background": len(people) - heroes})
+        occupancy.sort(key=lambda o: (-(o["heroes"] + o["background"]), o["place"]))
+        off_map = sum(len(people) for place, people in self._by_place.items() if place.startswith("~"))
+        busiest = ", ".join(f"{o['place']} {o['heroes'] + o['background']}" for o in occupancy[:3])
+        recorder.log("tick_summary", self.tick, tier=None, time=self.clock(),
+                     text=f"{self.clock()}: {busiest or 'nobody out'}; {off_map} at home or across town; "
+                          f"{hero_encounters} hero encounters, {conversations} conversations",
+                     occupancy=occupancy[:20], off_map=off_map, hero_encounters=hero_encounters,
+                     conversations=conversations)
 
     # --- metrics -----------------------------------------------------------------------------------------
 

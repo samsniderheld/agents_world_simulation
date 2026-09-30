@@ -126,8 +126,12 @@ export const agentsApi = {
 
   state: () => request<AgentsState>('/api/agents/state'),
 
-  events: (since = 0) =>
-    request<{ events: unknown[]; next: number }>(`/api/agents/events?since=${since}`),
+  // For a CITY run `since` is a cursor and `tier` picks "hero" (default),
+  // "background" or "all"; SCENE runs ignore it.
+  events: (since = 0, tier?: string) =>
+    request<{ events: unknown[]; next: number; dropped?: number }>(
+      `/api/agents/events?since=${since}${tier ? `&tier=${tier}` : ''}`,
+    ),
 
   run: (params: {
     agentNames: string[];

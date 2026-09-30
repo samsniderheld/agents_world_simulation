@@ -245,15 +245,22 @@ def persist_heroes(world):
     info = recorder.run_info()
     slices = recorder.hero_events()
     heroes = [h for h in world.heroes if h.character_id]
-    if not heroes:
-        return
-    storage.append_agent_run({
-        "started_at": info["started_at"],
-        "meta": info["meta"],
-        "agents": [{"name": h.name} for h in heroes],
-        "events": [],
-    }, slices={h.name: slices.get(h.name, []) for h in heroes})
-    recorder.log("status", world.tick, tier=None, text=f"saved {len(heroes)} heroes' memories")
+    for h in heroes:     # one at a time: each slice's embeddings become JSON lists only here
+        storage.append_agent_run({
+            "started_at": info["started_at"],
+            "meta": info["meta"],
+            "agents": [{"name": h.name}],
+            "events": [],
+        }, slices={h.name: [_jsonable(e) for e in slices.get(h.name, [])]})
+    if heroes:
+        recorder.log("status", world.tick, tier=None, text=f"saved {len(heroes)} heroes' memories")
+
+
+def _jsonable(event: dict) -> dict:
+    vector = event.get("embedding")
+    if vector is None or isinstance(vector, list):
+        return event
+    return {**event, "embedding": [round(float(x), 6) for x in vector]}
 
 
 def run_summary(world) -> dict:

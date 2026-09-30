@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { UIEvent } from 'react';
 import type { Node, NodeProps } from '@xyflow/react';
 import { agentsApi } from '../../api/client';
-import type { AgentEvent, CityZoomOptions, CityZoomResult } from '../../api/types';
+import type { AgentEvent, CityMetrics, CityZoomOptions, CityZoomResult } from '../../api/types';
 import { eventLine } from '../../inspector/format';
 import { useJobStore } from '../../state/jobStore';
 import { NodeShell } from './NodeShell';
@@ -46,6 +46,9 @@ interface NotableResident {
   hero_interactions: number;
 }
 
+const LOG_KINDS = new Set(['action', 'dialogue', 'react', 'status', 'promotion', 'tick_summary']);
+const LOG_KINDS_WITH_BACKGROUND = new Set([...LOG_KINDS, 'move', 'encounter', 'schedules', 'moves']);
+
 const PROVIDERS = [
   { value: '', label: 'profile default' },
   { value: 'ollama', label: 'Ollama (local)' },
@@ -68,6 +71,9 @@ export function CitySimulationNode({ id, data, selected, height }: NodeProps<Cit
   const [backgroundModel, setBackgroundModel] = useState(data.backgroundModel);
   const [recent, setRecent] = useState<AgentEvent[]>([]);
   const [watching, setWatching] = useState(false);
+  // Include background residents' moves/encounters in the log (the server
+  // sends heroes + run-level events by default).
+  const [showBackground, setShowBackground] = useState(false);
   const cursorRef = useRef(0);
   const logRef = useRef<HTMLDivElement>(null);
   const stickToBottomRef = useRef(true);
@@ -95,7 +101,7 @@ export function CitySimulationNode({ id, data, selected, height }: NodeProps<Cit
       busy = true;
       try {
         const state = await agentsApi.state();
-        const res = await agentsApi.events(cursorRef.current);
+        const res = await agentsApi.events(cursorRef.current, showBackground ? 'all' : 'hero');
         if (cancelled) return;
         cursorRef.current = res.next;
         if (res.events.length) setRecent((prev) => [...prev, ...(res.events as AgentEvent[])].slice(-2000));
@@ -112,9 +118,10 @@ export function CitySimulationNode({ id, data, selected, height }: NodeProps<Cit
       cancelled = true;
       clearInterval(timer);
     };
-  }, [live]);
+  }, [live, showBackground]);
 
-  const visibleEvents = recent.filter((e) => e.kind === 'action' || e.kind === 'dialogue' || e.kind === 'status');
+  const shownKinds = showBackground ? LOG_KINDS_WITH_BACKGROUND : LOG_KINDS;
+  const visibleEvents = recent.filter((e) => shownKinds.has(e.kind));
 
   useEffect(() => {
     if (!stickToBottomRef.current) return;
@@ -292,7 +299,26 @@ export function CitySimulationNode({ id, data, selected, height }: NodeProps<Cit
 
       {(error || statusError) && <div className="node-error-text">{error || statusError}</div>}
 
+      {isCityRun && agentsState?.metrics && <Metrics m={agentsState.metrics} />}
+
       {canZoom && <ZoomIn nodeId={id} onZoomIn={data.onZoomIn} />}
+
+      {(live || recent.length > 0) && (
+        <label className="node-checkbox-row">
+          <input
+            type="checkbox"
+            checked={showBackground}
+            onChange={(e) => {
+              // Re-read the (ring-buffered) log from the start with the new filter.
+              cursorRef.current = 0;
+              setRecent([]);
+              setShowBackground(e.target.checked);
+              if (!live) setWatching(true);
+            }}
+          />
+          <span className="node-subtitle">show background residents in the log</span>
+        </label>
+      )}
 
       {visibleEvents.length > 0 && (
         <div className="node-log nowheel" ref={logRef} onScroll={onLogScroll} style={{ maxHeight: height ? undefined : 240 }}>
@@ -433,5 +459,43 @@ function ZoomIn({ nodeId, onZoomIn }: { nodeId: string; onZoomIn: (nodeId: strin
       )}
       {message && <div>{message}</div>}
     </details>
+  );
+}
+
+const WAVE_ORDER = ['plan', 'decompose', 'encounters', 'react', 'dialogue', 'memory', 'reflect', 'promote'];
+
+// The last tick at a glance: how long it took and where the time went
+// (one bar segment per wave), how much was asked of the model, and how
+// many calls each tier made per agent.
+function Metrics({ m }: { m: CityMetrics }) {
+  const total = WAVE_ORDER.reduce((s, w) => s + (m.waves[w] ?? 0), 0) || 1;
+  const trouble = m.failures + m.retries + m.backpressure;
+  return (
+    <div className="city-metrics">
+      <div className="city-metrics-head">
+        <span>tick {m.tick + 1}{m.time ? ` · ${m.time}` : ''}</span>
+        <span>{m.seconds.toFixed(1)} s</span>
+      </div>
+      <div className="city-waves" role="img" aria-label="time per wave">
+        {WAVE_ORDER.filter((w) => (m.waves[w] ?? 0) > 0).map((w) => (
+          <span
+            key={w}
+            className={`city-wave city-wave-${w}`}
+            style={{ flexGrow: m.waves[w] / total }}
+            title={`${w}: ${m.waves[w].toFixed(2)} s`}
+          />
+        ))}
+      </div>
+      <div className="city-metrics-grid">
+        <span>{m.requests} requests</span>
+        <span>{m.tokens_per_second} tok/s</span>
+        <span>
+          {m.calls_per_hero} / hero · {m.calls_per_background} / background
+        </span>
+        <span className={trouble ? 'city-metrics-bad' : ''}>
+          {m.failures} failed · {m.retries} retries{m.backpressure ? ` · ${m.backpressure} backoffs` : ''}
+        </span>
+      </div>
+    </div>
   );
 }

@@ -238,6 +238,32 @@ export interface AgentsState {
   started_at: string | null;
   event_count: number;
   population?: { heroes: number; background: number; [key: string]: unknown };
+  // CITY runs: the last tick's metrics event.
+  metrics?: CityMetrics | null;
+}
+
+// One CITY tick's "metrics" event (agents/city/world.py's _record_metrics).
+export interface CityMetrics {
+  tick: number;
+  time?: string;
+  seconds: number;
+  waves: Record<string, number>;
+  requests: number;
+  tokens_in: number;
+  tokens_out: number;
+  retries: number;
+  failures: number;
+  repairs: number;
+  backpressure: number;
+  tokens_per_second: number;
+  calls_by_tier: Record<string, number>;
+  calls_by_kind: Record<string, number>;
+  calls_per_hero: number;
+  calls_per_background: number;
+  heroes: number;
+  background: number;
+  encounters: number;
+  conversations: number;
 }
 
 // GET /api/visuals/providers's capabilities block -- what the canvas can

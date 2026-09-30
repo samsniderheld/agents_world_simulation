@@ -1,9 +1,17 @@
 """The CITY run's event log. Separate from agents/recorder.py (SCENE's),
 so a CITY run never changes what a SCENE run records or serves.
 
-Every event gets a monotonically increasing `seq`, which is the cursor
-/api/agents/events hands back; `tier` says whose event it is ("hero",
-"background", or None for run-level events like metrics).
+Level of detail: heroes get every event (plan, decompose, action, observe,
+react, dialogue, memory, focal, insight, move, ...); background residents
+only get move / encounter / promotion events, plus one run-level
+"tick_summary" per tick (occupancy by place, counts). Run-level events
+(status, metrics, tick_summary) have tier None.
+
+The live log is a ring buffer (config.EVENT_BUFFER_SIZE): at 1000 agents a
+long run would otherwise grow without bound. Every event gets a
+monotonically increasing `seq`, which is the cursor /api/agents/events
+pages with; a client whose cursor fell out of the buffer is told how many
+events it missed.
 
 Besides the live log this keeps, for the end of the run:
 - every hero's own events in full (what gets appended to their citystate
@@ -11,11 +19,14 @@ Besides the live log this keeps, for the end of the run:
 - where every agent was at every tick (for zooming into a place and time).
 """
 
+import collections
 import datetime
 import threading
 
+from . import config as ccfg
+
 _lock = threading.Lock()
-_events: list = []
+_events = collections.deque(maxlen=ccfg.EVENT_BUFFER_SIZE)
 _seq = 0
 _started_at: str = None
 _heroes: list = []
@@ -29,7 +40,7 @@ _last_metrics: dict = None
 def start(heroes: list, meta: dict, population: dict = None):
     global _events, _seq, _started_at, _heroes, _meta, _population, _hero_events, _positions, _last_metrics
     with _lock:
-        _events, _seq = [], 0
+        _events, _seq = collections.deque(maxlen=ccfg.EVENT_BUFFER_SIZE), 0
         _started_at = datetime.datetime.now().isoformat()
         _heroes = [dict(h) for h in heroes]
         _meta = dict(meta or {}, mode="city")
@@ -90,9 +101,46 @@ def set_meta(**fields):
 def snapshot(cursor: int = 0, tier: str = "hero"):
     """(events after `cursor`, next cursor). tier "hero" (default) keeps
     hero and run-level events; "all" keeps everything."""
+    page = query(cursor, tier=tier, limit=None)
+    return page["events"], page["next"]
+
+
+def query(cursor: int = 0, tier: str = "hero", kinds: set = None, agent: str = None, place: str = None,
+          limit: int = 500) -> dict:
+    """One page of the live log after `cursor`:
+      tier   "hero" (default: heroes + run-level), "background", or "all"
+      kinds  only these event kinds
+      agent  only events by or addressed to this agent
+      place  only events at this place
+    Returns {"events", "next" (the cursor for the next page), "dropped"
+    (events after `cursor` that already left the ring buffer)}. With a
+    filter, "next" still advances past everything scanned, so paging never
+    re-reads skipped events."""
     with _lock:
-        out = [e for e in _events if e["seq"] > cursor and (tier == "all" or e["tier"] != "background")]
-        return out, _seq
+        oldest = _events[0]["seq"] if _events else _seq + 1
+        dropped = max(0, oldest - cursor - 1)
+        out = []
+        last = cursor
+        full = False
+        for e in _events:
+            if e["seq"] <= cursor:
+                continue
+            if limit is not None and len(out) >= limit:
+                full = True
+                break
+            last = e["seq"]
+            if tier == "hero" and e["tier"] == "background":
+                continue
+            if tier == "background" and e["tier"] != "background":
+                continue
+            if kinds and e["kind"] not in kinds:
+                continue
+            if agent and e.get("agent") != agent and e.get("listener") != agent and e.get("other") != agent:
+                continue
+            if place and place not in (e.get("location"), e.get("place"), e.get("to_location"), e.get("from_location")):
+                continue
+            out.append(e)
+        return {"events": out, "next": last if full else max(cursor, _seq), "dropped": dropped}
 
 
 def state() -> dict:

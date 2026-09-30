@@ -5,6 +5,7 @@ branch on the run's mode."""
 
 import contextlib
 import io
+import json
 import unittest
 from unittest import mock
 
@@ -30,13 +31,15 @@ def records_from(storage) -> dict:
 class PersistTests(unittest.TestCase):
     def test_heroes_persist_in_scene_shape(self):
         world, _ = run_city(ticks=4, background_count=40)
-        run_record, slices = world.storage.appended[0]
-        self.assertEqual(run_record["meta"]["mode"], "city")
-        self.assertEqual({a["name"] for a in run_record["agents"]}, {h.name for h in world.heroes if h.character_id})
+        self.assertTrue(all(r["meta"]["mode"] == "city" for r, _ in world.storage.appended))
+        self.assertEqual({a["name"] for r, _ in world.storage.appended for a in r["agents"]},
+                         {h.name for h in world.heroes if h.character_id})
+        slices = {name: events for _, s in world.storage.appended for name, events in s.items()}
         for hero in world.heroes:
             if not hero.character_id:
                 continue
             events = slices[hero.name]
+            json.dumps(events)    # embeddings are plain lists by now
             memories = [e for e in events if e["kind"] == "memory"]
             self.assertTrue(memories)
             self.assertTrue(all(len(e["embedding"]) == 16 for e in memories))
