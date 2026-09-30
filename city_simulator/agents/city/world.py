@@ -110,7 +110,7 @@ class CityWorld:
         yield
         stats = self.gw.take_stats()
         self._wave_metrics[name] = {
-            "seconds": round(time.monotonic() - t0, 3), "requests": stats["requests"],
+            "seconds": round(time.monotonic() - t0, 3), "requests": stats["requests"], "rounds": stats["rounds"],
             "tokens_in": stats["tokens_in"], "tokens_out": stats["tokens_out"], "retries": stats["retries"],
             "failures": stats["failures"], "repairs": stats["repairs"], "backpressure": stats["backpressure"],
             "by_tier": stats["by_tier"], "by_kind": stats["by_kind"],
@@ -184,7 +184,10 @@ class CityWorld:
 
     async def _plan_wave(self):
         heroes = [h for h in self.heroes if not h.plan]
-        day = (self.now.date() - self.start.date()).days
+        # Sim-days count 24 hours from the run's start, not calendar days: a
+        # routine runs midnight to midnight and wraps, so a run starting at
+        # 6 PM doesn't ask everyone for a new schedule six hours later.
+        day = int((self.now - self.start).total_seconds() // 86400)
         background = [b for b in self.background if b.schedule_day != day]
         remaining = max(1, self.total_ticks - self.tick)
         n_items = min(remaining, MAX_PLAN_ITEMS)
@@ -200,7 +203,7 @@ class CityWorld:
                                      _duration(horizon / n_items), n_items, self.clock(), self.until),
                 "plan", prompts.plan_schema(n_items), ccfg.TOKENS_PLAN))
         llm_background = self._schedule_picks(background) if self.llm_schedules else []
-        day_label = (self.now.strftime("%A") + (f" (day {day + 1})" if day else ""))
+        day_label = "today" if not day else f"day {day + 1}"
         schema = prompts.schedule_schema(self.schedule_places)
         for b in llm_background:
             directive = prompts.directive_for_background(self.directive, b)
@@ -573,7 +576,7 @@ class CityWorld:
         by_tier = collections.Counter()
         by_kind = collections.Counter()
         for w in waves.values():
-            for k in ("requests", "tokens_in", "tokens_out", "retries", "failures", "repairs", "backpressure"):
+            for k in ("requests", "rounds", "tokens_in", "tokens_out", "retries", "failures", "repairs", "backpressure"):
                 total[k] += w[k]
             by_tier.update(w["by_tier"])
             by_kind.update(w["by_kind"])
@@ -581,7 +584,8 @@ class CityWorld:
         metrics = {
             "seconds": round(seconds, 3),
             "waves": {k: v["seconds"] for k, v in waves.items()},
-            "requests": total["requests"], "tokens_in": total["tokens_in"], "tokens_out": total["tokens_out"],
+            "requests": total["requests"], "rounds": total["rounds"],
+            "tokens_in": total["tokens_in"], "tokens_out": total["tokens_out"],
             "retries": total["retries"], "failures": total["failures"], "repairs": total["repairs"],
             "backpressure": total["backpressure"],
             "tokens_per_second": round(total["tokens_out"] / seconds, 1) if seconds else 0.0,

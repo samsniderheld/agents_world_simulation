@@ -267,7 +267,9 @@ def _schema_instructions(schema: dict) -> str:
 # --- The gateway ----------------------------------------------------------------------------
 
 def _new_stats() -> dict:
-    return {"requests": 0, "ok": 0, "failures": 0, "retries": 0, "repairs": 0, "backpressure": 0,
+    # "rounds": sum over batches of ceil(batch size / the backend's cap) --
+    # the round trips an ideal server would need, i.e. the floor on time.
+    return {"requests": 0, "rounds": 0, "ok": 0, "failures": 0, "retries": 0, "repairs": 0, "backpressure": 0,
             "tokens_in": 0, "tokens_out": 0, "busy_seconds": 0.0, "by_tier": collections.Counter(),
             "by_kind": collections.Counter(), "errors": collections.Counter()}
 
@@ -334,6 +336,9 @@ class Gateway:
         is sorted by prompt prefix (see module docstring)."""
         if not requests:
             return []
+        per_tier = collections.Counter(r.tier for r in requests)
+        rounds = max(-(-n // self.limiter_for(tier).max_limit) for tier, n in per_tier.items())
+        self._count("rounds", rounds)
         order = sorted(range(len(requests)), key=lambda i: _prefix_key(requests[i]))
         tasks = {}
         for i in order:
@@ -448,6 +453,7 @@ class Gateway:
             return []
         unique = list(dict.fromkeys(texts))
         batches = [unique[i:i + ccfg.EMBED_BATCH_SIZE] for i in range(0, len(unique), ccfg.EMBED_BATCH_SIZE)]
+        self._count("rounds", -(-len(batches) // self._embed_limiter.max_limit))
         results = await asyncio.gather(*(self._embed_batch(b) for b in batches))
         vectors = {}
         for batch, vecs in zip(batches, results):
