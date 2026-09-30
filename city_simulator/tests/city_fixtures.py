@@ -70,6 +70,12 @@ class FakeStorage:
 
     def append_agent_run(self, run_record, slices=None):
         self.appended.append((run_record, slices))
+        by_name = {c["name"]: c["id"] for c in self.city["characters"]}
+        for agent in run_record["agents"]:
+            if agent["name"] in by_name:
+                self.records.setdefault(by_name[agent["name"]], {"runs": []})["runs"].append(
+                    {"started_at": run_record["started_at"], "meta": run_record["meta"],
+                     "events": (slices or {}).get(agent["name"], [])})
 
     def add_character(self, character):
         self.city["characters"].append(character)

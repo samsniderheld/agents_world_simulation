@@ -111,18 +111,29 @@ def zoom(place: str, tick_from: int, tick_to: int, started_at: str = None, trans
     places = {p["name"]: p for p in city.get("places", [])}
     residents = {r["name"]: r for r in city_run.storage.get_background()}
     recent = {b["name"]: b.get("recent", []) for b in summary["background"].values()}
+    recent.update(summary.get("promoted_memories") or {})
+    whereabouts = {n: _whereabouts(summary, n, place, tick_from, tick_to) for n, _, _ in cast}
     promoted_names = {h["name"]: h.get("promoted_from") for h in summary["heroes"] if h.get("promoted_from")}
 
     to_promote = []
+    backfill = []
     for name, _, _ in cast:
         if name in characters:
+            # Promoted by an earlier zoom but holding nothing from this run
+            # yet: give them this run's memories now.
+            c = characters[name]
+            if c.get("promoted_from") and not _has_run(c["id"], summary["started_at"]):
+                backfill.append(c)
             continue
         record = residents.get(name)
         if record is None and name in promoted_names:
             record = next((r for r in residents.values() if r["id"] == promoted_names[name]), None)
         if record is not None:
             to_promote.append(record)
-    created = asyncio.run(_promote(to_promote, place, places, summary, recent, transport)) if to_promote else []
+    created = asyncio.run(_promote(to_promote, place, places, summary, recent, whereabouts, transport)) \
+        if to_promote else []
+    if backfill:
+        asyncio.run(_backfill(backfill, summary, recent, whereabouts, transport))
     for c in created:
         characters[c["name"]] = c
 
@@ -145,7 +156,62 @@ def zoom(place: str, tick_from: int, tick_to: int, started_at: str = None, trans
     }
 
 
-async def _promote(records: list, place: str, places: dict, summary: dict, recent: dict, transport) -> list:
+def _has_run(character_id: str, started_at: str) -> bool:
+    record = city_run.storage.get_agent(character_id) or {}
+    return any(r.get("started_at") == started_at for r in record.get("runs", []))
+
+
+def _whereabouts(summary: dict, name: str, place: str, tick_from: int, tick_to: int):
+    """[tick, kind, text]: where this person was during the zoomed window,
+    so even someone who met nobody remembers being there."""
+    if name not in summary["agents"] or place not in summary["places"]:
+        return None
+    i, target = summary["agents"].index(name), summary["places"].index(place)
+    ticks = [t for t in range(tick_from, tick_to + 1)
+             if t < len(summary["positions"]) and summary["positions"][t][i] == target]
+    if not ticks:
+        return None
+    meta = summary["meta"]
+    return [ticks[0], "observation",
+            f"{name} was at {place} from {_clock(meta, ticks[0])} to {_clock(meta, ticks[-1] + 1)}."]
+
+
+async def _memory_events(gw, name: str, mems: list) -> list:
+    vectors = await gw.embed_many([m[2] for m in mems])
+    return [{"kind": "memory", "tick": tick, "agent": name,
+             "memory_kind": "chat" if kind == "dialogue" else "observation",
+             "importance": heuristic_importance(text, kind), "text": text,
+             "embedding": [round(float(x), 6) for x in vector], "evidence": []}
+            for (tick, kind, text), vector in zip(mems, vectors)]
+
+
+def _save_memories(name: str, summary: dict, events: list):
+    if events:
+        city_run.storage.append_agent_run({
+            "started_at": summary["started_at"], "meta": dict(summary["meta"], mode="city"),
+            "agents": [{"name": name}], "events": [],
+        }, slices={name: events})
+
+
+def _memories_for(name: str, recent: dict, whereabouts: dict) -> list:
+    mems = [list(m) for m in recent.get(name, [])]
+    if whereabouts.get(name) and whereabouts[name][2] not in {m[2] for m in mems}:
+        mems.append(whereabouts[name])
+    return sorted(mems, key=lambda m: m[0])
+
+
+async def _backfill(characters: list, summary: dict, recent: dict, whereabouts: dict, transport):
+    meta = summary["meta"]
+    profile = hardware.city_profile(meta.get("profile") or "auto")
+    backends = backends_for_profile(profile, meta.get("provider"), meta.get("chat_model"),
+                                    meta.get("background_provider"), meta.get("background_model"))
+    async with Gateway(backends, transport=transport) as gw:
+        for c in characters:
+            _save_memories(c["name"], summary, await _memory_events(gw, c["name"], _memories_for(c["name"], recent, whereabouts)))
+
+
+async def _promote(records: list, place: str, places: dict, summary: dict, recent: dict, whereabouts: dict,
+                   transport) -> list:
     meta = summary["meta"]
     profile = hardware.city_profile(meta.get("profile") or "auto")
     backends = backends_for_profile(profile, meta.get("provider"), meta.get("chat_model"),
@@ -158,10 +224,10 @@ async def _promote(records: list, place: str, places: dict, summary: dict, recen
                                max_tokens=ccfg.TOKENS_BIO, temperature=0.9, kind="bio")
                     for r in records]
         results = await gw.generate_many(requests)
-        memories = [[m for m in recent.get(r["name"], [])] for r in records]
-        vectors = iter(await gw.embed_many([m[2] for ms in memories for m in ms]))
+        memory_events = [await _memory_events(gw, r["name"], _memories_for(r["name"], recent, whereabouts))
+                         for r in records]
     created = []
-    for r, result, mems in zip(records, results, memories):
+    for r, result, events in zip(records, results, memory_events):
         bio, quirk = _parse_bio(result.text if result.ok else "")
         home = places.get(r.get("work")) or places.get(r.get("haunt")) or places.get(place) or {}
         character = {
@@ -173,15 +239,7 @@ async def _promote(records: list, place: str, places: dict, summary: dict, recen
         }
         city_run.storage.add_character(character)
         city_run.storage.update_background_resident(r["id"], promoted_to=character["id"])
-        if mems:
-            city_run.storage.append_agent_run({
-                "started_at": summary["started_at"], "meta": dict(meta, mode="city"),
-                "agents": [{"name": r["name"]}], "events": [],
-            }, slices={r["name"]: [
-                {"kind": "memory", "tick": tick, "agent": r["name"], "memory_kind": "chat" if kind == "dialogue" else "observation",
-                 "importance": heuristic_importance(text, kind), "text": text,
-                 "embedding": [round(float(x), 6) for x in next(vectors)], "evidence": []}
-                for tick, kind, text in mems]})
+        _save_memories(r["name"], summary, events)
         created.append(character)
     return created
 

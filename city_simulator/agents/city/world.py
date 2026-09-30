@@ -293,6 +293,10 @@ class CityWorld:
             if b.location is not None and block.place != b.location:
                 moved += 1
                 self._log("move", b, from_location=b.location_label(), to_location=_label(block.place, b))
+            if block.activity != b.current_action or block.place != b.location:
+                # Their own day, not just who they ran into -- so a resident
+                # who met nobody still has a trail of memories.
+                b.memory.add(self.tick, "schedule", f"{self.clock()}: {block.activity} ({_label(block.place, b)}).")
             b.location = block.place
             b.current_action = block.activity
         if moved:

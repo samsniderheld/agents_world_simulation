@@ -166,6 +166,56 @@ class ZoomTests(unittest.TestCase):
         self.assertTrue(set(result["promoted"]) <= {h.name for h in world.heroes})
 
 
+class ZoomMemoryTests(unittest.TestCase):
+    """Everyone a zoom turns into a character starts with memories of the
+    CITY run -- even someone who met nobody, and someone who'd been promoted
+    to hero mid-run."""
+
+    def _memories(self, storage, name):
+        cid = next(c["id"] for c in storage.city["characters"] if c["name"] == name)
+        return [e["text"] for run in storage.records.get(cid, {}).get("runs", []) for e in run["events"]
+                if e["kind"] == "memory"]
+
+    def test_every_promoted_character_gets_memories(self):
+        server = StubServer(reply_fn=prompts.stub_reply)
+        storage = FakeStorage()
+
+        def promote_one(world):
+            world.promotion_requests.append(world.background[0].name)
+        world, _ = run_city(server, ticks=4, background_count=40, storage=storage, on_world=promote_one)
+        mid_run = next(h.name for h in world.heroes if h.promoted_from)
+        summary = storage.city_runs[-1]
+        self.assertTrue(summary["promoted_memories"][mid_run])
+        with fake_storage(storage):
+            for opt in zoom.options()["places"]:
+                zoom.zoom(opt["name"], 0, 3, transport=server.transport())
+        promoted = [c for c in storage.city["characters"] if c.get("promoted_from")]
+        self.assertTrue(promoted)
+        self.assertIn(mid_run, [c["name"] for c in promoted])
+        for c in promoted:
+            mems = self._memories(storage, c["name"])
+            self.assertTrue(mems, c["name"])
+            self.assertTrue(any(" was at " in m for m in mems), c["name"])        # where they were
+        self.assertTrue(any("(" in m and ")." in m for c in promoted for m in self._memories(storage, c["name"])))
+
+    def test_earlier_zoom_characters_are_backfilled_once(self):
+        server = StubServer(reply_fn=prompts.stub_reply)
+        storage = FakeStorage()
+        run_city(server, ticks=3, background_count=40, storage=storage)
+        with fake_storage(storage):
+            place = zoom.options()["places"][0]["name"]
+            first = zoom.zoom(place, 0, 2, transport=server.transport())
+            if not first["promoted"]:
+                self.skipTest("no background residents at the busiest place")
+            name = first["promoted"][0]
+            cid = next(c["id"] for c in storage.city["characters"] if c["name"] == name)
+            storage.records.pop(cid)                   # as if saved before memories were kept
+            zoom.zoom(place, 0, 2, transport=server.transport())
+            zoom.zoom(place, 0, 2, transport=server.transport())
+        self.assertEqual(len(storage.records[cid]["runs"]), 1)
+        self.assertTrue(self._memories(storage, name))
+
+
 class TreatmentTests(unittest.TestCase):
     def test_city_transcript_narrowed_by_place_and_ticks(self):
         world, _ = run_city(ticks=4, background_count=60)

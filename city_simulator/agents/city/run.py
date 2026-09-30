@@ -263,6 +263,10 @@ def _jsonable(event: dict) -> dict:
     return {**event, "embedding": [round(float(x), 6) for x in vector]}
 
 
+# Memories kept per resident in a run summary, for zoom-in to seed from.
+RECENT_KEPT = 10
+
+
 def run_summary(world) -> dict:
     """The compact record of a CITY run (citystate's city_runs/): meta,
     heroes, every agent's place at every tick (as indexes into `places`),
@@ -286,8 +290,15 @@ def run_summary(world) -> dict:
                    "acquaintances": dict(b.acquaintances.most_common(5)), "schedule": b.schedule_source,
                    # A few memories, so zooming in later can seed a promoted
                    # resident's SCENE memory with something.
-                   "recent": [[e.tick, e.kind, e.text] for e in list(b.memory.entries)[-5:]]}
+                   "recent": [[e.tick, e.kind, e.text] for e in list(b.memory.entries)[-RECENT_KEPT:]]}
             for b in world.background
+        },
+        # Residents promoted to hero mid-run: their memories now live in a
+        # hero memory stream, and zooming in needs them too.
+        "promoted_memories": {
+            h.name: [[n.created_tick, "dialogue" if n.kind == "chat" else "observation", n.description]
+                     for n in h.memory.nodes if n.kind != "plan"][-RECENT_KEPT:]
+            for h in world.heroes if h.promoted_from
         },
         "promoted": promoted,
         "metrics": world.metrics_history,
