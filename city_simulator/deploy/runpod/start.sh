@@ -45,8 +45,12 @@ else
   for _ in $(seq 1 $((WAIT_MIN * 12))); do
     up http://localhost:8000/v1/models && break
     if ! kill -0 "$VLLM_PID" 2>/dev/null; then
-      echo; echo "vLLM exited during startup. The end of its log:"; echo
-      tail -n 40 "$LOGS/vllm.log"
+      echo; echo "vLLM exited during startup. The engine's own error (the root cause):"; echo
+      grep -E "EngineCore.*(Error|error|Exception|raise |No such file|not found|Traceback)" "$LOGS/vllm.log" \
+        | grep -v "WARNING" | tail -n 25 || true
+      echo; echo "The end of the log:"; tail -n 8 "$LOGS/vllm.log"
+      echo; echo "Common fixes: apt-get install -y build-essential python3-dev (Python.h / C compiler);"
+      echo "VLLM_USE_DEEP_GEMM=0 bash $0 (DeepGEMM kernel build fails); VLLM_GPU_UTIL=0.7 (memory)."
       echo; echo "GPU right now:"; nvidia-smi --query-gpu=name,memory.used,memory.total,driver_version --format=csv
       exit 1
     fi

@@ -22,7 +22,10 @@ SUDO=""; [ "$(id -u)" -ne 0 ] && SUDO="sudo"
 
 echo "== system packages"
 $SUDO apt-get update -y
-$SUDO apt-get install -y --no-install-recommends curl git ca-certificates zstd python3-venv lsof
+# build-essential + python3-dev: vLLM compiles small Triton/DeepGEMM kernels at
+# startup, which needs a C compiler and Python.h.
+$SUDO apt-get install -y --no-install-recommends curl git ca-certificates zstd python3-venv python3-dev \
+  build-essential lsof
 
 echo "== Node 20 (to build the frontend)"
 if ! command -v node >/dev/null || [ "$(node -v | tr -d v | cut -d. -f1)" -lt 20 ]; then
