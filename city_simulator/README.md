@@ -209,7 +209,11 @@ bash city_simulator/deploy/runpod/start.sh     # starts Ollama, vLLM, the app; p
 `.env` (vLLM URL, a small Ollama chat model), and downloads the models into
 `/workspace` so they survive a restart. For a different model:
 `VLLM_MODEL=Qwen/Qwen3-8B-FP8 bash .../setup.sh` (and the same variable for
-`start.sh`). Add `FAL_KEY=...` to `city_simulator/.env` for image/video
+`start.sh`). The first `start.sh` takes a while after the weights load:
+vLLM compiles kernels and captures CUDA graphs (15-30 min is possible on
+H100); the result is cached under `/workspace/vllm-cache`, so later starts
+are quick. To skip it, `VLLM_EXTRA_ARGS=--enforce-eager bash .../start.sh`
+(serves somewhat slower). Add `FAL_KEY=...` to `city_simulator/.env` for image/video
 nodes. Then, on your laptop:
 
 ```bash

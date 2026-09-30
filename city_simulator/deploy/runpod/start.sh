@@ -8,6 +8,8 @@
 #                      the rest is for Ollama (~6 GB)
 #   VLLM_MAX_LEN       default 8192 -- context length
 #   VLLM_WAIT_MIN      default 25 -- minutes to wait for vLLM to come up
+#   VLLM_EXTRA_ARGS    extra `vllm serve` flags, e.g. "--enforce-eager" to skip
+#                      the slow first-start compile (somewhat slower serving)
 #   WORKSPACE          default /workspace
 set -euo pipefail
 
@@ -16,6 +18,10 @@ WS="${WORKSPACE:-/workspace}"
 VLLM_MODEL="${VLLM_MODEL:-Qwen/Qwen3-30B-A3B-Instruct-2507-FP8}"
 export HF_HOME="${HF_HOME:-$WS/hf-cache}"
 export OLLAMA_MODELS="${OLLAMA_MODELS:-$WS/ollama-models}"
+# vLLM's compile caches (torch.compile, CUDA graphs, DeepGEMM kernels) default
+# to ~/.cache, which RunPod wipes on restart -- keep them on the volume so the
+# slow first-start compile only happens once.
+export VLLM_CACHE_ROOT="${VLLM_CACHE_ROOT:-$WS/vllm-cache}"
 LOGS="$WS/logs"; mkdir -p "$LOGS"
 
 up() { curl -s -o /dev/null "$1"; }
@@ -32,7 +38,7 @@ if up http://localhost:8000/v1/models; then
 else
   nohup "$WS/vllm-venv/bin/vllm" serve "$VLLM_MODEL" --port 8000 \
     --max-model-len "${VLLM_MAX_LEN:-8192}" --gpu-memory-utilization "${VLLM_GPU_UTIL:-0.80}" \
-    > "$LOGS/vllm.log" 2>&1 &
+    ${VLLM_EXTRA_ARGS:-} > "$LOGS/vllm.log" 2>&1 &
   VLLM_PID=$!
   echo -n "vLLM: starting $VLLM_MODEL (log: $LOGS/vllm.log) "
   WAIT_MIN="${VLLM_WAIT_MIN:-25}"
@@ -51,7 +57,9 @@ else
   else
     echo; echo "vLLM still isn't answering after $WAIT_MIN min (it's still running as pid $VLLM_PID)."
     echo "Last log lines:"; tail -n 15 "$LOGS/vllm.log"
-    echo "If it's still loading/compiling, wait and rerun this script; it'll pick it up."
+    echo "If it's still loading/compiling (the first start compiles kernels; later starts reuse"
+    echo "$VLLM_CACHE_ROOT), wait and rerun this script -- it'll pick it up. To skip compiling:"
+    echo "  pkill -f 'vllm serve'; VLLM_EXTRA_ARGS=--enforce-eager bash $0"
     exit 1
   fi
 fi
