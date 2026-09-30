@@ -15,6 +15,7 @@ import { NewAgentModal } from '../flow/NewAgentModal';
 import { miniMapNodeColor } from '../flow/miniMapColor';
 import { AgentNode } from '../flow/nodes/AgentNode';
 import { FrameNode } from '../flow/nodes/FrameNode';
+import { PhotoNode } from '../flow/nodes/PhotoNode';
 import { LocationNode } from '../flow/nodes/LocationNode';
 import { MissingNode } from '../flow/nodes/MissingNode';
 import { ScratchMusicNode, type ScratchMusicNodeData } from '../flow/nodes/ScratchMusicNode';
@@ -45,6 +46,7 @@ const nodeTypes = {
   population: PopulationNode,
   treatment: TreatmentNode,
   frame: FrameNode,
+  photo: PhotoNode,
   video: VideoNode,
   style: StyleNode,
   storyboard: StoryboardNode,
@@ -52,7 +54,7 @@ const nodeTypes = {
   'scratch-music': ScratchMusicNode,
 };
 
-const PIPELINE_TYPES = new Set(['population', 'sim', 'treatment', 'frame', 'video', 'style', 'storyboard', 'text-viewer']);
+const PIPELINE_TYPES = new Set(['photo', 'population', 'sim', 'treatment', 'frame', 'video', 'style', 'storyboard', 'text-viewer']);
 const SCRATCH_TYPES = new Set(['scratch-music']);
 
 // A Scratch board still has the full node palette (Agent/Location/
@@ -243,7 +245,7 @@ function ScratchCanvasInner({
       if (kind === 'scratch') addScratchNode('scratch-music', position);
       else if (kind === 'style' && rest[0] === 'new') addStyleNode(position);
       else if (kind === 'style') addStyleNode(position, styles.find((s) => s.id === rest[0]));
-      else if (kind === 'pipeline') addPipelineNode(rest[0] as 'sim' | 'treatment' | 'video' | 'text-viewer' | 'frame' | 'storyboard' | 'population', position);
+      else if (kind === 'pipeline') addPipelineNode(rest[0] as 'sim' | 'treatment' | 'video' | 'text-viewer' | 'frame' | 'storyboard' | 'population' | 'photo', position);
       else if (kind === 'agent' && rest[0] === 'new') addNewAgent(position);
       else if (kind === 'agent') addToCanvas({ id: rest[0], kind: 'agent' }, position);
       else if (kind === 'location') addToCanvas({ id: rest[0], kind: 'location' }, position);
@@ -265,6 +267,7 @@ function ScratchCanvasInner({
         { id: 'sim', label: 'Simulation', dragPayload: 'pipeline:sim', onAdd: () => addPipelineNode('sim') },
         { id: 'treatment', label: 'Treatment', dragPayload: 'pipeline:treatment', onAdd: () => addPipelineNode('treatment') },
         { id: 'image', label: 'Image', dragPayload: 'pipeline:frame', onAdd: () => addPipelineNode('frame') },
+        { id: 'photo', label: 'Photo', sublabel: 'upload an image from your computer', dragPayload: 'pipeline:photo', onAdd: () => addPipelineNode('photo') },
         { id: 'storyboard', label: 'Storyboard', dragPayload: 'pipeline:storyboard', onAdd: () => addPipelineNode('storyboard') },
         { id: 'video', label: 'Video', dragPayload: 'pipeline:video', onAdd: () => addPipelineNode('video') },
         { id: 'text-viewer', label: 'Text', sublabel: 'view a Treatment\'s text', dragPayload: 'pipeline:text-viewer', onAdd: () => addPipelineNode('text-viewer') },

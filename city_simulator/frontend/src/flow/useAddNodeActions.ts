@@ -37,7 +37,7 @@ export interface AddNodeActionsOptions {
   onMusicUpdate: (nodeId: string, patch: { prompt?: string; negativePrompt?: string; url?: string }) => void;
 }
 
-const PIPELINE_TYPES = new Set(['sim', 'treatment', 'frame', 'video', 'style', 'storyboard', 'population']);
+const PIPELINE_TYPES = new Set(['sim', 'treatment', 'frame', 'video', 'style', 'storyboard', 'population', 'photo']);
 
 export function useAddNodeActions({
   data,
@@ -69,7 +69,7 @@ export function useAddNodeActions({
   );
 
   const addPipelineNode = useCallback(
-    (type: 'sim' | 'treatment' | 'video' | 'text-viewer' | 'frame' | 'storyboard' | 'population', position?: XYPosition) => {
+    (type: 'sim' | 'treatment' | 'video' | 'text-viewer' | 'frame' | 'storyboard' | 'population' | 'photo', position?: XYPosition) => {
       setNodes((prev) => {
         const list = prev ?? [];
         const pos =
@@ -134,6 +134,9 @@ export function useAddNodeActions({
               data: { prompt: '', attachTo: ownerEntityId, ownerEntityId, onUpdate: pipeline.onFrameUpdate, onCityChanged: pipeline.onCityChanged },
             },
           ];
+        }
+        if (type === 'photo') {
+          return [...list, { ...base, type, width: 540, height: 400, data: { onUpdate: pipeline.onPhotoUpdate } }];
         }
         if (type === 'population') {
           return [

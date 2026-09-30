@@ -9,6 +9,7 @@ import type { GraphEdge, GraphNode, Style } from '../api/types';
 import { newNodeId } from './graphIds';
 import { nonOverlappingGridPositions, type Rect } from './layout';
 import type { FrameNodeData } from './nodes/FrameNode';
+import type { PhotoNodeData } from './nodes/PhotoNode';
 import type { StyleNodeData } from './nodes/StyleNode';
 import type { VideoNodeData } from './nodes/VideoNode';
 import type { PipelineCallbacks } from './pipeline';
@@ -18,7 +19,7 @@ import type { PipelineCallbacks } from './pipeline';
 // yet -- good enough for "don't land a new Frame on top of you," not
 // meant to be pixel-exact. Media nodes' floor comes straight from
 // FrameNode/ImageNode/VideoNode's own NodeShell minWidth/minHeight.
-const MEDIA_NODE_TYPES = new Set(['frame', 'video']);
+const MEDIA_NODE_TYPES = new Set(['frame', 'video', 'photo']);
 const WIDE_NODE_TYPES = new Set(['sim', 'treatment', 'style']);
 
 function nodeFootprint(n: Node): { width: number; height: number } {
@@ -100,6 +101,10 @@ export function usePipelineCallbacks(
   // for; only Image (still entity-attached, per-agent/per-place) and
   // Style still trigger it, elsewhere.
   const onFrameUpdate = useCallback((nodeId: string, patch: Partial<FrameNodeData>) => {
+    setNodes((prev) => (prev ? prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, ...patch } } : n)) : prev));
+  }, [setNodes]);
+
+  const onPhotoUpdate = useCallback((nodeId: string, patch: Partial<PhotoNodeData>) => {
     setNodes((prev) => (prev ? prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, ...patch } } : n)) : prev));
   }, [setNodes]);
 
@@ -302,6 +307,7 @@ export function usePipelineCallbacks(
     onPopulationChange,
     onCityChanged,
     onFrameUpdate,
+    onPhotoUpdate,
     onVideoUpdate,
     onStyleLoaded,
     onStyleUpdate,

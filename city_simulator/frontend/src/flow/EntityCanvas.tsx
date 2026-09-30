@@ -12,6 +12,7 @@ import { entityToGraphNode, toEntityRenderNode } from './entityNodeKit';
 import { NewAgentModal } from './NewAgentModal';
 import { AgentNode } from './nodes/AgentNode';
 import { FrameNode } from './nodes/FrameNode';
+import { PhotoNode } from './nodes/PhotoNode';
 import type { FrameNodeData } from './nodes/FrameNode';
 import { LocationNode } from './nodes/LocationNode';
 import { MissingNode } from './nodes/MissingNode';
@@ -46,6 +47,7 @@ const nodeTypes = {
   population: PopulationNode,
   treatment: TreatmentNode,
   frame: FrameNode,
+  photo: PhotoNode,
   video: VideoNode,
   style: StyleNode,
   storyboard: StoryboardNode,
@@ -53,7 +55,7 @@ const nodeTypes = {
   'scratch-music': ScratchMusicNode,
 };
 
-const PIPELINE_TYPES = new Set(['population', 'sim', 'treatment', 'frame', 'video', 'style', 'storyboard', 'text-viewer']);
+const PIPELINE_TYPES = new Set(['photo', 'population', 'sim', 'treatment', 'frame', 'video', 'style', 'storyboard', 'text-viewer']);
 const SCRATCH_TYPES = new Set(['scratch-music']);
 
 // This entity's own drill-in canvas, with the *same* full node palette
@@ -264,7 +266,7 @@ function CanvasInner({
       const position = screenToFlowPosition({ x: e.clientX, y: e.clientY });
       const [kind, ...rest] = payload.split(':');
       if (kind === 'media') addExistingMedia(rest[0], position);
-      else if (kind === 'pipeline') addPipelineNode(rest[0] as 'sim' | 'treatment' | 'video' | 'text-viewer' | 'frame' | 'storyboard' | 'population', position);
+      else if (kind === 'pipeline') addPipelineNode(rest[0] as 'sim' | 'treatment' | 'video' | 'text-viewer' | 'frame' | 'storyboard' | 'population' | 'photo', position);
       else if (kind === 'style' && rest[0] === 'new') addStyleNode(position);
       else if (kind === 'style') addStyleNode(position, styles.find((s) => s.id === rest[0]));
       else if (kind === 'scratch') addScratchNode('scratch-music', position);
@@ -285,6 +287,7 @@ function CanvasInner({
       label: 'Nodes',
       items: [
         { id: 'image', label: 'Image', sublabel: 'saves to this one\'s media by default', dragPayload: 'pipeline:frame', onAdd: () => addPipelineNode('frame') },
+        { id: 'photo', label: 'Photo', sublabel: 'upload an image from your computer', dragPayload: 'pipeline:photo', onAdd: () => addPipelineNode('photo') },
         { id: 'population', label: 'Population', sublabel: 'a new resident + portraits for N locations', dragPayload: 'pipeline:population', onAdd: () => addPipelineNode('population') },
         { id: 'sim', label: 'Simulation', dragPayload: 'pipeline:sim', onAdd: () => addPipelineNode('sim') },
         { id: 'treatment', label: 'Treatment', dragPayload: 'pipeline:treatment', onAdd: () => addPipelineNode('treatment') },

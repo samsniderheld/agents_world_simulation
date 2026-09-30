@@ -10,6 +10,7 @@ import type { GraphNode, HistoryData, Style } from '../api/types';
 import type { AgentNodeData } from './nodes/AgentNode';
 import type { FrameNodeData } from './nodes/FrameNode';
 import type { LocationNodeData } from './nodes/LocationNode';
+import type { PhotoNodeData } from './nodes/PhotoNode';
 import type { PopulationNodeData } from './nodes/PopulationNode';
 import type { SimulationNodeData } from './nodes/SimulationNode';
 import type { StoryboardNodeData } from './nodes/StoryboardNode';
@@ -43,6 +44,7 @@ export interface PipelineCallbacks {
   onPopulationChange: (nodeId: string, patch: { count?: number }) => void;
   onCityChanged: () => void;
   onFrameUpdate: (nodeId: string, patch: Partial<FrameNodeData>) => void;
+  onPhotoUpdate: (nodeId: string, patch: Partial<PhotoNodeData>) => void;
   onVideoUpdate: (nodeId: string, patch: Partial<VideoNodeData>) => void;
   onStyleLoaded: (nodeId: string, style: Style) => void;
   onStyleUpdate: (nodeId: string, patch: Partial<Style>) => void;
@@ -196,6 +198,21 @@ export function toPipelineRenderNode(gn: GraphNode, cb: PipelineCallbacks, owner
     // same way Video's sourceImagePath has no state here either.
     return { id: gn.id, type: 'text-viewer', position: gn.position, width: gn.width, height: gn.height, data: {} };
   }
+  if (gn.type === 'photo') {
+    return {
+      id: gn.id,
+      type: 'photo',
+      position: gn.position,
+      width: gn.width ?? 540,
+      height: gn.height ?? 400,
+      data: {
+        url: gn.data.url as string | undefined,
+        localPath: gn.data.localPath as string | undefined,
+        fileName: gn.data.fileName as string | undefined,
+        onUpdate: cb.onPhotoUpdate,
+      },
+    };
+  }
   if (gn.type === 'population') {
     return {
       id: gn.id,
@@ -289,6 +306,10 @@ export function pipelineToGraphNode(n: Node): GraphNode | null {
   if (n.type === 'text-viewer') {
     return { id: n.id, type: 'text-viewer', position: n.position, width: n.width, height: n.height, data: {} };
   }
+  if (n.type === 'photo') {
+    const d = n.data as PhotoNodeData;
+    return { id: n.id, type: 'photo', position: n.position, width: n.width, height: n.height, data: { url: d.url, localPath: d.localPath, fileName: d.fileName } };
+  }
   if (n.type === 'population') {
     const d = n.data as PopulationNodeData;
     return { id: n.id, type: 'population', position: n.position, width: n.width, height: n.height, data: { count: d.count } };
@@ -354,7 +375,7 @@ function connectedEntityReferenceImages(nodeId: string, edges: Edge[], byId: Map
 // of connectedEntityReferenceImages's result, since a connected Agent/
 // Location with zero existing photos yet should still show its port as
 // "live," not fall back to looking exactly like nothing's wired at all.
-// An Image node's image:in port -- the actual files of the other Image
+// An Image node's image:in port -- the actual files of the Image or Photo
 // nodes wired in. Order follows
 // edge order; a node wired to itself, or one with nothing generated yet,
 // contributes nothing.
@@ -375,12 +396,23 @@ function entityName(historyData: HistoryData, id: string | undefined): string | 
   return historyData.characters.find((c) => c.id === id)?.name ?? historyData.places.find((p) => p.id === id)?.name;
 }
 
+// The picture of whatever's wired into an image:in port -- an Image node
+// (either way it keeps its result) or an uploaded Photo.
+function sourceImage(source: Node | undefined, historyData: HistoryData): { imageUrl?: string; imagePath?: string } {
+  if (source?.type === 'frame') return frameImage(source.data as FrameNodeData, historyData);
+  if (source?.type === 'photo') {
+    const d = source.data as PhotoNodeData;
+    return { imageUrl: d.url ? visuals.fileUrl(d.url) : undefined, imagePath: d.localPath };
+  }
+  return {};
+}
+
 function connectedInputImagePaths(nodeId: string, edges: Edge[], byId: Map<string, Node>, historyData: HistoryData): string[] {
   const paths: string[] = [];
   for (const e of edges) {
     if (e.target !== nodeId || e.targetHandle !== 'image:in' || e.source === nodeId) continue;
     const source = byId.get(e.source);
-    const path = source?.type === 'frame' ? frameImage(source.data as FrameNodeData, historyData).imagePath : undefined;
+    const path = sourceImage(source, historyData).imagePath;
     if (path) paths.push(path);
   }
   return paths;
@@ -470,11 +502,9 @@ export function enrichPipelineNodes(nodes: Node[], edges: Edge[], historyData: H
       const source = imgEdge && byId.get(imgEdge.source);
       let sourceImagePath: string | undefined;
       let sourceImageUrl: string | undefined;
-      if (source?.type === 'frame') {
-        const img = frameImage(source.data as FrameNodeData, historyData);
-        sourceImagePath = img.imagePath;
-        sourceImageUrl = img.imageUrl;
-      }
+      const img = sourceImage(source, historyData);
+      sourceImagePath = img.imagePath;
+      sourceImageUrl = img.imageUrl;
       const merged = mergeStyles(connectedStyles(n.id, edges, byId));
       return {
         ...n,

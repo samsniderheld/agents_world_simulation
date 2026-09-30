@@ -27,6 +27,7 @@ import { entityToGraphNode, toEntityRenderNode } from './entityNodeKit';
 import { NewAgentModal } from './NewAgentModal';
 import { AgentNode } from './nodes/AgentNode';
 import { FrameNode } from './nodes/FrameNode';
+import { PhotoNode } from './nodes/PhotoNode';
 import { LocationNode } from './nodes/LocationNode';
 import { MissingNode } from './nodes/MissingNode';
 import { ScratchMusicNode, type ScratchMusicNodeData } from './nodes/ScratchMusicNode';
@@ -59,6 +60,7 @@ const nodeTypes = {
   population: PopulationNode,
   treatment: TreatmentNode,
   frame: FrameNode,
+  photo: PhotoNode,
   video: VideoNode,
   style: StyleNode,
   storyboard: StoryboardNode,
@@ -72,7 +74,7 @@ const nodeTypes = {
 // canvas now (per the requirement that no node type be scoped to
 // "wherever it happened to make the most obvious sense"), so this same
 // set applies here, in EntityCanvas, and in ScratchScreen alike.
-const PIPELINE_TYPES = new Set(['population', 'sim', 'treatment', 'frame', 'video', 'style', 'storyboard', 'text-viewer']);
+const PIPELINE_TYPES = new Set(['photo', 'population', 'sim', 'treatment', 'frame', 'video', 'style', 'storyboard', 'text-viewer']);
 const SCRATCH_TYPES = new Set(['scratch-music']);
 
 function CanvasInner({ cityId, data, onDataRefresh }: { cityId: string; data: HistoryData; onDataRefresh: () => void }) {
@@ -228,7 +230,7 @@ function CanvasInner({ cityId, data, onDataRefresh }: { cityId: string; data: Hi
       e.preventDefault();
       const position = screenToFlowPosition({ x: e.clientX, y: e.clientY });
       const [kind, ...rest] = payload.split(':');
-      if (kind === 'pipeline') addPipelineNode(rest[0] as 'sim' | 'treatment' | 'video' | 'text-viewer' | 'frame' | 'storyboard' | 'population', position);
+      if (kind === 'pipeline') addPipelineNode(rest[0] as 'sim' | 'treatment' | 'video' | 'text-viewer' | 'frame' | 'storyboard' | 'population' | 'photo', position);
       else if (kind === 'style' && rest[0] === 'new') addStyleNode(position);
       else if (kind === 'style') addStyleNode(position, styles.find((s) => s.id === rest[0]));
       else if (kind === 'scratch') addScratchNode('scratch-music', position);
@@ -252,6 +254,7 @@ function CanvasInner({ cityId, data, onDataRefresh }: { cityId: string; data: Hi
         { id: 'sim', label: 'Simulation', dragPayload: 'pipeline:sim', onAdd: () => addPipelineNode('sim') },
         { id: 'treatment', label: 'Treatment', dragPayload: 'pipeline:treatment', onAdd: () => addPipelineNode('treatment') },
         { id: 'image', label: 'Image', dragPayload: 'pipeline:frame', onAdd: () => addPipelineNode('frame') },
+        { id: 'photo', label: 'Photo', sublabel: 'upload an image from your computer', dragPayload: 'pipeline:photo', onAdd: () => addPipelineNode('photo') },
         { id: 'storyboard', label: 'Storyboard', dragPayload: 'pipeline:storyboard', onAdd: () => addPipelineNode('storyboard') },
         { id: 'video', label: 'Video', dragPayload: 'pipeline:video', onAdd: () => addPipelineNode('video') },
         { id: 'text-viewer', label: 'Text', sublabel: 'view a Treatment\'s text', dragPayload: 'pipeline:text-viewer', onAdd: () => addPipelineNode('text-viewer') },

@@ -157,6 +157,15 @@
   display: block;
 }
 
+.node-media-box.is-drop-target {
+  border-color: var(--accent);
+}
+
+.node-photo-empty {
+  font-size: 12px;
+  cursor: pointer;
+}
+
 .node-media-box.is-expandable {
   cursor: zoom-in;
 }
