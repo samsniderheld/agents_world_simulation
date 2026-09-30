@@ -79,3 +79,16 @@ class InsightTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ServedContextTests(unittest.TestCase):
+    def test_budget_follows_the_servers_real_limit(self):
+        from unittest import mock
+        from agents.gateway import Backend
+        b = Backend("openai", "Qwen/Qwen3-30B-A3B-Instruct-2507-FP8", "http://stub:8000/v1")
+        fake = mock.Mock()
+        fake.json.return_value = {"data": [{"id": b.model, "max_model_len": 8192}]}
+        with mock.patch("agents.city.insight.httpx.get", return_value=fake):
+            self.assertEqual(insight._budget_chars({"context_tokens": 16384}, b), (8192 - 1400) * 3)
+        with mock.patch("agents.city.insight.httpx.get", side_effect=OSError("down")):
+            self.assertEqual(insight._budget_chars({"context_tokens": 16384}, b), (16384 - 1400) * 3)

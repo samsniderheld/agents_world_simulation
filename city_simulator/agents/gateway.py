@@ -78,6 +78,7 @@ class LLMResult:
     tokens_in: int = 0
     tokens_out: int = 0
     seconds: float = 0.0
+    detail: str = ""                   # the server's own message for the last failure, if any
 
 
 @dataclasses.dataclass
@@ -359,6 +360,7 @@ class Gateway:
         attempts = 0
         tokens_in = tokens_out = 0
         last_error = "unknown"
+        last_detail = ""
         retries_left = self.max_retries
 
         while True:
@@ -387,6 +389,7 @@ class Gateway:
                 self._count("backpressure")
                 error = "timeout"
             except ProviderHTTPError as e:
+                last_detail = str(e)[:300]
                 if e.status in (429, 503, 529):
                     limiter.on_backpressure()
                     self._count("backpressure")
@@ -439,7 +442,7 @@ class Gateway:
         self.stats["errors"][last_error] += 1
         self.totals["errors"][last_error] += 1
         return self._done(LLMResult(False, "", None, last_error, attempts, tokens_in, tokens_out,
-                                    time.monotonic() - started))
+                                    time.monotonic() - started, last_detail))
 
     def _done(self, result: LLMResult) -> LLMResult:
         self._count("ok" if result.ok else "failures")

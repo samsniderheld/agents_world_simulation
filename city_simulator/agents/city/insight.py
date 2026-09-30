@@ -16,6 +16,8 @@ into plain log lines and cut to fit the model's context window:
 import asyncio
 import re
 
+import httpx
+
 import hardware
 
 from ..gateway import Gateway, LLMRequest, backends_for_profile
@@ -104,11 +106,37 @@ def _saved_occupancy(summary: dict) -> str:
     return "; ".join(f"{p}: {n} people" for p, n in sorted(counts.items(), key=lambda kv: -kv[1])[:10])
 
 
-def _budget_chars(meta: dict) -> int:
-    """How much log fits: the context window minus room for the prompt's
-    other parts and the answer, at ~3 characters per token."""
+def _backends(meta: dict) -> dict:
+    profile = hardware.city_profile(meta.get("profile") or "auto")
+    return backends_for_profile(profile, meta.get("provider"), meta.get("chat_model"),
+                                meta.get("background_provider"), meta.get("background_model"))
+
+
+def _served_context(backend) -> int:
+    """The context length the server really allows, where it says (vLLM and
+    SGLang list max_model_len per model) -- it can be smaller than the
+    hardware profile assumes (e.g. vLLM started with --max-model-len 8192)."""
+    if backend.provider != "openai":
+        return None
+    try:
+        headers = {"Authorization": f"Bearer {backend.api_key}"} if backend.api_key else {}
+        data = httpx.get(f"{backend.base_url}/models", headers=headers, timeout=5).json().get("data", [])
+        lengths = [m.get("max_model_len") for m in data if m.get("max_model_len")]
+        chosen = next((m.get("max_model_len") for m in data if m.get("id") == backend.model and m.get("max_model_len")), None)
+        return chosen or (min(lengths) if lengths else None)
+    except Exception:
+        return None
+
+
+def _budget_chars(meta: dict, backend=None) -> int:
+    """How much log fits: the context window (the server's real limit when
+    it reports one) minus room for the prompt's other parts and the answer,
+    at ~3 characters per token."""
     context = int(meta.get("context_tokens") or 4096)
-    return max(3000, int((context - 1200) * 3))
+    served = _served_context(backend) if backend is not None else None
+    if served:
+        context = min(context, int(served))
+    return max(2000, int((context - 1400) * 3))
 
 
 def recent_lines(lines: list, budget: int) -> list:
@@ -172,7 +200,8 @@ def report(previous: str = None, transport=None) -> dict:
         raise ValueError("there's no CITY run to report on yet")
     if not material["lines"]:
         raise ValueError("the run hasn't recorded anything yet -- give it a tick")
-    lines = recent_lines(material["lines"], _budget_chars(material["meta"]) - len(previous or ""))
+    backend = _backends(material["meta"])["hero"]
+    lines = recent_lines(material["lines"], _budget_chars(material["meta"], backend) - len(previous or ""))
     text = _ask_model(material, prompts.city_report(_header(material), lines, previous), transport, max_tokens=700)
     return {"text": text, "lines_used": len(lines), "lines_total": len(material["lines"]),
             "source": material["source"], "started_at": material["started_at"]}
@@ -185,17 +214,15 @@ def ask(question: str, transport=None) -> dict:
     material = gather()
     if material is None:
         raise ValueError("there's no CITY run to ask about yet")
-    lines = relevant_lines(material["lines"], question, _budget_chars(material["meta"]) - len(question))
+    backend = _backends(material["meta"])["hero"]
+    lines = relevant_lines(material["lines"], question, _budget_chars(material["meta"], backend) - len(question))
     text = _ask_model(material, prompts.city_question(_header(material), lines, question), transport, max_tokens=500)
     return {"text": text, "lines_used": len(lines), "lines_total": len(material["lines"]),
             "source": material["source"], "started_at": material["started_at"]}
 
 
 def _ask_model(material: dict, specifics: str, transport, max_tokens: int) -> str:
-    meta = material["meta"]
-    profile = hardware.city_profile(meta.get("profile") or "auto")
-    backends = backends_for_profile(profile, meta.get("provider"), meta.get("chat_model"),
-                                    meta.get("background_provider"), meta.get("background_model"))
+    backends = _backends(material["meta"])
 
     async def call():
         async with Gateway(backends, transport=transport) as gw:
@@ -205,5 +232,7 @@ def _ask_model(material: dict, specifics: str, transport, max_tokens: int) -> st
                 max_tokens=max_tokens, temperature=0.4, kind="insight_report")]))[0]
     result = asyncio.run(call())
     if not result.ok:
-        raise RuntimeError(f"the model didn't answer ({result.error})")
+        b = backends["hero"]
+        raise RuntimeError(f"the model ({b.label()} at {b.base_url}) didn't answer: {result.error}"
+                           + (f" -- {result.detail}" if result.detail else ""))
     return result.text.strip()
