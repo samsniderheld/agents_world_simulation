@@ -203,6 +203,9 @@ def run(ticks: int = 8, provider: str = None, chat_model: str = None, embed_mode
             for a in agents
         ],
         meta={
+            # SCENE vs CITY (agents/city/): anything reading a persisted
+            # run treats one without this key as "scene".
+            "mode": "scene",
             "provider": config.PROVIDER,
             "chat_model": {"claude": config.CLAUDE_MODEL, "openai": config.OPENAI_COMPAT_MODEL}.get(config.PROVIDER, config.CHAT_MODEL),
             "embed_model": config.EMBED_MODEL,

@@ -168,6 +168,46 @@ export const agentsApi = {
       }),
     }),
 
+  // A CITY run (agents/city/) -- same /run endpoint and job slot as a
+  // SCENE run, with mode "city".
+  runCity: (params: {
+    agentNames: string[];
+    backgroundCount: number;
+    profile?: string;
+    heroProvider?: string;
+    heroModel?: string;
+    backgroundProvider?: string;
+    backgroundModel?: string;
+    ticks: number;
+    tickMinutes?: number;
+    startTime?: string;
+    directive?: string;
+    placeId?: string;
+    persistHeroMemories?: boolean;
+    seed?: number;
+  }) =>
+    request<{ ok: boolean; error: string | null }>('/api/agents/run', {
+      method: 'POST',
+      body: json({
+        mode: 'city',
+        agent_names: params.agentNames,
+        background_count: params.backgroundCount,
+        profile: params.profile,
+        hero_provider: params.heroProvider,
+        hero_model: params.heroModel,
+        background_provider: params.backgroundProvider,
+        background_model: params.backgroundModel,
+        ticks: params.ticks,
+        tick_minutes: params.tickMinutes,
+        start_time: params.startTime,
+        directive: params.directive,
+        place_id: params.placeId,
+        location_mode: params.placeId ? 'convene' : 'grounded',
+        persist_hero_memories: params.persistHeroMemories ?? true,
+        seed: params.seed,
+      }),
+    }),
+
   stop: () => request<{ ok: boolean }>('/api/agents/stop', { method: 'POST' }),
 
   generateTreatment: (

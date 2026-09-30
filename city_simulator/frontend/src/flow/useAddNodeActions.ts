@@ -10,7 +10,7 @@ import type { Character, HistoryData, Style } from '../api/types';
 import { toEntityRenderNode } from './entityNodeKit';
 import { newNodeId } from './graphIds';
 import { gridPosition } from './layout';
-import type { PipelineCallbacks } from './pipeline';
+import { citySimSettings, type PipelineCallbacks } from './pipeline';
 
 export interface AddNodeActionsOptions {
   data: HistoryData | null;
@@ -37,7 +37,7 @@ export interface AddNodeActionsOptions {
   onMusicUpdate: (nodeId: string, patch: { prompt?: string; negativePrompt?: string; url?: string }) => void;
 }
 
-const PIPELINE_TYPES = new Set(['sim', 'treatment', 'frame', 'video', 'style', 'storyboard', 'population', 'photo']);
+const PIPELINE_TYPES = new Set(['sim', 'citysim', 'treatment', 'frame', 'video', 'style', 'storyboard', 'population', 'photo']);
 
 export function useAddNodeActions({
   data,
@@ -69,7 +69,7 @@ export function useAddNodeActions({
   );
 
   const addPipelineNode = useCallback(
-    (type: 'sim' | 'treatment' | 'video' | 'text-viewer' | 'frame' | 'storyboard' | 'population' | 'photo', position?: XYPosition) => {
+    (type: 'sim' | 'treatment' | 'video' | 'text-viewer' | 'frame' | 'storyboard' | 'population' | 'photo' | 'citysim', position?: XYPosition) => {
       setNodes((prev) => {
         const list = prev ?? [];
         const pos =
@@ -102,6 +102,8 @@ export function useAddNodeActions({
               },
             },
           ];
+        if (type === 'citysim')
+          return [...list, { ...base, type, data: { ...citySimSettings(), agentNames: [], onChange: pipeline.onCitySimChange } }];
         if (type === 'treatment')
           return [
             ...list,

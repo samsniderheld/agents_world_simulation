@@ -20,7 +20,7 @@ import type { PipelineCallbacks } from './pipeline';
 // meant to be pixel-exact. Media nodes' floor comes straight from
 // FrameNode/ImageNode/VideoNode's own NodeShell minWidth/minHeight.
 const MEDIA_NODE_TYPES = new Set(['frame', 'video', 'photo']);
-const WIDE_NODE_TYPES = new Set(['sim', 'treatment', 'style']);
+const WIDE_NODE_TYPES = new Set(['sim', 'citysim', 'treatment', 'style']);
 
 function nodeFootprint(n: Node): { width: number; height: number } {
   if (n.measured?.width && n.measured?.height) return { width: n.measured.width, height: n.measured.height };
@@ -60,6 +60,10 @@ export function usePipelineCallbacks(
   }, [setNodes]);
 
   const onPopulationChange = useCallback((nodeId: string, patch: { count?: number }) => {
+    setNodes((prev) => (prev ? prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, ...patch } } : n)) : prev));
+  }, [setNodes]);
+
+  const onCitySimChange = useCallback((nodeId: string, patch: Record<string, unknown>) => {
     setNodes((prev) => (prev ? prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, ...patch } } : n)) : prev));
   }, [setNodes]);
 
@@ -305,6 +309,7 @@ export function usePipelineCallbacks(
     onCreateStoryboard,
     onExpandStoryboard,
     onPopulationChange,
+    onCitySimChange,
     onCityChanged,
     onFrameUpdate,
     onPhotoUpdate,

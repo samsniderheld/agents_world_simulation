@@ -8,6 +8,7 @@ import type { Edge, Node } from '@xyflow/react';
 import { city, visuals } from '../api/client';
 import type { GraphNode, HistoryData, Style } from '../api/types';
 import type { AgentNodeData } from './nodes/AgentNode';
+import type { CitySimulationNodeData } from './nodes/CitySimulationNode';
 import type { FrameNodeData } from './nodes/FrameNode';
 import type { LocationNodeData } from './nodes/LocationNode';
 import type { PhotoNodeData } from './nodes/PhotoNode';
@@ -42,6 +43,7 @@ export interface PipelineCallbacks {
   ) => void;
   onExpandStoryboard: (storyboardId: string) => void;
   onPopulationChange: (nodeId: string, patch: { count?: number }) => void;
+  onCitySimChange: (nodeId: string, patch: Partial<CitySimulationNodeData>) => void;
   onCityChanged: () => void;
   onFrameUpdate: (nodeId: string, patch: Partial<FrameNodeData>) => void;
   onPhotoUpdate: (nodeId: string, patch: Partial<PhotoNodeData>) => void;
@@ -68,7 +70,35 @@ export function migrateImageNode(gn: GraphNode, ownerEntityId?: string): GraphNo
   return gn;
 }
 
+// The City Simulation node's saved settings, with defaults for any a
+// saved graph doesn't have yet. Shared by the load path and "+ add".
+export function citySimSettings(d: Record<string, unknown> = {}) {
+  return {
+    backgroundCount: (d.backgroundCount as number) ?? 100,
+    profile: (d.profile as string) ?? 'auto',
+    heroProvider: (d.heroProvider as string) ?? '',
+    heroModel: (d.heroModel as string) ?? '',
+    backgroundProvider: (d.backgroundProvider as string) ?? '',
+    backgroundModel: (d.backgroundModel as string) ?? '',
+    ticks: (d.ticks as number) ?? 16,
+    tickMinutes: (d.tickMinutes as number) ?? 30,
+    startTime: (d.startTime as string) ?? '06:00',
+    directive: (d.directive as string) ?? '',
+    persistHeroMemories: (d.persistHeroMemories as boolean) ?? true,
+  };
+}
+
 export function toPipelineRenderNode(gn: GraphNode, cb: PipelineCallbacks, ownerEntityId?: string): Node | null {
+  if (gn.type === 'citysim') {
+    return {
+      id: gn.id,
+      type: 'citysim',
+      position: gn.position,
+      width: gn.width,
+      height: gn.height,
+      data: { ...citySimSettings(gn.data), agentNames: [], onChange: cb.onCitySimChange },
+    };
+  }
   if (gn.type === 'sim') {
     return {
       id: gn.id,
@@ -253,6 +283,9 @@ export function toPipelineRenderNode(gn: GraphNode, cb: PipelineCallbacks, owner
 }
 
 export function pipelineToGraphNode(n: Node): GraphNode | null {
+  if (n.type === 'citysim') {
+    return { id: n.id, type: 'citysim', position: n.position, width: n.width, height: n.height, data: citySimSettings(n.data as CitySimulationNodeData) };
+  }
   if (n.type === 'sim') {
     const d = n.data as SimulationNodeData;
     return {
@@ -448,7 +481,7 @@ export function enrichPipelineNodes(nodes: Node[], edges: Edge[], historyData: H
   const byId = new Map(nodes.map((n) => [n.id, n]));
 
   return nodes.map((n) => {
-    if (n.type === 'sim') {
+    if (n.type === 'sim' || n.type === 'citysim') {
       const agentNames = connectedAgents(n.id, 'agents:in', edges, byId).map((a) => a.name);
       const placeEdge = edges.find((e) => e.target === n.id && e.targetHandle === 'place:in');
       const placeSource = placeEdge && byId.get(placeEdge.source);
@@ -463,7 +496,7 @@ export function enrichPipelineNodes(nodes: Node[], edges: Edge[], historyData: H
       if (source?.type === 'agent') {
         const c = (source.data as AgentNodeData).character;
         candidates = [{ id: c.id, name: c.name }];
-      } else if (source?.type === 'sim') {
+      } else if (source?.type === 'sim' || source?.type === 'citysim') {
         candidates = connectedAgents(source.id, 'agents:in', edges, byId);
       }
       // Extra cast/setting context from the Treatment's own agent:in/

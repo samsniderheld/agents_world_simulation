@@ -10,6 +10,7 @@ from citystate import store as citystate
 from jsonutil import json_response
 
 from . import jobs, providers, recorder, simulation, treatment
+from .city import recorder as city_recorder
 
 bp = Blueprint("agents", __name__, url_prefix="/api/agents")
 
@@ -35,6 +36,8 @@ def models():
 
 @bp.get("/state")
 def state():
+    if jobs.current_mode() == "city":
+        return json_response({"status": {**jobs.get_status(), "mode": "city"}, **city_recorder.state()})
     _, total = recorder.snapshot(0)
     return json_response({
         "status": jobs.get_status(),
@@ -48,6 +51,10 @@ def state():
 @bp.get("/events")
 def events():
     since = int(request.args.get("since", "0"))
+    if jobs.current_mode() == "city":
+        # `since` is a cursor (the last event's seq), not a list index.
+        events, cursor = city_recorder.snapshot(since, tier=request.args.get("tier") or "hero")
+        return json_response({"events": events, "next": cursor})
     events, total = recorder.snapshot(since)
     return json_response({"events": events, "next": total})
 
@@ -60,9 +67,55 @@ def _start_time(value):
     return f"{int(match.group(1)):02d}:{match.group(2)}"
 
 
+def _convene_place_name(body):
+    """The place name a Location wired into the node resolves to, None
+    when there isn't one; raises ValueError for an unknown place id."""
+    place_id = body.get("place_id")
+    if not place_id or (body.get("location_mode") or "grounded") != "convene":
+        return None
+    city = citystate.get()
+    place = next((p for p in (city or {}).get("places") or [] if p["id"] == place_id), None)
+    if place is None:
+        raise ValueError(f"no such place: {place_id!r}")
+    return place["name"]
+
+
+def _city_params(body):
+    """The City Simulation node's run request -> agents.city.run.run()'s
+    keyword arguments."""
+    def opt_int(key, lo, hi):
+        return max(lo, min(hi, int(body[key]))) if body.get(key) not in (None, "") else None
+    return {
+        "hero_names": body.get("agent_names") or None,
+        "background_count": opt_int("background_count", 0, 5000) or 0,
+        "profile": body.get("profile") or "auto",
+        "hero_provider": body.get("hero_provider") or None,
+        "hero_model": body.get("hero_model") or None,
+        "background_provider": body.get("background_provider") or None,
+        "background_model": body.get("background_model") or None,
+        "ticks": opt_int("ticks", 1, 1000) or 8,
+        "tick_minutes": opt_int("tick_minutes", 1, 1440),
+        "start_time": _start_time(body.get("start_time")),
+        "directive": (body.get("directive") or "").strip() or None,
+        "convene_at": _convene_place_name(body),
+        "persist_hero_memories": bool(body.get("persist_hero_memories", True)),
+        "seed": opt_int("seed", 0, 2**31 - 1),
+    }
+
+
 @bp.post("/run")
 def run():
     body = request.get_json(silent=True) or {}
+
+    # "scene" (the default, and what every client sent before CITY mode
+    # existed) or "city". Both share jobs.py's single slot.
+    if (body.get("mode") or "scene") == "city":
+        try:
+            params = _city_params(body)
+        except (ValueError, TypeError) as e:
+            return json_response({"ok": False, "error": str(e)}, status=400)
+        ok, error = jobs.start(params, mode="city")
+        return json_response({"ok": ok, "error": error}, status=200 if ok else 409)
 
     # "convene" (the node-based UI's Location -> Simulation edge) makes
     # every selected agent start this run at `place_id` instead of their

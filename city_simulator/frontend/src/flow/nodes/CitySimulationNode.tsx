@@ -1,0 +1,287 @@
+import { useEffect, useRef, useState } from 'react';
+import type { UIEvent } from 'react';
+import type { Node, NodeProps } from '@xyflow/react';
+import { agentsApi } from '../../api/client';
+import type { AgentEvent } from '../../api/types';
+import { eventLine } from '../../inspector/format';
+import { useJobStore } from '../../state/jobStore';
+import { NodeShell } from './NodeShell';
+import { NumberField } from './NumberField';
+import { Port } from './Port';
+
+// CITY mode (agents/city/): wired-in agents are the HERO tier (full
+// cognition); `backgroundCount` more residents are generated from the
+// city's own data and follow schedules, touching the LLM only rarely.
+// SCENE mode's Simulation node is a separate node and unchanged.
+export interface CitySimulationNodeData extends Record<string, unknown> {
+  backgroundCount: number;
+  // A CITY hardware profile (hardware.py's CITY_PROFILES) or "auto".
+  profile: string;
+  // Per-tier provider/model overrides; blank = the profile's choice.
+  heroProvider: string;
+  heroModel: string;
+  backgroundProvider: string;
+  backgroundModel: string;
+  ticks: number;
+  tickMinutes: number;
+  startTime: string;
+  directive: string;
+  // Append each hero's events to their saved record, as a SCENE run does.
+  persistHeroMemories: boolean;
+  // Resolved by pipeline.ts from the agents:in / place:in edges.
+  agentNames: string[];
+  placeId?: string;
+  placeName?: string;
+  onChange: (nodeId: string, patch: Partial<CitySimulationNodeData>) => void;
+}
+
+export type CitySimulationNodeType = Node<CitySimulationNodeData, 'citysim'>;
+
+const PROVIDERS = [
+  { value: '', label: 'profile default' },
+  { value: 'ollama', label: 'Ollama (local)' },
+  { value: 'openai', label: 'OpenAI-compatible (vLLM / SGLang / llama.cpp / MLX)' },
+  { value: 'claude', label: 'Claude (API)' },
+];
+
+const CITY_PROFILES = [
+  { value: 'auto', label: 'auto-detect hardware' },
+  { value: 'mac', label: 'Mac (Ollama, ≤64 GB)' },
+  { value: 'rtx5090', label: 'RTX 5090 (vLLM)' },
+  { value: 'h100', label: 'H100 (vLLM)' },
+];
+
+export function CitySimulationNode({ id, data, selected, height }: NodeProps<CitySimulationNodeType>) {
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [directive, setDirective] = useState(data.directive);
+  const [heroModel, setHeroModel] = useState(data.heroModel);
+  const [backgroundModel, setBackgroundModel] = useState(data.backgroundModel);
+  const [recent, setRecent] = useState<AgentEvent[]>([]);
+  const [watching, setWatching] = useState(false);
+  const cursorRef = useRef(0);
+  const logRef = useRef<HTMLDivElement>(null);
+  const stickToBottomRef = useRef(true);
+  const agentsState = useJobStore((s) => s.agentsState);
+
+  const globallyRunning = agentsState?.status.phase === 'running';
+  const isCityRun = agentsState?.status.mode === 'city';
+  const cityRunning = globallyRunning && isCityRun;
+  const live = watching || cityRunning;
+
+  useEffect(() => {
+    if (!live) return;
+    let cancelled = false;
+    let busy = false;
+    const poll = async () => {
+      if (busy) return;
+      busy = true;
+      try {
+        const state = await agentsApi.state();
+        const res = await agentsApi.events(cursorRef.current);
+        if (cancelled) return;
+        cursorRef.current = res.next;
+        if (res.events.length) setRecent((prev) => [...prev, ...(res.events as AgentEvent[])].slice(-2000));
+        if (state.status.phase !== 'running') setWatching(false);
+      } catch {
+        // transient -- the next poll retries
+      } finally {
+        busy = false;
+      }
+    };
+    poll();
+    const timer = setInterval(poll, 1500);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [live]);
+
+  const visibleEvents = recent.filter((e) => e.kind === 'action' || e.kind === 'dialogue' || e.kind === 'status');
+
+  useEffect(() => {
+    if (!stickToBottomRef.current) return;
+    const el = logRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [visibleEvents.length]);
+
+  function onLogScroll(e: UIEvent<HTMLDivElement>) {
+    const el = e.currentTarget;
+    stickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
+  }
+
+  const change = (patch: Partial<CitySimulationNodeData>) => data.onChange(id, patch);
+
+  async function run() {
+    setError(null);
+    setPending(true);
+    setRecent([]);
+    cursorRef.current = 0;
+    try {
+      const res = await agentsApi.runCity({
+        agentNames: data.agentNames,
+        backgroundCount: data.backgroundCount,
+        profile: data.profile,
+        heroProvider: data.heroProvider || undefined,
+        heroModel: heroModel.trim() || undefined,
+        backgroundProvider: data.backgroundProvider || undefined,
+        backgroundModel: backgroundModel.trim() || undefined,
+        ticks: data.ticks,
+        tickMinutes: data.tickMinutes,
+        startTime: data.startTime,
+        directive,
+        placeId: data.placeId,
+        persistHeroMemories: data.persistHeroMemories,
+      });
+      if (!res.ok) setError(res.error ?? 'failed to start');
+      else setWatching(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setPending(false);
+    }
+  }
+
+  const statusError = cityRunning || !isCityRun ? null : agentsState?.status.error;
+  const heroes = data.agentNames.length;
+
+  return (
+    <NodeShell typeLabel="City Simulation" selected={selected} running={cityRunning} error={Boolean(error || statusError)} wide>
+      <div className="node-title">City Simulation</div>
+      <div className="node-grounding">
+        {heroes ? `${heroes} hero${heroes === 1 ? '' : 'es'} connected` : 'no heroes wired: the city’s generated residents are the heroes'}
+      </div>
+      <div className="node-grounding">{data.placeName ? `heroes convene: ${data.placeName}` : 'everyone starts at their own place'}</div>
+
+      <div className="node-controls">
+        <NumberField
+          value={data.backgroundCount}
+          min={0}
+          max={1000}
+          title="Background residents"
+          onCommit={(v) => change({ backgroundCount: v })}
+        />
+        <span className="node-subtitle">background residents</span>
+      </div>
+
+      <textarea
+        className="node-prompt-input"
+        rows={2}
+        value={directive}
+        placeholder="Direction for the heroes (name background residents to include them)…"
+        onChange={(e) => setDirective(e.target.value)}
+        onBlur={() => directive !== data.directive && change({ directive })}
+      />
+
+      <div className="node-controls">
+        <span className="node-subtitle">hardware</span>
+        <select className="node-select" value={data.profile} onChange={(e) => change({ profile: e.target.value })}>
+          {CITY_PROFILES.map((p) => (
+            <option key={p.value} value={p.value}>
+              {p.label}
+            </option>
+          ))}
+        </select>
+      </div>
+      <TierRow
+        label="heroes"
+        provider={data.heroProvider}
+        model={heroModel}
+        onProvider={(v) => {
+          setHeroModel('');
+          change({ heroProvider: v, heroModel: '' });
+        }}
+        onModel={setHeroModel}
+        onModelCommit={() => heroModel !== data.heroModel && change({ heroModel })}
+      />
+      <TierRow
+        label="background"
+        provider={data.backgroundProvider}
+        model={backgroundModel}
+        onProvider={(v) => {
+          setBackgroundModel('');
+          change({ backgroundProvider: v, backgroundModel: '' });
+        }}
+        onModel={setBackgroundModel}
+        onModelCommit={() => backgroundModel !== data.backgroundModel && change({ backgroundModel })}
+      />
+
+      <div className="node-controls">
+        <span className="node-subtitle">ticks</span>
+        <NumberField value={data.ticks} min={1} max={1000} title="Number of ticks" onCommit={(v) => change({ ticks: v })} />
+        <span className="node-subtitle">×</span>
+        <NumberField value={data.tickMinutes} min={1} max={1440} title="Simulated minutes per tick" onCommit={(v) => change({ tickMinutes: v })} />
+        <span className="node-subtitle">min from</span>
+        <input
+          className="node-select"
+          type="time"
+          value={data.startTime}
+          title="Simulated time of day the run starts at"
+          onChange={(e) => e.target.value && change({ startTime: e.target.value })}
+        />
+      </div>
+      <label className="node-checkbox-row">
+        <input type="checkbox" checked={data.persistHeroMemories} onChange={(e) => change({ persistHeroMemories: e.target.checked })} />
+        <span className="node-subtitle">persist hero memories (SCENE runs remember this run)</span>
+      </label>
+
+      <div className="node-controls">
+        <button className="node-run-btn" disabled={globallyRunning || pending} onClick={run}>
+          {cityRunning ? 'running…' : '▶ run city'}
+        </button>
+        {cityRunning && (
+          <button className="node-run-btn node-delete-btn" onClick={() => agentsApi.stop()}>
+            stop
+          </button>
+        )}
+      </div>
+
+      {(error || statusError) && <div className="node-error-text">{error || statusError}</div>}
+
+      {visibleEvents.length > 0 && (
+        <div className="node-log nowheel" ref={logRef} onScroll={onLogScroll} style={{ maxHeight: height ? undefined : 240 }}>
+          {visibleEvents.map((e, i) => (
+            <div className="node-log-row" key={i}>
+              <span className="node-log-badge">{e.kind}</span>
+              {e.agent && <span>{e.agent}: </span>}
+              {eventLine(e)}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <Port id="agents:in" type="agent" direction="in" label="heroes" top="calc(100% - 34px)" />
+      <Port id="place:in" type="place" direction="in" label="place" optional={!data.placeName} top="calc(100% - 14px)" />
+      <Port id="run:out" type="run" direction="out" label="run" top="calc(100% - 24px)" />
+    </NodeShell>
+  );
+}
+
+function TierRow(props: {
+  label: string;
+  provider: string;
+  model: string;
+  onProvider: (v: string) => void;
+  onModel: (v: string) => void;
+  onModelCommit: () => void;
+}) {
+  return (
+    <div className="node-controls">
+      <span className="node-subtitle">{props.label}</span>
+      <select className="node-select" value={props.provider} onChange={(e) => props.onProvider(e.target.value)}>
+        {PROVIDERS.map((p) => (
+          <option key={p.value} value={p.value}>
+            {p.label}
+          </option>
+        ))}
+      </select>
+      <input
+        className="node-select"
+        placeholder="model (profile default)"
+        value={props.model}
+        onChange={(e) => props.onModel(e.target.value)}
+        onBlur={props.onModelCommit}
+      />
+    </div>
+  );
+}

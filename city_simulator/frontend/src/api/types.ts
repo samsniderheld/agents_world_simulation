@@ -139,7 +139,13 @@ export type AgentEventKind =
   | 'dialogue'
   | 'move'
   | 'reflect_pause'
-  | 'treatment';
+  | 'treatment'
+  // CITY mode (agents/city/recorder.py) only:
+  | 'status'
+  | 'encounter'
+  | 'promotion'
+  | 'metrics'
+  | 'schedule';
 
 export interface AgentEvent {
   kind: AgentEventKind;
@@ -210,20 +216,28 @@ export type JobPhase = 'idle' | 'running' | 'done' | 'error';
 export interface JobStatus {
   phase: JobPhase;
   error: string | null;
+  // /api/agents/state only, and only for a CITY run: "city".
+  mode?: string;
 }
 
 export interface AgentsState {
   status: JobStatus;
+  // For a CITY run, only the heroes -- background residents are counted
+  // in `population`, not listed.
   agents: AgentStateRow[];
   meta: {
+    // "scene" or "city"; a run from before modes existed has none (= scene).
+    mode?: string;
     provider: string;
     chat_model: string;
     embed_model: string | null;
     context_tokens: number | null;
     ticks: number;
+    [key: string]: unknown;
   };
   started_at: string | null;
   event_count: number;
+  population?: { heroes: number; background: number; [key: string]: unknown };
 }
 
 // GET /api/visuals/providers's capabilities block -- what the canvas can

@@ -106,7 +106,9 @@ function EventLog({ record }: { record: AgentRecord }) {
     <div>
       {newestFirst(record.runs).map((run, i) => (
         <div key={i}>
-          <div className="inspector-run-header">run · {fmtDate(run.started_at)}</div>
+          <div className="inspector-run-header">
+            {run.meta?.mode === 'city' ? 'city run' : 'run'} · {fmtDate(run.started_at)}
+          </div>
           {newestFirst(run.events).map((e, j) => (
             <div className="inspector-event-row" key={j}>
               <span className="inspector-event-badge">{e.kind}</span>

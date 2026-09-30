@@ -9,6 +9,7 @@ export function miniMapNodeColor(n: Node): string {
     case 'location':
       return 'var(--port-entity)';
     case 'sim':
+    case 'citysim':
       return 'var(--node-running)';
     case 'treatment':
       return 'var(--port-narrative)';
