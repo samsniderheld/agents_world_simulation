@@ -192,7 +192,7 @@ runs FP8 weights on it (a little slower than on H100).
 | Template | **RunPod PyTorch** (Ubuntu 22.04, CUDA 12.x; any 2.4+ tag). It has Python and the NVIDIA stack; the setup script adds the rest. |
 | Container disk | 40 GB (system packages; wiped on every restart) |
 | Volume disk (`/workspace`) | **150 GB** -- the vLLM model (~30 GB), Ollama models (~6 GB), the two virtualenvs (~15 GB), your cities, with room for a second model |
-| Exposed ports | TCP **22**, with *SSH over exposed TCP* / public IP on, so you can tunnel. Don't expose 8420: the app has no login. |
+| Exposed ports | TCP **22**, with *SSH over exposed TCP* / public IP on, so you can tunnel. Expose HTTP 8420 only with the app's login on (see *As a public website* below). |
 | Environment variables | none needed; optionally `VLLM_MODEL`, `VLLM_GPU_UTIL`, `FAL_KEY` |
 
 **Setup** (in the pod's web terminal, or over SSH):
@@ -222,6 +222,22 @@ ssh -L 8420:localhost:8420 root@<pod-ip> -p <ssh-port> -i ~/.ssh/<your-key>
 
 and open `http://localhost:8420`. Logs are in `/workspace/logs/`
 (`vllm.log`, `ollama.log`, `app.log`).
+
+**As a public website** (instead of the tunnel): RunPod can give the pod a
+public HTTPS address, but then anyone with the link reaches the app -- so
+turn on its login first. In `city_simulator/.env` on the pod:
+
+```bash
+APP_HOST=0.0.0.0          # listen beyond localhost (refused without a password)
+APP_USER=admin
+APP_PASSWORD=<something long>
+```
+
+restart the app (`pkill -f app.py; bash city_simulator/deploy/runpod/start.sh`),
+then in RunPod edit the pod and add **8420** under *Expose HTTP Ports*. The
+site is `https://<pod-id>-8420.proxy.runpod.net`; the browser asks for the
+user and password once. Editing a pod's ports restarts it, so run
+`setup.sh` and `start.sh` again afterwards.
 
 **After a pod restart** everything outside `/workspace` is gone: rerun
 `setup.sh` (a few minutes -- it only reinstalls system packages; venvs and
