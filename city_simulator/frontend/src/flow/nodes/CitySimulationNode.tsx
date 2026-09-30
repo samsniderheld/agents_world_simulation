@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import type { UIEvent } from 'react';
 import type { Node, NodeProps } from '@xyflow/react';
-import { agentsApi } from '../../api/client';
+import { agentsApi, history } from '../../api/client';
 import type { AgentEvent, CityMetrics, CityZoomOptions, CityZoomResult } from '../../api/types';
 import { eventLine } from '../../inspector/format';
 import { useJobStore } from '../../state/jobStore';
+import { readHiddenIds } from '../useHiddenEntities';
 import { NodeShell } from './NodeShell';
 import { NumberField } from './NumberField';
 import { Port } from './Port';
@@ -28,6 +29,9 @@ export interface CitySimulationNodeData extends Record<string, unknown> {
   directive: string;
   // Append each hero's events to their saved record, as a SCENE run does.
   persistHeroMemories: boolean;
+  // Heroes = every resident not hidden in the Gallery (plus any wired in),
+  // resolved fresh each time the run starts.
+  heroesFromGallery: boolean;
   // Resolved by pipeline.ts from the agents:in / place:in edges.
   agentNames: string[];
   placeId?: string;
@@ -63,6 +67,15 @@ const CITY_PROFILES = [
   { value: 'h100', label: 'H100 (vLLM)' },
 ];
 
+// Every resident of the active city that isn't hidden in the Gallery (its
+// hide toggle, kept per city in this browser).
+async function visibleResidents(): Promise<string[]> {
+  const [data, cities] = await Promise.all([history.data(), history.listCities()]);
+  const cityId = cities.cities.find((c) => c.is_active)?.id;
+  const hidden = cityId ? readHiddenIds(cityId) : new Set<string>();
+  return data.characters.filter((c) => !hidden.has(c.id)).map((c) => c.name);
+}
+
 export function CitySimulationNode({ id, data, selected, height }: NodeProps<CitySimulationNodeType>) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -84,6 +97,19 @@ export function CitySimulationNode({ id, data, selected, height }: NodeProps<Cit
   const stickToBottomRef = useRef(true);
   const agentsState = useJobStore((s) => s.agentsState);
   const [detected, setDetected] = useState<string | null>(null);
+  const [visible, setVisible] = useState<string[] | null>(null);
+
+  // How many heroes the Gallery option gives, shown on the node.
+  useEffect(() => {
+    if (!data.heroesFromGallery) return;
+    let cancelled = false;
+    visibleResidents()
+      .then((names) => !cancelled && setVisible(names))
+      .catch(() => !cancelled && setVisible(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [data.heroesFromGallery]);
 
   useEffect(() => {
     agentsApi
@@ -164,8 +190,13 @@ export function CitySimulationNode({ id, data, selected, height }: NodeProps<Cit
     staleRunRef.current = agentsState?.started_at ?? null;
     setStaleRun(staleRunRef.current);
     try {
+      // Fresh, so hiding someone in the Gallery just before a run counts.
+      const agentNames = data.heroesFromGallery
+        ? [...new Set([...data.agentNames, ...(await visibleResidents())])]
+        : data.agentNames;
+      if (data.heroesFromGallery) setVisible(agentNames.filter((n) => !data.agentNames.includes(n)));
       const res = await agentsApi.runCity({
-        agentNames: data.agentNames,
+        agentNames,
         backgroundCount: data.backgroundCount,
         profile: data.profile,
         heroProvider: data.heroProvider || undefined,
@@ -199,13 +230,22 @@ export function CitySimulationNode({ id, data, selected, height }: NodeProps<Cit
     if (!res.ok) setError(res.error ?? 'promotion failed');
   }
   const heroes = data.agentNames.length;
+  const galleryExtra = data.heroesFromGallery && visible ? visible.filter((n) => !data.agentNames.includes(n)).length : 0;
 
   return (
     <NodeShell typeLabel="City Simulation" selected={selected} running={cityRunning} error={Boolean(error || statusError)} wide>
       <div className="node-title">City Simulation</div>
       <div className="node-grounding">
-        {heroes ? `${heroes} hero${heroes === 1 ? '' : 'es'} connected` : 'no heroes wired: the city’s generated residents are the heroes'}
+        {data.heroesFromGallery
+          ? `heroes: ${heroes ? `${heroes} connected + ` : ''}${visible ? galleryExtra : '…'} visible in the Gallery`
+          : heroes
+            ? `${heroes} hero${heroes === 1 ? '' : 'es'} connected`
+            : 'no heroes wired: the city’s generated residents are the heroes'}
       </div>
+      <label className="node-checkbox-row" title="Hide residents in the Gallery to leave them out">
+        <input type="checkbox" checked={data.heroesFromGallery} onChange={(e) => change({ heroesFromGallery: e.target.checked })} />
+        <span className="node-subtitle">heroes: every resident not hidden in the Gallery</span>
+      </label>
       <div className="node-grounding">{data.placeName ? `heroes convene: ${data.placeName}` : 'everyone starts at their own place'}</div>
 
       <div className="node-controls">

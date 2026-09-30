@@ -91,6 +91,7 @@ export function citySimSettings(d: Record<string, unknown> = {}) {
     startTime: (d.startTime as string) ?? '06:00',
     directive: (d.directive as string) ?? '',
     persistHeroMemories: (d.persistHeroMemories as boolean) ?? true,
+    heroesFromGallery: (d.heroesFromGallery as boolean) ?? false,
   };
 }
 

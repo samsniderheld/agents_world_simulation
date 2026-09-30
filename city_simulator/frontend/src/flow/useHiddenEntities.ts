@@ -33,6 +33,12 @@ function writeHidden(cityId: string, ids: Set<string>): void {
   }
 }
 
+// For code outside React state that needs the current list once (the City
+// Simulation node, resolving its heroes when it runs).
+export function readHiddenIds(cityId: string): Set<string> {
+  return readHidden(cityId);
+}
+
 export function useHiddenEntities(cityId: string | undefined): {
   hiddenIds: Set<string>;
   isHidden: (id: string) => boolean;
