@@ -112,7 +112,7 @@ CITY_PROFILES = {
 
 def detect_city_profile() -> str:
     """The profile that fits this machine: a Mac is "mac"; an NVIDIA card
-    with 70 GB+ is "h100", 24 GB+ is "rtx5090"; anything else is treated
+    with 70 GB+ is "h100", 20 GB+ is "rtx5090"; anything else is treated
     like the Mac profile (small local Ollama). CITY_PROFILE overrides."""
     forced = os.environ.get("CITY_PROFILE")
     if forced in CITY_PROFILES:
@@ -122,7 +122,7 @@ def detect_city_profile() -> str:
     vram = _nvidia_vram_gb()
     if vram >= 70:
         return "h100"
-    if vram >= 24:
+    if vram >= 20:          # a "24 GB" card reports a little under 24
         return "rtx5090"
     return "mac"
 

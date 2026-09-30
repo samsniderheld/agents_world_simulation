@@ -167,6 +167,69 @@ not yet against real vLLM -- the first run will tell you if anything's off.
    fallback note. For Simulation and Treatment nodes, pick
    **OpenAI-compatible** to use vLLM too.
 
+### On RunPod
+
+**Which GPU.** Pick a *Pod* (not Serverless) in a region with the card you
+want:
+
+| Goal | GPU | Model (`VLLM_MODEL`) | CITY profile it gets | Agents |
+|---|---|---|---|---|
+| Recommended | **H100 80GB** (SXM or PCIe), A100 80GB | `Qwen/Qwen3-30B-A3B-Instruct-2507-FP8` (the default) | `h100`: 256 in flight | up to 2000 |
+| Cheaper, still good | L40S 48GB, RTX 6000 Ada 48GB | the same model, `VLLM_GPU_UTIL=0.85` | `rtx5090`: 128 in flight | ~1000 |
+| Just trying it | RTX 4090 24GB, RTX 5090 32GB | `Qwen/Qwen3-8B-FP8` | `rtx5090` | a few hundred |
+| Biggest heroes | H200 141GB | `openai/gpt-oss-120b` | `h100` | up to 2000 |
+
+An 80 GB card fits the recommended model with plenty of room for many
+agents' requests at once (its KV cache) plus Ollama beside it; a 48 GB card
+fits it with less headroom. On a 24-32 GB card the 30B model doesn't leave
+enough room, so use an 8B model. The A100 has no native FP8, but vLLM still
+runs FP8 weights on it (a little slower than on H100).
+
+**Template and pod settings.**
+
+| Setting | Recommendation |
+|---|---|
+| Template | **RunPod PyTorch** (Ubuntu 22.04, CUDA 12.x; any 2.4+ tag). It has Python and the NVIDIA stack; the setup script adds the rest. |
+| Container disk | 40 GB (system packages; wiped on every restart) |
+| Volume disk (`/workspace`) | **150 GB** -- the vLLM model (~30 GB), Ollama models (~6 GB), the two virtualenvs (~15 GB), your cities, with room for a second model |
+| Exposed ports | TCP **22**, with *SSH over exposed TCP* / public IP on, so you can tunnel. Don't expose 8420: the app has no login. |
+| Environment variables | none needed; optionally `VLLM_MODEL`, `VLLM_GPU_UTIL`, `FAL_KEY` |
+
+**Setup** (in the pod's web terminal, or over SSH):
+
+```bash
+cd /workspace
+git clone https://github.com/samsniderheld/agents_world_simulation.git
+cd agents_world_simulation && git checkout improving_agents
+bash city_simulator/deploy/runpod/setup.sh     # ~15-25 min the first time (downloads)
+bash city_simulator/deploy/runpod/start.sh     # starts Ollama, vLLM, the app; prints the tunnel command
+```
+
+`setup.sh` installs Node, Ollama and vLLM, builds the frontend, writes
+`.env` (vLLM URL, a small Ollama chat model), and downloads the models into
+`/workspace` so they survive a restart. For a different model:
+`VLLM_MODEL=Qwen/Qwen3-8B-FP8 bash .../setup.sh` (and the same variable for
+`start.sh`). Add `FAL_KEY=...` to `city_simulator/.env` for image/video
+nodes. Then, on your laptop:
+
+```bash
+ssh -L 8420:localhost:8420 root@<pod-ip> -p <ssh-port> -i ~/.ssh/<your-key>
+```
+
+and open `http://localhost:8420`. Logs are in `/workspace/logs/`
+(`vllm.log`, `ollama.log`, `app.log`).
+
+**After a pod restart** everything outside `/workspace` is gone: rerun
+`setup.sh` (a few minutes -- it only reinstalls system packages; venvs and
+models are kept), then `start.sh`. **Stop the pod** when you're done --
+RunPod bills a running pod by the hour, and a stopped pod only for its
+volume. Your cities live in `/workspace/.../citystate/data`, so they're
+kept while the volume exists; copy that folder off the pod before you
+delete it.
+
+These scripts follow RunPod's standard pod layout but haven't been run on
+RunPod yet; if a step fails, its output says which.
+
 To measure the box before a real run (needs an active city):
 
 ```bash
