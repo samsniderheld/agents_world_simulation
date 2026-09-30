@@ -25,7 +25,7 @@ import time
 import requests
 
 from .. import config
-from .base import Provider
+from .base import AsyncCapabilities, Provider, ProviderHTTPError, Reply
 
 _API_URL = "https://api.anthropic.com/v1/messages"
 _API_VERSION = "2023-06-01"
@@ -65,7 +65,14 @@ def _check_response(resp: requests.Response):
         )
 
 
-class ClaudeProvider(Provider):
+class ClaudeProvider(Provider, AsyncCapabilities):
+    # Async capability flags (CITY mode's gateway). JSON replies are asked
+    # for in the prompt; a hosted API rate-limits well before a GPU
+    # server's batching limit.
+    supports_json_schema = False
+    max_concurrency = 8
+    supports_prefix_cache = False
+
     def chat(self, messages: list, model: str = None, temperature: float = 0.7,
               context_tokens: int = None) -> str:
         api_key = _require_api_key()
@@ -124,3 +131,26 @@ class ClaudeProvider(Provider):
 
     def check_connection(self):
         _require_api_key()
+
+    # --- async (CITY mode's agents/gateway.py) ---------------------------
+
+    async def agenerate(self, client, backend, messages: list, *, max_tokens: int = 256,
+                        temperature: float = 0.7, seed: int = None, schema: dict = None) -> Reply:
+        # temperature/seed are dropped for the same reason as in chat().
+        api_key = backend.api_key or _require_api_key()
+        system = next((m["content"] for m in messages if m.get("role") == "system"), None)
+        body = {"model": backend.model, "max_tokens": max_tokens,
+                "messages": [m for m in messages if m.get("role") != "system"]}
+        if system:
+            body["system"] = system
+        headers = {"x-api-key": api_key, "anthropic-version": _API_VERSION, "content-type": "application/json"}
+        resp = await client.post(backend.base_url or _API_URL, json=body, headers=headers, timeout=backend.timeout)
+        if resp.status_code >= 400:
+            raise ProviderHTTPError(resp.status_code, resp.text[:300])
+        data = resp.json()
+        text = "".join(b.get("text", "") for b in data.get("content", []) if b.get("type") == "text").strip()
+        usage = data.get("usage") or {}
+        return Reply(text, usage.get("input_tokens") or 0, usage.get("output_tokens") or len(text) // 4)
+
+    async def alist_models(self, client, base_url: str = None, api_key: str = "") -> list:
+        return list(_KNOWN_MODELS)

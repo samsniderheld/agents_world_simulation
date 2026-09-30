@@ -16,7 +16,7 @@ import time
 import requests
 
 from .. import config
-from .base import Provider
+from .base import AsyncCapabilities, Provider, ProviderHTTPError, Reply, SchemaUnsupported
 
 _RETRY_STATUS_CODES = (429, 500, 502, 503)
 _MAX_RETRIES = 3
@@ -25,7 +25,16 @@ _MAX_RETRIES = 3
 _THINK = re.compile(r"<think>.*?</think>", re.DOTALL)
 
 
-class OpenAICompatProvider(Provider):
+class OpenAICompatProvider(Provider, AsyncCapabilities):
+    # Async capability flags (CITY mode's gateway). vLLM, SGLang and
+    # llama.cpp constrain output to a JSON schema natively (mlx_lm.server
+    # doesn't -- a Backend with schema_mode "none" covers that, and a
+    # server that rejects the field is detected and falls back); all of
+    # them batch concurrent requests and cache shared prompt prefixes.
+    supports_json_schema = True
+    max_concurrency = 64
+    supports_prefix_cache = True
+
     def _headers(self) -> dict:
         headers = {"Content-Type": "application/json"}
         if config.OPENAI_COMPAT_API_KEY:
@@ -79,3 +88,41 @@ class OpenAICompatProvider(Provider):
         wanted = config.OPENAI_COMPAT_MODEL
         if wanted and wanted not in models:
             raise RuntimeError(f"Model '{wanted}' isn't served at {config.OPENAI_COMPAT_BASE_URL} (it has: {', '.join(models) or 'none'}).")
+
+    # --- async (CITY mode's agents/gateway.py) ---------------------------
+
+    async def agenerate(self, client, backend, messages: list, *, max_tokens: int = 256,
+                        temperature: float = 0.7, seed: int = None, schema: dict = None) -> Reply:
+        body = {"model": backend.model, "messages": messages, "temperature": temperature, "max_tokens": max_tokens}
+        if seed is not None:
+            body["seed"] = seed
+        mode = backend.schema_mode
+        if schema is not None:
+            if mode == "guided_json":        # vLLM's own extra parameter
+                body["guided_json"] = schema
+            elif mode == "json_schema":      # llama.cpp server
+                body["json_schema"] = schema
+            else:                            # OpenAI standard; vLLM, SGLang, llama.cpp
+                body["response_format"] = {"type": "json_schema",
+                                           "json_schema": {"name": "reply", "schema": schema}}
+        headers = {"Content-Type": "application/json"}
+        if backend.api_key:
+            headers["Authorization"] = f"Bearer {backend.api_key}"
+        resp = await client.post(f"{backend.base_url}/chat/completions", json=body, headers=headers,
+                                 timeout=backend.timeout)
+        if resp.status_code == 400 and schema is not None and any(
+                k in resp.text for k in ("response_format", "json_schema", "guided", "grammar")):
+            raise SchemaUnsupported(resp.text[:300])
+        if resp.status_code >= 400:
+            raise ProviderHTTPError(resp.status_code, resp.text[:300])
+        data = resp.json()
+        text = _THINK.sub("", (data["choices"][0]["message"].get("content") or "")).strip()
+        usage = data.get("usage") or {}
+        return Reply(text, usage.get("prompt_tokens") or 0, usage.get("completion_tokens") or len(text) // 4)
+
+    async def alist_models(self, client, base_url: str, api_key: str = "") -> list:
+        headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+        resp = await client.get(f"{base_url}/models", headers=headers, timeout=10)
+        if resp.status_code >= 400:
+            raise ProviderHTTPError(resp.status_code, resp.text[:300])
+        return [m["id"] for m in resp.json().get("data", [])]

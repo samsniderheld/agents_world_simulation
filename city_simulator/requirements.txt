@@ -2,3 +2,5 @@ requests>=2.31
 flask>=3.0
 pyyaml>=6.0
 python-dotenv>=1.0
+# CITY mode's async inference layer (agents/gateway.py)
+httpx>=0.27

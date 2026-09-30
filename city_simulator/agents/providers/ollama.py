@@ -8,10 +8,18 @@ Claude-API equivalent.
 import requests
 
 from .. import config
-from .base import Provider
+from .base import AsyncCapabilities, Provider, ProviderHTTPError, Reply
 
 
-class OllamaProvider(Provider):
+class OllamaProvider(Provider, AsyncCapabilities):
+    # Async capability flags (CITY mode's gateway). Ollama >= 0.5 takes a
+    # JSON schema as `format`; it queues past OLLAMA_NUM_PARALLEL, and
+    # keeps one KV cache per parallel slot, so shared prefixes help only a
+    # little.
+    supports_json_schema = True
+    max_concurrency = 4
+    supports_prefix_cache = False
+
     def chat(self, messages: list, model: str = None, temperature: float = 0.7,
               context_tokens: int = None) -> str:
         """Explicitly caps num_ctx (see config.CHAT_CONTEXT_TOKENS) rather
@@ -96,3 +104,36 @@ class OllamaProvider(Provider):
         )
         resp.raise_for_status()
         return resp.json()["embedding"]
+
+    # --- async (CITY mode's agents/gateway.py) ---------------------------
+    # Take the target explicitly (a gateway Backend: base_url, model,
+    # context_tokens) instead of reading config, so the two CITY tiers can
+    # use different models, and a CITY run never changes what SCENE uses.
+
+    async def agenerate(self, client, backend, messages: list, *, max_tokens: int = 256,
+                        temperature: float = 0.7, seed: int = None, schema: dict = None) -> Reply:
+        options = {"temperature": temperature, "num_ctx": backend.context_tokens, "num_predict": max_tokens}
+        if seed is not None:
+            options["seed"] = seed
+        body = {"model": backend.model, "messages": messages, "stream": False,
+                "options": options, "think": config.ENABLE_THINKING}
+        if schema is not None:
+            body["format"] = schema
+        resp = await client.post(f"{backend.base_url}/api/chat", json=body, timeout=backend.timeout)
+        if resp.status_code >= 400:
+            raise ProviderHTTPError(resp.status_code, resp.text[:300])
+        data = resp.json()
+        text = (data.get("message") or {}).get("content", "").strip()
+        return Reply(text, data.get("prompt_eval_count") or 0, data.get("eval_count") or len(text) // 4)
+
+    async def aembed_many(self, client, base_url: str, model: str, texts: list, timeout: float = 120) -> list:
+        resp = await client.post(f"{base_url}/api/embed", json={"model": model, "input": texts}, timeout=timeout)
+        if resp.status_code >= 400:
+            raise ProviderHTTPError(resp.status_code, resp.text[:300])
+        return resp.json()["embeddings"]
+
+    async def alist_models(self, client, base_url: str) -> list:
+        resp = await client.get(f"{base_url}/api/tags", timeout=10)
+        if resp.status_code >= 400:
+            raise ProviderHTTPError(resp.status_code, resp.text[:300])
+        return sorted(m["name"] for m in resp.json().get("models", []))

@@ -25,6 +25,17 @@ def provider_list():
     return json_response({"providers": providers.AVAILABLE_PROVIDERS})
 
 
+@bp.get("/city/profiles")
+def city_profiles():
+    """CITY hardware profiles (hardware.py) for the City Simulation node's
+    picker, and which one "auto" resolves to on this machine."""
+    import hardware
+    return json_response({
+        "profiles": {name: hardware.city_profile(name) for name in hardware.CITY_PROFILES},
+        "detected": hardware.detect_city_profile(),
+    })
+
+
 @bp.get("/models")
 def models():
     provider = request.args.get("provider") or None
