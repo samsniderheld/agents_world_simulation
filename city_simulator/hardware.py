@@ -71,6 +71,9 @@ CITY_PROFILES = {
         "context_tokens": 4096,
         "population_cap": 200,
         "hero_cap": 30,
+        # Background schedules written by the model each sim-day; the rest
+        # use occupation templates (a 3B model on a laptop does ~5/min).
+        "llm_schedule_cap": 40,
         "schema_mode": "native",
     },
     # One RTX 5090 (32 GB) running vLLM: a mixture-of-experts hero model
@@ -84,6 +87,9 @@ CITY_PROFILES = {
         "context_tokens": 8192,
         "population_cap": 1000,
         "hero_cap": 200,
+        # Background schedules written by the model each sim-day; the rest
+        # use occupation templates (a 3B model on a laptop does ~5/min).
+        "llm_schedule_cap": 1000,
         "schema_mode": "response_format",
     },
     # One H100 80 GB running vLLM: a larger MoE hero (fits one card).
@@ -96,6 +102,9 @@ CITY_PROFILES = {
         "context_tokens": 16384,
         "population_cap": 2000,
         "hero_cap": 200,
+        # Background schedules written by the model each sim-day; the rest
+        # use occupation templates (a 3B model on a laptop does ~5/min).
+        "llm_schedule_cap": 2000,
         "schema_mode": "response_format",
     },
 }

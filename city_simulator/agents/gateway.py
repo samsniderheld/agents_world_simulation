@@ -278,21 +278,22 @@ class Gateway:
     benchmark) swap in an httpx.MockTransport stub server."""
 
     def __init__(self, backends: dict, embed_base_url: str = None, embed_model: str = None,
-                 transport: httpx.AsyncBaseTransport = None, max_retries: int = ccfg.MAX_RETRIES,
-                 backoff_base: float = ccfg.BACKOFF_BASE_SECONDS, rng: random.Random = None):
+                 transport: httpx.AsyncBaseTransport = None, max_retries: int = None,
+                 backoff_base: float = None, rng: random.Random = None):
         self.backends = backends
         self.embed_base_url = (embed_base_url or scene_config.OLLAMA_HOST).rstrip("/")
         self.embed_model = embed_model or ccfg.EMBED_MODEL
-        self.max_retries = max_retries
-        self.backoff_base = backoff_base
+        self.max_retries = ccfg.MAX_RETRIES if max_retries is None else max_retries
+        self.backoff_base = ccfg.BACKOFF_BASE_SECONDS if backoff_base is None else backoff_base
         self._rng = rng or random.Random()
         self._transport = transport
         self._client: Optional[httpx.AsyncClient] = None
-        # One limiter per distinct server+model: two tiers on the same
-        # server share its capacity.
+        # One limiter per server: two tiers on the same server (even with
+        # different models -- Ollama's OLLAMA_NUM_PARALLEL covers both)
+        # share its capacity.
         self._limiters = {}
         for b in backends.values():
-            key = (b.base_url, b.model)
+            key = (b.provider, b.base_url)
             if key not in self._limiters:
                 self._limiters[key] = AIMDLimiter(b.max_concurrency)
             else:
@@ -313,7 +314,7 @@ class Gateway:
 
     def limiter_for(self, tier: str) -> AIMDLimiter:
         b = self.backends[tier]
-        return self._limiters[(b.base_url, b.model)]
+        return self._limiters[(b.provider, b.base_url)]
 
     def take_stats(self) -> dict:
         """This wave's counters (then reset). by_tier/by_kind count requests."""
