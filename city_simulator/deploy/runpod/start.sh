@@ -27,6 +27,10 @@ export VLLM_CACHE_ROOT="${VLLM_CACHE_ROOT:-$WS/vllm-cache}"
 # the venv isn't otherwise "activated").
 export PATH="$WS/vllm-venv/bin:/usr/local/cuda/bin:$PATH"
 [ -d /usr/local/cuda ] && export CUDA_HOME="${CUDA_HOME:-/usr/local/cuda}"
+# DeepGEMM (optional fast FP8 kernels) builds itself at startup and needs
+# NVCC 12.9+, newer than most RunPod images ship; without it vLLM uses its
+# other FP8 kernels. Set VLLM_USE_DEEP_GEMM=1 on an image with CUDA 12.9+.
+export VLLM_USE_DEEP_GEMM="${VLLM_USE_DEEP_GEMM:-0}"
 LOGS="$WS/logs"; mkdir -p "$LOGS"
 
 up() { curl -s -o /dev/null "$1"; }
@@ -55,7 +59,7 @@ else
         | grep -v "WARNING" | tail -n 25 || true
       echo; echo "The end of the log:"; tail -n 8 "$LOGS/vllm.log"
       echo; echo "Common fixes: apt-get install -y build-essential python3-dev ninja-build (Python.h / C compiler / ninja);"
-      echo "VLLM_USE_DEEP_GEMM=0 bash $0 (DeepGEMM kernel build fails); VLLM_GPU_UTIL=0.7 (memory)."
+      echo "VLLM_EXTRA_ARGS=--enforce-eager bash $0 (skip kernel compiling); VLLM_GPU_UTIL=0.7 (memory)."
       echo; echo "GPU right now:"; nvidia-smi --query-gpu=name,memory.used,memory.total,driver_version --format=csv
       exit 1
     fi
