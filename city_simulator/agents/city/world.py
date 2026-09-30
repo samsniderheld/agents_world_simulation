@@ -114,6 +114,7 @@ class CityWorld:
             "tokens_in": stats["tokens_in"], "tokens_out": stats["tokens_out"], "retries": stats["retries"],
             "failures": stats["failures"], "repairs": stats["repairs"], "backpressure": stats["backpressure"],
             "by_tier": stats["by_tier"], "by_kind": stats["by_kind"],
+            "errors": stats["errors"], "retried": stats["retried"],
         }
 
     def _cast(self, hero, extra: list = ()) -> list:
@@ -575,7 +576,10 @@ class CityWorld:
         total = collections.Counter()
         by_tier = collections.Counter()
         by_kind = collections.Counter()
+        errors = collections.Counter()
         for w in waves.values():
+            errors.update(w["errors"])
+            errors.update({f"retried:{k}": v for k, v in w["retried"].items()})
             for k in ("requests", "rounds", "tokens_in", "tokens_out", "retries", "failures", "repairs", "backpressure"):
                 total[k] += w[k]
             by_tier.update(w["by_tier"])
@@ -590,6 +594,9 @@ class CityWorld:
             "backpressure": total["backpressure"],
             "tokens_per_second": round(total["tokens_out"] / seconds, 1) if seconds else 0.0,
             "calls_by_tier": dict(by_tier), "calls_by_kind": dict(by_kind),
+            # what went wrong: final failures by type, and "retried:<type>"
+            # for attempts that were retried
+            "errors": dict(errors),
             "calls_per_hero": round(by_tier.get("hero", 0) / n_heroes, 3) if n_heroes else 0.0,
             "calls_per_background": round(by_tier.get("background", 0) / n_bg, 4) if n_bg else 0.0,
             "heroes": n_heroes, "background": n_bg, "encounters": encounters, "conversations": conversations,

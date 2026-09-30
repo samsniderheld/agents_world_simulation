@@ -75,6 +75,11 @@ export function CitySimulationNode({ id, data, selected, height }: NodeProps<Cit
   // sends heroes + run-level events by default).
   const [showBackground, setShowBackground] = useState(false);
   const cursorRef = useRef(0);
+  // started_at of the run that was current when "run" was clicked: until
+  // the new run has actually started (preflight comes first), the server
+  // still serves the old run, whose events and metrics must not show here.
+  const staleRunRef = useRef<string | null>(null);
+  const [staleRun, setStaleRun] = useState<string | null>(null);
   const logRef = useRef<HTMLDivElement>(null);
   const stickToBottomRef = useRef(true);
   const agentsState = useJobStore((s) => s.agentsState);
@@ -104,6 +109,11 @@ export function CitySimulationNode({ id, data, selected, height }: NodeProps<Cit
         const res = await agentsApi.events(cursorRef.current, showBackground ? 'all' : 'hero');
         if (cancelled) return;
         cursorRef.current = res.next;
+        if (staleRunRef.current && res.started_at === staleRunRef.current) return;
+        if (staleRunRef.current) {
+          staleRunRef.current = null;
+          setStaleRun(null);
+        }
         if (res.events.length) setRecent((prev) => [...prev, ...(res.events as AgentEvent[])].slice(-2000));
         if (state.status.phase !== 'running') setWatching(false);
       } catch {
@@ -119,6 +129,16 @@ export function CitySimulationNode({ id, data, selected, height }: NodeProps<Cit
       clearInterval(timer);
     };
   }, [live, showBackground]);
+
+  // Show the latest CITY run's log even if it finished before this node
+  // mounted (e.g. after a reload): read it once.
+  const loadedOnce = useRef(false);
+  useEffect(() => {
+    if (!isCityRun || loadedOnce.current) return;
+    loadedOnce.current = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot kick of the poll effect above
+    setWatching(true);
+  }, [isCityRun]);
 
   const shownKinds = showBackground ? LOG_KINDS_WITH_BACKGROUND : LOG_KINDS;
   const visibleEvents = recent.filter((e) => shownKinds.has(e.kind));
@@ -141,6 +161,8 @@ export function CitySimulationNode({ id, data, selected, height }: NodeProps<Cit
     setPending(true);
     setRecent([]);
     cursorRef.current = 0;
+    staleRunRef.current = agentsState?.started_at ?? null;
+    setStaleRun(staleRunRef.current);
     try {
       const res = await agentsApi.runCity({
         agentNames: data.agentNames,
@@ -299,7 +321,9 @@ export function CitySimulationNode({ id, data, selected, height }: NodeProps<Cit
 
       {(error || statusError) && <div className="node-error-text">{error || statusError}</div>}
 
-      {isCityRun && agentsState?.metrics && <Metrics m={agentsState.metrics} />}
+      {isCityRun && agentsState?.metrics && !pending && !(staleRun && agentsState.started_at === staleRun) && (
+        <Metrics m={agentsState.metrics} />
+      )}
 
       {canZoom && <ZoomIn nodeId={id} onZoomIn={data.onZoomIn} />}
 
@@ -400,9 +424,11 @@ function ZoomIn({ nodeId, onZoomIn }: { nodeId: string; onZoomIn: (nodeId: strin
     try {
       const result = await agentsApi.cityZoom({ place, tickFrom: from, tickTo: Math.max(from, to), startedAt: options?.started_at });
       onZoomIn(nodeId, result);
+      const who = result.promoted.join(', ');
       setMessage(
-        `scene created: ${result.agent_names.length} people` +
-          (result.promoted.length ? `, ${result.promoted.join(', ')} now saved characters` : ''),
+        `scene created: ${result.agent_names.length} ${result.agent_names.length === 1 ? 'person' : 'people'}` +
+          (result.promoted.length === 1 ? `; ${who} is now a saved character` : '') +
+          (result.promoted.length > 1 ? `; ${who} are now saved characters` : ''),
       );
     } catch (e) {
       setMessage(e instanceof Error ? e.message : String(e));

@@ -271,7 +271,7 @@ def _new_stats() -> dict:
     # the round trips an ideal server would need, i.e. the floor on time.
     return {"requests": 0, "rounds": 0, "ok": 0, "failures": 0, "retries": 0, "repairs": 0, "backpressure": 0,
             "tokens_in": 0, "tokens_out": 0, "busy_seconds": 0.0, "by_tier": collections.Counter(),
-            "by_kind": collections.Counter(), "errors": collections.Counter()}
+            "by_kind": collections.Counter(), "errors": collections.Counter(), "retried": collections.Counter()}
 
 
 class Gateway:
@@ -323,7 +323,7 @@ class Gateway:
         out = self.stats
         self.stats = _new_stats()
         return {**out, "by_tier": dict(out["by_tier"]), "by_kind": dict(out["by_kind"]),
-                "errors": dict(out["errors"])}
+                "errors": dict(out["errors"]), "retried": dict(out["retried"])}
 
     def _count(self, key: str, n=1):
         self.stats[key] += n
@@ -431,6 +431,8 @@ class Gateway:
                 break
             retries_left -= 1
             self._count("retries")
+            self.stats["retried"][error] += 1
+            self.totals["retried"][error] += 1
             delay = min(ccfg.BACKOFF_CAP_SECONDS, self.backoff_base * 2 ** (self.max_retries - retries_left - 1))
             await asyncio.sleep(delay * self._rng.uniform(0.5, 1.5))
 
@@ -475,6 +477,8 @@ class Gateway:
                 self._embed_limiter.release()
             if attempt < self.max_retries:
                 self._count("retries")
+                self.stats["retried"]["embed"] += 1
+                self.totals["retried"]["embed"] += 1
                 await asyncio.sleep(self.backoff_base * 2 ** attempt * self._rng.uniform(0.5, 1.5))
         self._count("failures")
         self.stats["errors"]["embed"] += 1

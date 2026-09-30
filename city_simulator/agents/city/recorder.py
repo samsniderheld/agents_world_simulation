@@ -35,12 +35,16 @@ _population: dict = {}
 _hero_events: dict = {}      # hero name -> [event], full (with embeddings)
 _positions: list = []        # per tick: {agent name: location label}
 _last_metrics: dict = None
+_run_first_seq = 1           # seq of this run's first event
 
 
 def start(heroes: list, meta: dict, population: dict = None):
-    global _events, _seq, _started_at, _heroes, _meta, _population, _hero_events, _positions, _last_metrics
+    global _events, _started_at, _heroes, _meta, _population, _hero_events, _positions, _last_metrics, _run_first_seq
     with _lock:
-        _events, _seq = collections.deque(maxlen=ccfg.EVENT_BUFFER_SIZE), 0
+        _run_first_seq = _seq + 1
+        # `_seq` keeps counting across runs, so a client's cursor from an
+        # earlier run can never skip the start of this one.
+        _events = collections.deque(maxlen=ccfg.EVENT_BUFFER_SIZE)
         _started_at = datetime.datetime.now().isoformat()
         _heroes = [dict(h) for h in heroes]
         _meta = dict(meta or {}, mode="city")
@@ -117,8 +121,9 @@ def query(cursor: int = 0, tier: str = "hero", kinds: set = None, agent: str = N
     filter, "next" still advances past everything scanned, so paging never
     re-reads skipped events."""
     with _lock:
-        oldest = _events[0]["seq"] if _events else _seq + 1
-        dropped = max(0, oldest - cursor - 1)
+        first = _events[0]["seq"] if _events else _seq + 1
+        run_start = _run_first_seq
+        dropped = max(0, first - max(cursor, run_start - 1) - 1)
         out = []
         last = cursor
         full = False
@@ -140,7 +145,8 @@ def query(cursor: int = 0, tier: str = "hero", kinds: set = None, agent: str = N
             if place and place not in (e.get("location"), e.get("place"), e.get("to_location"), e.get("from_location")):
                 continue
             out.append(e)
-        return {"events": out, "next": last if full else max(cursor, _seq), "dropped": dropped}
+        return {"events": out, "next": last if full else max(cursor, _seq), "dropped": dropped,
+                "started_at": _started_at}
 
 
 def state() -> dict:

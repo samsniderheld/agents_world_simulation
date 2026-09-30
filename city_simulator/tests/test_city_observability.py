@@ -17,14 +17,27 @@ class RecorderTests(unittest.TestCase):
             recorder.start([{"name": "Lou"}], {})
             for i in range(120):
                 recorder.log("action", i, agent="Lou", tier="hero", text=str(i))
+        base = recorder._run_first_seq - 1          # seq keeps counting across runs
         page = recorder.query(0, limit=None)
         self.assertEqual(len(page["events"]), 50)
         self.assertEqual(page["dropped"], 70)
-        self.assertEqual(page["events"][0]["seq"], 71)
-        self.assertEqual(page["next"], 120)
-        self.assertEqual(recorder.query(120)["events"], [])
+        self.assertEqual(page["events"][0]["seq"], base + 71)
+        self.assertEqual(page["next"], base + 120)
+        self.assertEqual(recorder.query(base + 120)["events"], [])
         # the hero's own full record isn't truncated by the live buffer
         self.assertEqual(len(recorder.hero_events()["Lou"]), 120)
+
+    def test_an_old_cursor_never_skips_a_new_run(self):
+        recorder.start([{"name": "Lou"}], {})
+        for i in range(30):
+            recorder.log("action", i, agent="Lou", tier="hero")
+        old = recorder.query(0, limit=None)
+        stale_cursor = old["next"]
+        recorder.start([{"name": "Vera"}], {})
+        recorder.log("status", 0, text="new run")
+        page = recorder.query(stale_cursor, limit=None)
+        self.assertEqual([e["text"] for e in page["events"]], ["new run"])
+        self.assertNotEqual(page["started_at"], None)
 
     def test_paging_reads_everything_once(self):
         recorder.start([{"name": "Lou"}], {})

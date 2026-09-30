@@ -129,7 +129,7 @@ export const agentsApi = {
   // For a CITY run `since` is a cursor and `tier` picks "hero" (default),
   // "background" or "all"; SCENE runs ignore it.
   events: (since = 0, tier?: string) =>
-    request<{ events: unknown[]; next: number; dropped?: number }>(
+    request<{ events: unknown[]; next: number; dropped?: number; started_at?: string | null }>(
       `/api/agents/events?since=${since}${tier ? `&tier=${tier}` : ''}`,
     ),
 

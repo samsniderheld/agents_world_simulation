@@ -145,7 +145,10 @@ export type AgentEventKind =
   | 'encounter'
   | 'promotion'
   | 'metrics'
-  | 'schedule';
+  | 'schedule'
+  | 'schedules'
+  | 'moves'
+  | 'tick_summary';
 
 export interface AgentEvent {
   kind: AgentEventKind;

@@ -40,6 +40,10 @@ export function eventLine(e: AgentEvent): string {
     case 'encounter':
     case 'promotion':
     case 'schedule':
+    case 'schedules':
+    case 'moves':
+    case 'tick_summary':
+    case 'metrics':
       return e.text ?? '';
     default:
       return '';
