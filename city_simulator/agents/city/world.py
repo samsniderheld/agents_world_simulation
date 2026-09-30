@@ -77,6 +77,7 @@ class CityWorld:
         self.colors = display.agent_hex_colors([h.name for h in self.heroes])
         self.promotion_requests = collections.deque()
         self.metrics_history = []
+        self.finished = False
         self._by_place = {}
         self._wave_metrics = {}
 
@@ -506,10 +507,43 @@ class CityWorld:
             self._log("reflect_pause", h)
         await self._memory_wave()
 
-    # --- PROMOTE (filled in by promotion support) -------------------------------------------------------
+    # --- PROMOTE ---------------------------------------------------------------------------------------
 
     async def _promote_wave(self):
-        return None
+        """Background residents who've now dealt with heroes
+        `promote_after` times, plus any picked in the UI, become heroes --
+        up to the profile's hero cap. Their ring-buffer memories become
+        MemoryNodes, embedded in one batch; they plan at the next tick."""
+        requested = []
+        while self.promotion_requests:
+            requested.append(self.promotion_requests.popleft())
+        by_name = {b.name: b for b in self.background}
+        picks = [by_name[n] for n in dict.fromkeys(requested) if n in by_name]
+        picks += [b for b in self.background if b.hero_interactions >= self.promote_after and b not in picks]
+        picks = picks[:max(0, self.hero_cap - len(self.heroes))]
+        if picks:
+            texts = [e.text for b in picks for e in b.memory.entries]
+            vectors = iter(await self.gw.embed_many(texts))
+            for b in picks:
+                hero = promote(b, [next(vectors) for _ in b.memory.entries], self.places)
+                self.background.remove(b)
+                self.heroes.append(hero)
+                self.colors[hero.name] = display.agent_hex_colors([hero.name])[hero.name]
+                recorder.add_hero({"name": hero.name, "color": self.colors[hero.name], "age": hero.age,
+                                   "traits": hero.traits, "location": hero.location, "tier": "hero",
+                                   "promoted_from": b.id})
+                why = "picked in the UI" if b.name in requested else f"{b.hero_interactions} dealings with heroes"
+                recorder.log("promotion", self.tick, agent=hero.name, tier="hero",
+                             text=f"{hero.name} ({b.occupation}) becomes a hero: {why}", resident_id=b.id)
+            self._index_places()
+        recorder.set_meta(notable=self.notable())
+
+    def notable(self, n: int = 12) -> list:
+        """Background residents most tangled up with the heroes, for the
+        node's promote list."""
+        ranked = sorted(self.background, key=lambda b: (-b.hero_interactions, -sum(b.acquaintances.values()), b.id))
+        return [{"name": b.name, "occupation": b.occupation, "location": b.location_label(),
+                 "hero_interactions": b.hero_interactions} for b in ranked[:n]]
 
     # --- metrics -----------------------------------------------------------------------------------------
 
@@ -540,6 +574,26 @@ class CityWorld:
         recorder.log("metrics", self.tick, tier=None, time=self.clock(),
                      text=f"tick {self.tick + 1}: {metrics['seconds']}s, {metrics['requests']} requests, "
                           f"{metrics['tokens_per_second']} tok/s", **metrics)
+
+
+def promote(b: BackgroundAgent, vectors: list, places: list) -> CityHero:
+    """A background resident as a hero: same name and life, their ring
+    buffer turned into MemoryNodes (heuristic importance kept, `vectors`
+    from one embed_many batch), standing where they were."""
+    from ..memory import MemoryNode
+    from .tiers import _ids, compact_vector
+    location = b.location if b.location in places else (b.work or b.haunt or f"{b.name}'s place")
+    hero = CityHero(name=b.name, age=b.age, traits=b.occupation, currently=b.bio, location=location,
+                    home=b.home or b.work or location)
+    for e, vector in zip(b.memory.entries, vectors):
+        hero.memory.nodes.append(MemoryNode(
+            id=next(_ids), kind="chat" if e.kind == "dialogue" else "observation", description=e.text,
+            created_tick=e.tick, last_accessed_tick=e.tick, importance=e.importance,
+            embedding=compact_vector(vector)))
+    hero.acquaintances = b.acquaintances.copy()
+    hero.current_action = b.current_action
+    hero.promoted_from = b.id
+    return hero
 
 
 class _Conversation:

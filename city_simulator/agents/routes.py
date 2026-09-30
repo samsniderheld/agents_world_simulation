@@ -171,7 +171,44 @@ def run():
 @bp.post("/stop")
 def stop():
     jobs.stop()
+    from .city import run as city_run
+    city_run.pause_flag.clear()      # a paused CITY run has to wake up to see the stop
     return json_response({"ok": True})
+
+
+# --- CITY-only controls -------------------------------------------------------
+
+@bp.post("/city/pause")
+def city_pause():
+    from .city import run as city_run
+    if jobs.current_mode() != "city" or jobs.get_status()["phase"] != "running":
+        return json_response({"ok": False, "error": "no CITY run is in progress"}, status=409)
+    city_run.pause_flag.set()
+    city_recorder.set_meta(paused=True)
+    return json_response({"ok": True})
+
+
+@bp.post("/city/resume")
+def city_resume():
+    from .city import run as city_run
+    city_run.pause_flag.clear()
+    city_recorder.set_meta(paused=False)
+    return json_response({"ok": True})
+
+
+@bp.post("/city/promote")
+def city_promote():
+    """Promote a background resident of the running CITY run to hero (at
+    the end of the current tick)."""
+    from .city import run as city_run
+    name = (request.get_json(silent=True) or {}).get("name")
+    error = city_run.request_promotion(name) if name else "name is required"
+    return json_response({"ok": error is None, "error": error}, status=200 if error is None else 400)
+
+
+@bp.get("/city/runs")
+def city_runs():
+    return json_response({"runs": citystate.list_city_runs()})
 
 
 @bp.post("/treatment")

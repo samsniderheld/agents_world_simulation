@@ -10,6 +10,7 @@ the whole run.
 
 import asyncio
 import datetime
+import threading
 
 import hardware
 from citystate import store as citystate
@@ -23,6 +24,32 @@ from . import recorder
 from .tiers import BackgroundAgent, CityHero, CityMemoryStream
 
 _DEFAULT_DATE = datetime.datetime(2026, 8, 24)   # the same calendar day SCENE runs use
+
+# Everything the CITY runner reads or writes on disk goes through this one
+# object (citystate.store in the app); tests swap in a fake.
+storage = citystate
+
+# Pause/resume for CITY runs (routes.py's /city/pause, /city/resume); the
+# world checks it between ticks. The stop flag stays jobs.py's shared one.
+pause_flag = threading.Event()
+_current_world = None
+
+
+def current_world():
+    """The running (or last) CityWorld, for the routes' promote/zoom calls."""
+    return _current_world
+
+
+def request_promotion(name: str) -> str:
+    """Queue a background resident for promotion to hero at the end of the
+    current tick. Returns an error message, or None."""
+    world = _current_world
+    if world is None or world.finished:
+        return "no CITY run is in progress"
+    if not any(b.name == name for b in world.background):
+        return f"{name!r} isn't a background resident of this run"
+    world.promotion_requests.append(name)
+    return None
 
 
 def build_heroes(city: dict, hero_names: list = None, cap: int = 200, hydrate: bool = True) -> list:
@@ -42,7 +69,7 @@ def build_heroes(city: dict, hero_names: list = None, cap: int = 200, hydrate: b
         hero = CityHero(name=c["name"], age=c.get("age", 40), traits=traits or "a longtime local",
                         currently=c.get("bio", ""), location=place, character_id=c.get("id"), home=place)
         if hydrate and c.get("id"):
-            record = citystate.get_agent(c["id"])
+            record = storage.get_agent(c["id"])
             if record and record.get("runs"):
                 hero.memory = CityMemoryStream.from_persisted(record)
         heroes.append(hero)
@@ -71,17 +98,12 @@ def build_background(city: dict, count: int, seed: int, taken_names: set) -> lis
     return residents
 
 
-# Storage hooks for the background population (see citystate); kept as
-# module functions so tests can swap them out.
 def citystate_background() -> list:
-    getter = getattr(citystate, "get_background", None)
-    return list(getter() or []) if getter else []
+    return list(storage.get_background() or [])
 
 
 def save_background(residents: list):
-    saver = getattr(citystate, "save_background", None)
-    if saver:
-        saver(residents)
+    storage.save_background(residents)
 
 
 async def _preflight(gw: Gateway, backends: dict) -> list:
@@ -128,7 +150,7 @@ def run(stop_flag=None, hero_names=None, background_count=0, profile="auto", her
     """Blocking. `transport` (an httpx transport) and `city` are for tests
     and the benchmark; `on_world` receives the CityWorld once built (the
     routes use it to queue UI promotions)."""
-    city = city if city is not None else citystate.get()
+    city = city if city is not None else storage.get()
     if not city:
         raise RuntimeError("no active city -- generate one first")
     prof = hardware.city_profile(profile)
@@ -149,9 +171,14 @@ def run(stop_flag=None, hero_names=None, background_count=0, profile="auto", her
 
     return asyncio.run(_main(
         city, prof, backends, heroes, background, start, tick_minutes, ticks, directive, convene_at, seed,
-        stop_flag, pause_flag, transport, persist_hero_memories,
+        stop_flag, pause_flag if pause_flag is not None else _fresh_pause_flag(), transport, persist_hero_memories,
         ccfg.BACKGROUND_LLM_SCHEDULES if llm_schedules is None else llm_schedules,
         clipped=(background_count or 0) - count, on_world=on_world))
+
+
+def _fresh_pause_flag():
+    pause_flag.clear()
+    return pause_flag
 
 
 async def _main(city, prof, backends, heroes, background, start, tick_minutes, ticks, directive, convene_at, seed,
@@ -191,8 +218,42 @@ async def _main(city, prof, backends, heroes, background, start, tick_minutes, t
         world = CityWorld(gw, heroes, background, city, start=start, tick_minutes=tick_minutes, directive=directive,
                           seed=seed, stop_flag=stop_flag, pause_flag=pause_flag, llm_schedules=llm_schedules,
                           hero_cap=prof["hero_cap"], llm_schedule_cap=prof.get("llm_schedule_cap"))
+        global _current_world
+        _current_world = world
         if on_world:
             on_world(world)
-        await world.run(ticks)
+        try:
+            await world.run(ticks)
+        finally:
+            world.finished = True
         recorder.log("status", world.tick, tier=None, text=f"finished after {world.tick} ticks")
+        storage.save_city_run(run_summary(world))
         return world
+
+
+def run_summary(world) -> dict:
+    """The compact record of a CITY run (citystate's city_runs/): meta,
+    heroes, every agent's place at every tick (as indexes into `places`),
+    and per-resident tallies -- not the background agents' event slices."""
+    info = recorder.run_info()
+    positions = recorder.positions()
+    names = list(dict.fromkeys(n for tick in positions for n in tick))
+    places = sorted({loc for tick in positions for loc in tick.values()})
+    place_index = {p: i for i, p in enumerate(places)}
+    promoted = {h.promoted_from: h.name for h in world.heroes if h.promoted_from}
+    return {
+        "started_at": info["started_at"],
+        "meta": info["meta"],
+        "heroes": [{"name": h.name, "character_id": h.character_id, "promoted_from": h.promoted_from}
+                   for h in world.heroes],
+        "agents": names,
+        "places": places,
+        "positions": [[place_index.get(tick.get(n), -1) for n in names] for tick in positions],
+        "background": {
+            b.id: {"name": b.name, "occupation": b.occupation, "hero_interactions": b.hero_interactions,
+                   "acquaintances": dict(b.acquaintances.most_common(5)), "schedule": b.schedule_source}
+            for b in world.background
+        },
+        "promoted": promoted,
+        "metrics": world.metrics_history,
+    }

@@ -37,6 +37,13 @@ export interface CitySimulationNodeData extends Record<string, unknown> {
 
 export type CitySimulationNodeType = Node<CitySimulationNodeData, 'citysim'>;
 
+interface NotableResident {
+  name: string;
+  occupation: string;
+  location: string;
+  hero_interactions: number;
+}
+
 const PROVIDERS = [
   { value: '', label: 'profile default' },
   { value: 'ollama', label: 'Ollama (local)' },
@@ -63,6 +70,14 @@ export function CitySimulationNode({ id, data, selected, height }: NodeProps<Cit
   const logRef = useRef<HTMLDivElement>(null);
   const stickToBottomRef = useRef(true);
   const agentsState = useJobStore((s) => s.agentsState);
+  const [detected, setDetected] = useState<string | null>(null);
+
+  useEffect(() => {
+    agentsApi
+      .cityProfiles()
+      .then((res) => setDetected(res.detected))
+      .catch(() => {});
+  }, []);
 
   const globallyRunning = agentsState?.status.phase === 'running';
   const isCityRun = agentsState?.status.mode === 'city';
@@ -143,6 +158,13 @@ export function CitySimulationNode({ id, data, selected, height }: NodeProps<Cit
   }
 
   const statusError = cityRunning || !isCityRun ? null : agentsState?.status.error;
+  const paused = Boolean(agentsState?.meta?.paused);
+  const notable = (isCityRun ? (agentsState?.meta?.notable as NotableResident[] | undefined) : undefined) ?? [];
+
+  async function promote(name: string) {
+    const res = await agentsApi.cityPromote(name).catch((e) => ({ ok: false, error: String(e) }));
+    if (!res.ok) setError(res.error ?? 'promotion failed');
+  }
   const heroes = data.agentNames.length;
 
   return (
@@ -178,7 +200,7 @@ export function CitySimulationNode({ id, data, selected, height }: NodeProps<Cit
         <select className="node-select" value={data.profile} onChange={(e) => change({ profile: e.target.value })}>
           {CITY_PROFILES.map((p) => (
             <option key={p.value} value={p.value}>
-              {p.label}
+              {p.value === 'auto' && detected ? `auto-detect (${detected})` : p.label}
             </option>
           ))}
         </select>
@@ -230,11 +252,39 @@ export function CitySimulationNode({ id, data, selected, height }: NodeProps<Cit
           {cityRunning ? 'running…' : '▶ run city'}
         </button>
         {cityRunning && (
+          <button className="node-run-btn" onClick={() => (paused ? agentsApi.cityResume() : agentsApi.cityPause())}>
+            {paused ? 'resume' : 'pause'}
+          </button>
+        )}
+        {cityRunning && (
           <button className="node-run-btn node-delete-btn" onClick={() => agentsApi.stop()}>
             stop
           </button>
         )}
       </div>
+      {isCityRun && agentsState?.population && (
+        <div className="node-subtitle">
+          {agentsState.population.heroes} heroes · {agentsState.population.background} background
+          {paused ? ' · paused' : ''}
+        </div>
+      )}
+
+      {cityRunning && notable.length > 0 && (
+        <details className="node-subtitle">
+          <summary>residents dealing with the heroes ({notable.length})</summary>
+          {notable.map((r) => (
+            <div key={r.name} className="node-controls">
+              <span>
+                {r.name}, {r.occupation} @ {r.location}
+                {r.hero_interactions ? ` · ${r.hero_interactions}×` : ''}
+              </span>
+              <button className="node-run-btn" title="Make this resident a hero from the next tick" onClick={() => promote(r.name)}>
+                promote
+              </button>
+            </div>
+          ))}
+        </details>
+      )}
 
       {(error || statusError) && <div className="node-error-text">{error || statusError}</div>}
 

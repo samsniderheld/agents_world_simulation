@@ -210,6 +210,16 @@ export const agentsApi = {
 
   stop: () => request<{ ok: boolean }>('/api/agents/stop', { method: 'POST' }),
 
+  // CITY-only controls (agents/routes.py's /city/*).
+  cityPause: () => request<{ ok: boolean; error?: string }>('/api/agents/city/pause', { method: 'POST' }),
+  cityResume: () => request<{ ok: boolean }>('/api/agents/city/resume', { method: 'POST' }),
+  cityPromote: (name: string) =>
+    request<{ ok: boolean; error: string | null }>('/api/agents/city/promote', { method: 'POST', body: json({ name }) }),
+  cityProfiles: () =>
+    request<{ profiles: Record<string, { label: string; population_cap: number; hero_cap: number }>; detected: string }>(
+      '/api/agents/city/profiles',
+    ),
+
   generateTreatment: (
     agentId: string,
     params?: { provider?: string; model?: string; agentIds?: string[]; placeIds?: string[] },

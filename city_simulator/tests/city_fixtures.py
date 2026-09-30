@@ -28,16 +28,67 @@ def fake_city() -> dict:
     }
 
 
+class FakeStorage:
+    """Stands in for citystate.store in CITY runs (agents/city/run.py's
+    `storage`): an in-memory city, background list, run summaries,
+    appended runs and characters. Nothing touches disk."""
+
+    def __init__(self, city=None):
+        self.city = city or fake_city()
+        self.background = []
+        self.city_runs = []
+        self.appended = []
+        self.records = {}
+        self.added = []
+
+    def get(self):
+        return self.city
+
+    def get_agent(self, agent_id):
+        return self.records.get(agent_id)
+
+    def get_background(self):
+        return list(self.background)
+
+    def save_background(self, residents):
+        self.background = list(residents)
+
+    def update_background_resident(self, resident_id, **fields):
+        for r in self.background:
+            if r["id"] == resident_id:
+                r.update(fields)
+                return True
+        return False
+
+    def save_city_run(self, summary):
+        self.city_runs.append(summary)
+        return "run.json"
+
+    def get_city_run(self, started_at=None):
+        runs = [s for s in self.city_runs if not started_at or s["started_at"] == started_at]
+        return runs[-1] if runs else None
+
+    def append_agent_run(self, run_record):
+        self.appended.append(run_record)
+
+    def add_character(self, character):
+        self.city["characters"].append(character)
+        self.added.append(character)
+        return character
+
+
 @contextlib.contextmanager
-def no_background_storage():
-    saved = (city_run.citystate_background, city_run.save_background)
-    store = []
-    city_run.citystate_background = lambda: list(store)
-    city_run.save_background = lambda r: store.__setitem__(slice(None), r)
+def fake_storage(storage: FakeStorage = None):
+    storage = storage or FakeStorage()
+    saved = city_run.storage
+    city_run.storage = storage
     try:
-        yield store
+        yield storage
     finally:
-        city_run.citystate_background, city_run.save_background = saved
+        city_run.storage = saved
+
+
+no_background_storage = fake_storage
 
 
 def run_city(server: StubServer = None, **kw):
@@ -45,8 +96,10 @@ def run_city(server: StubServer = None, **kw):
     params = dict(background_count=40, ticks=3, profile="mac", transport=server.transport(), city=fake_city(),
                   tick_minutes=60, start_time="17:00", hero_model="stub-hero", background_model="stub-background")
     params.update(kw)
-    with no_background_storage():
+    storage = params.pop("storage", None) or FakeStorage(params["city"])
+    with fake_storage(storage):
         world = city_run.run(**params)
+    world.storage = storage
     return world, server
 
 
