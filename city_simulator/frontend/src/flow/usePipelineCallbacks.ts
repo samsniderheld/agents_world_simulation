@@ -59,7 +59,7 @@ export function usePipelineCallbacks(
     setNodes((prev) => (prev ? prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, startTime } } : n)) : prev));
   }, [setNodes]);
 
-  const onPopulationChange = useCallback((nodeId: string, patch: { count?: number }) => {
+  const onPopulationChange = useCallback((nodeId: string, patch: { count?: number; withImages?: boolean }) => {
     setNodes((prev) => (prev ? prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, ...patch } } : n)) : prev));
   }, [setNodes]);
 

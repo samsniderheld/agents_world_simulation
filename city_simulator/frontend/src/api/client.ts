@@ -424,13 +424,14 @@ export const graph = {
 // ---- the Population node (/api/history/population) -- history/population.py
 
 export const populationApi = {
-  start: (params: { count: number; characterStyle?: PopulationStyle; locationStyle?: PopulationStyle }) =>
+  start: (params: { count: number; characterStyle?: PopulationStyle; locationStyle?: PopulationStyle; withImages?: boolean }) =>
     request<{ ok: boolean; error: string | null }>('/api/history/population', {
       method: 'POST',
       body: json({
         count: params.count,
         character_style: params.characterStyle,
         location_style: params.locationStyle,
+        with_images: params.withImages ?? true,
       }),
     }),
   status: () => request<PopulationStatus>('/api/history/population'),

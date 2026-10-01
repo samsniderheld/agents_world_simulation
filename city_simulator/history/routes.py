@@ -165,9 +165,10 @@ def save_character():
 
 @bp.post("/population")
 def start_population():
-    """Body: {"count": N, "character_style": {...}, "location_style": {...}}
-    -- N locations each get a new resident; each style {"prompt",
-    "reference_images"} is optional. See population.py."""
+    """Body: {"count": N, "character_style": {...}, "location_style": {...},
+    "with_images": true} -- N locations each get a new resident; each style
+    {"prompt", "reference_images"} is optional; with_images false skips the
+    portraits and exterior photos. See population.py."""
     if jobs.get_status().get("phase") == "running":
         return json_response({"ok": False, "error": "a city is being generated -- wait for it to finish"}, status=409)
     body = request.get_json(silent=True) or {}
@@ -179,6 +180,7 @@ def start_population():
         count,
         character_style=body.get("character_style") or None,
         location_style=body.get("location_style") or None,
+        with_images=bool(body.get("with_images", True)),
         # same roster refresh POST /characters does, so new residents show
         # up as addable Agent nodes right away
         on_characters_added=lambda: agents_jobs.set_history_roster(citystate.get()),

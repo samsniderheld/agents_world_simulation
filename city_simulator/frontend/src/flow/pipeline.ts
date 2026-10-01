@@ -42,7 +42,7 @@ export interface PipelineCallbacks {
     styleNames: string[],
   ) => void;
   onExpandStoryboard: (storyboardId: string) => void;
-  onPopulationChange: (nodeId: string, patch: { count?: number }) => void;
+  onPopulationChange: (nodeId: string, patch: { count?: number; withImages?: boolean }) => void;
   onCitySimChange: (nodeId: string, patch: Partial<CitySimulationNodeData>) => void;
   // City Simulation "zoom in": adds a pre-wired Simulation node (plus the
   // cast's Agent nodes and the Location) next to the City node. The work
@@ -264,6 +264,7 @@ export function toPipelineRenderNode(gn: GraphNode, cb: PipelineCallbacks, owner
       data: {
         // older nodes stored separate characters/locations counts
         count: (gn.data.count as number) ?? (gn.data.characters as number) ?? 5,
+        withImages: (gn.data.withImages as boolean) ?? true,
         onChange: cb.onPopulationChange,
         onCityChanged: cb.onCityChanged,
       },
@@ -365,7 +366,7 @@ export function pipelineToGraphNode(n: Node): GraphNode | null {
   }
   if (n.type === 'population') {
     const d = n.data as PopulationNodeData;
-    return { id: n.id, type: 'population', position: n.position, width: n.width, height: n.height, data: { count: d.count } };
+    return { id: n.id, type: 'population', position: n.position, width: n.width, height: n.height, data: { count: d.count, withImages: d.withImages } };
   }
   if (n.type === 'storyboard') {
     const d = n.data as StoryboardNodeData;

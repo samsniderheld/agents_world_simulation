@@ -151,7 +151,7 @@ export function useAddNodeActions({
         if (type === 'population') {
           return [
             ...list,
-            { ...base, type, width: 340, data: { count: 5, onChange: pipeline.onPopulationChange, onCityChanged: pipeline.onCityChanged } },
+            { ...base, type, width: 340, data: { count: 5, withImages: true, onChange: pipeline.onPopulationChange, onCityChanged: pipeline.onCityChanged } },
           ];
         }
         if (type === 'storyboard') {

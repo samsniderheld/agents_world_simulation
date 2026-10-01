@@ -101,7 +101,7 @@ def _progress():
         _status["current"] = f"{_status['active']} in progress" if _status["active"] else ""
 
 
-def _make_character(place: dict, style: dict, on_characters_added) -> bool:
+def _make_character(place: dict, style: dict, on_characters_added, with_images: bool = True) -> bool:
     if _stop.is_set():
         return True
     with _lock:
@@ -116,8 +116,9 @@ def _make_character(place: dict, style: dict, on_characters_added) -> bool:
         )
         saved = citystate.add_character(character)
         on_characters_added()
-        url, local, prompt = _square_image(_portrait_prompt(saved), style)
-        citystate.add_media(saved["id"], "image", url, local_path=local, prompt=prompt, tag="portrait")
+        if with_images:
+            url, local, prompt = _square_image(_portrait_prompt(saved), style)
+            citystate.add_media(saved["id"], "image", url, local_path=local, prompt=prompt, tag="portrait")
         _log(f"+ {saved['name']}, {saved.get('occupation') or 'resident'} at {place['name']}")
         return True
     except Exception as e:
@@ -147,7 +148,7 @@ def _photograph(place: dict, style: dict) -> bool:
         _progress()
 
 
-def _worker(count: int, on_characters_added, character_style: dict, location_style: dict):
+def _worker(count: int, on_characters_added, character_style: dict, location_style: dict, with_images: bool = True):
     try:
         city = citystate.get()
         if city is None:
@@ -157,13 +158,16 @@ def _worker(count: int, on_characters_added, character_style: dict, location_sty
             raise RuntimeError("the city has no active locations")
         if len(targets) < count:
             _log(f"only {len(targets)} active location(s) available")
-        needs_photo = [p for p in targets if p["id"] not in _has_exterior(city)]
+        needs_photo = [p for p in targets if p["id"] not in _has_exterior(city)] if with_images else []
         _set(total=len(targets) + len(needs_photo))
 
         from visuals import config as visuals_config
-        parallel = 1 if visuals_config.PROVIDER == "local" else MAX_PARALLEL
+        # Without images every step is an LLM call; the local image provider
+        # (on this machine's GPU) is the only reason to go one at a time.
+        parallel = 1 if with_images and visuals_config.PROVIDER == "local" else MAX_PARALLEL
         with ThreadPoolExecutor(max_workers=parallel) as pool:
-            futures = [pool.submit(_make_character, place, character_style, on_characters_added) for place in targets]
+            futures = [pool.submit(_make_character, place, character_style, on_characters_added, with_images)
+                       for place in targets]
             futures += [pool.submit(_photograph, place, location_style) for place in needs_photo]
             errors = sum(not f.result() for f in futures)
 
@@ -174,11 +178,12 @@ def _worker(count: int, on_characters_added, character_style: dict, location_sty
 
 
 def start(count: int, on_characters_added=lambda: None,
-          character_style: dict = None, location_style: dict = None):
+          character_style: dict = None, location_style: dict = None, with_images: bool = True):
     """Returns (ok, error_message). `count` is how many locations get a new
     resident. `on_characters_added` runs after each saved character
     (routes.py uses it to refresh the agent roster). Each style is
-    {"prompt": str, "reference_images": [paths]} or None."""
+    {"prompt": str, "reference_images": [paths]} or None. `with_images`
+    False makes residents only: no portraits, no exterior photos."""
     global _thread
     count = max(0, min(MAX_COUNT, int(count)))
     if count == 0:
@@ -189,7 +194,8 @@ def start(count: int, on_characters_added=lambda: None,
         _stop.clear()
         _status.update(phase="running", error=None, total=count, done=0, active=0, current="starting", log=[])
         _thread = threading.Thread(
-            target=_worker, args=(count, on_characters_added, character_style, location_style), daemon=True,
+            target=_worker, args=(count, on_characters_added, character_style, location_style, with_images),
+            daemon=True,
         )
         _thread.start()
     return True, None
