@@ -235,6 +235,24 @@ class GalleryResidentsTests(unittest.TestCase):
         self.assertEqual(after[target["id"]]["character_name"], target["name"])
         self.assertEqual(len([c for c in storage.added if c["name"] == target["name"]]), 1)
 
+    def test_resident_detail(self):
+        server = StubServer(reply_fn=prompts.stub_reply)
+        storage = FakeStorage()
+        run_city(server, ticks=4, background_count=30, tick_minutes=60, storage=storage)
+        with fake_storage(storage):
+            r = max(zoom.residents(), key=lambda x: x["hero_interactions"] or 0)
+            d = zoom.resident_detail(r["id"])
+            with self.assertRaises(ValueError):
+                zoom.resident_detail("bg_nope")
+        self.assertEqual(d["name"], r["name"])
+        run = d["run"]
+        self.assertTrue(run["in_run"])
+        self.assertEqual(run["stays"][0]["from"], "17:00")
+        self.assertEqual(run["stays"][-1]["until"], "21:00")
+        self.assertTrue(all(s["place"] for s in run["stays"]))
+        self.assertTrue(run["memories"])
+        self.assertTrue(any(a["hero"] for a in run["acquaintances"]) or r["hero_interactions"] == 0)
+
     def test_without_any_city_run(self):
         server = StubServer(reply_fn=prompts.stub_reply)
         storage = FakeStorage()

@@ -26,6 +26,7 @@ import type {
   CityInsight,
   ThemeSummary,
   BackgroundResident,
+  ResidentDetail,
 } from './types';
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -235,6 +236,7 @@ export const agentsApi = {
   cityAsk: (question: string) =>
     request<CityInsight>('/api/agents/city/ask', { method: 'POST', body: json({ question }) }),
   cityResidents: () => request<{ residents: BackgroundResident[] }>('/api/agents/city/residents'),
+  cityResident: (id: string) => request<ResidentDetail>(`/api/agents/city/residents/${encodeURIComponent(id)}`),
   cityResidentToCharacter: (id: string) =>
     request<{ character: Character }>(`/api/agents/city/residents/${encodeURIComponent(id)}/character`, { method: 'POST' }),
   cityZoomOptions: () => request<CityZoomOptions>('/api/agents/city/zoom'),

@@ -42,6 +42,20 @@ export interface BackgroundResident {
   character_name: string | null;
 }
 
+// GET /api/agents/city/residents/<id> -- one resident's page.
+export interface ResidentDetail extends Omit<BackgroundResident, 'hero_interactions'> {
+  run: null | {
+    started_at: string;
+    in_run: boolean;
+    became_hero: boolean;
+    hero_interactions: number | null;
+    schedule: string | null; // "llm" | "template"
+    acquaintances: { name: string; count: number; hero: boolean }[];
+    memories: { time: string; kind: string; text: string }[];
+    stays: { place: string; from: string; until: string }[];
+  };
+}
+
 // GET /api/themes -- a city theme (themes/*.yaml, or uploaded).
 export interface ThemeSummary {
   id: string;

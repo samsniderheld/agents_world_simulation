@@ -16,6 +16,7 @@ finished), otherwise from the run's saved summary (citystate city_runs/).
 
 import asyncio
 import datetime
+import re
 
 import hardware
 from history import entities
@@ -312,3 +313,51 @@ def make_character(resident_id: str, transport=None) -> dict:
         recent.update(summary.get("promoted_memories") or {})
     created = asyncio.run(_promote([record], place, places, summary, recent, {}, transport))
     return created[0]
+
+
+def resident_detail(resident_id: str) -> dict:
+    """One background resident for their own page: the saved record, plus
+    what the latest CITY run knows -- dealings with heroes, who they knew
+    best, their last memories, and where they were, as stays."""
+    record = next((r for r in city_run.storage.get_background() if r["id"] == resident_id), None)
+    if record is None:
+        raise ValueError(f"no such resident: {resident_id!r}")
+    city = city_run.storage.get() or {}
+    characters = {c["id"]: c["name"] for c in city.get("characters", [])}
+    out = {**{k: record.get(k) for k in ("id", "name", "age", "occupation", "work", "haunt", "home", "shift", "bio")},
+           "promoted_to": record.get("promoted_to"), "character_name": characters.get(record.get("promoted_to")),
+           "run": None}
+    summary = city_run.storage.get_city_run()
+    if not summary:
+        return out
+    meta = summary["meta"]
+    entry = (summary.get("background") or {}).get(resident_id)
+    promoted_hero = next((h for h in summary.get("heroes", []) if h.get("promoted_from") == resident_id), None)
+    memories = entry.get("recent", []) if entry else (summary.get("promoted_memories") or {}).get(record["name"], [])
+    stays = []
+    if record["name"] in summary.get("agents", []):
+        i = summary["agents"].index(record["name"])
+        for tick, row in enumerate(summary["positions"]):
+            where = summary["places"][row[i]] if row[i] >= 0 else None
+            if where and where.startswith("~"):
+                where = "home" if "home" in where else "somewhere across town"
+            if stays and stays[-1]["place"] == where:
+                stays[-1]["until"] = _clock(meta, tick + 1)
+            else:
+                stays.append({"place": where, "from": _clock(meta, tick), "until": _clock(meta, tick + 1)})
+    hero_names = {h["name"] for h in summary.get("heroes", [])}
+    out["run"] = {
+        "started_at": summary["started_at"],
+        "in_run": bool(entry or promoted_hero),
+        "became_hero": bool(promoted_hero),
+        "hero_interactions": (entry or {}).get("hero_interactions"),
+        "schedule": (entry or {}).get("schedule"),
+        "acquaintances": [{"name": n, "count": c, "hero": n in hero_names}
+                          for n, c in ((entry or {}).get("acquaintances") or {}).items()],
+        # Routine memories start with their own clock time ("06:00 AM: ...");
+        # the page shows the time separately.
+        "memories": [{"time": _clock(meta, tick), "kind": kind,
+                      "text": re.sub(r"^(Day \d+, )?\d{1,2}:\d{2} [AP]M: ", "", text)} for tick, kind, text in memories],
+        "stays": [s for s in stays if s["place"]],
+    }
+    return out

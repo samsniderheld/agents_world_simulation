@@ -214,7 +214,11 @@ function BackgroundSection({ cityId, onCharacterMade }: { cityId: string; onChar
         <>
           <div className="gallery-grid">
             {matching.slice(0, shown).map((r) => (
-              <div key={r.id} className={`gallery-card gallery-resident ${r.promoted_to ? 'is-promoted' : ''}`}>
+              <div
+                key={r.id}
+                className={`gallery-card gallery-resident ${r.promoted_to ? 'is-promoted' : ''}`}
+                onClick={() => navigate({ kind: 'resident', cityId, residentId: r.id, from: { kind: 'gallery', cityId } })}
+              >
                 <div className="gallery-card-body">
                   <div className="gallery-card-name">{r.name}</div>
                   <div className="gallery-card-subtitle">
@@ -234,18 +238,24 @@ function BackgroundSection({ cityId, onCharacterMade }: { cityId: string; onChar
                   <button
                     className="node-run-btn"
                     title="This resident is a character now -- open them"
-                    onClick={() => navigate({ kind: 'agent', cityId, agentId: r.promoted_to!, from: { kind: 'gallery', cityId } })}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigate({ kind: 'agent', cityId, agentId: r.promoted_to!, from: { kind: 'gallery', cityId } });
+                    }}
                   >
-                    character: {r.character_name ?? 'open'}
+                    hero: {r.character_name ?? 'open'}
                   </button>
                 ) : (
                   <button
                     className="node-run-btn"
                     disabled={busy !== null}
-                    title="Write them a full dossier and save them as a character, so they can go on a canvas"
-                    onClick={() => makeCharacter(r)}
+                    title="Write them a full dossier and save them as a character -- a hero in CITY runs, and an Agent you can put on a canvas"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      makeCharacter(r);
+                    }}
                   >
-                    {busy === r.id ? 'writing their dossier…' : 'make a character'}
+                    {busy === r.id ? 'writing their dossier…' : 'make a hero'}
                   </button>
                 )}
               </div>

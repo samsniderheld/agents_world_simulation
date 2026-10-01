@@ -259,6 +259,16 @@ def city_residents():
     return json_response({"residents": zoom.residents()})
 
 
+@bp.get("/city/residents/<resident_id>")
+def city_resident(resident_id):
+    """One background resident's page (agents/city/zoom.py)."""
+    from .city import zoom
+    try:
+        return json_response(zoom.resident_detail(resident_id))
+    except ValueError as e:
+        return json_response({"error": str(e)}, status=404)
+
+
 @bp.post("/city/residents/<resident_id>/character")
 def city_resident_to_character(resident_id):
     """Make one background resident a saved character (Gallery button)."""
