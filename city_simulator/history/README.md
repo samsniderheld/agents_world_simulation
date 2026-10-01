@@ -23,14 +23,14 @@ already happened.
 
 | Concept | What it is | Where |
 |---|---|---|
-| **Era** | One of 8 fixed named periods spanning 1624–1959, each with its own year range and a `description` used as color text. | `eras.py` / `data/eras.yaml` |
+| **Era** | One of 8 fixed named periods spanning 1624–1959, each with its own year range and a `description` used as color text. | `eras.py` / the theme's `eras` |
 | **Figure** | A person: name, role (Merchant, Gang Boss, Reverend, ...), domain (a one/two-word thematic tag drawn from *that figure's own era* — "the fur trade" for a Dutch colonial figure, "bootlegging" for a Prohibition one; see `entities.py`'s `domains_for_era()`), birth/death year, and a mutable `properties` bag (`allies`, `rivals`, `reputation`, `founded_places`). | `entities.py` |
 | **Place** | A location: name, type (Tavern, Shipyard, Tenement, ...), founding year/figure, current owner, `status` (active/destroyed/closed), a one-sentence `architecture` description (generated once at founding — and regenerated if it's ever rebuilt, since a rebuild can land in a later, differently-styled era — by crossing that era's real architectural style with what kind of building this place_type actually is; see `architecture.py`), and its own append-only `history` list of every event that touched it. | `entities.py` / `architecture.py` |
-| **Event template** | A pool of ~15 kinds of thing that can happen (found a place, feud violence, scandal, rename, ...), each with a grammar for its Gospel text, an optional effect function that mutates a figure/place, and an optional precondition/place-filter gating when it's eligible. | `events.py` / `data/events.yaml` |
+| **Event template** | A pool of ~15 kinds of thing that can happen (found a place, feud violence, scandal, rename, ...), each with a grammar for its Gospel text, an optional effect function that mutates a figure/place, and an optional precondition/place-filter gating when it's eligible. | `events.py` / the theme's `events` |
 | **Grammar** | A tiny replacement-grammar engine: named symbols, each a list of weighted string rules; `{symbol}` recurses, `{context_key}` fills from the event's context dict. | `grammar.py` |
 | **Gospel text** | The one sentence an event produces — the generator's only real "output" per event; everything else (JSON fields) is bookkeeping in service of producing more of these later. | — |
 
-The 8 eras, in order (`data/eras.yaml`):
+The 8 eras of the default noir theme, in order (`themes/noir_nyc.yaml`'s `eras`):
 
 ```
 1624 ─┬─ New Amsterdam (Dutch Colonial)
@@ -267,7 +267,7 @@ exactly what the next event reads.
                               │
                               ▼
 ┌─ _maybe_flourish(text, "place_destroyed", rng) ───────────────────────┐
-│ "place_destroyed" is in notable_template_ids (events.yaml) → eligible │
+│ "place_destroyed" is in notable_template_ids (theme events) → eligible │
 │ if rng.random() <= LLM_FLOURISH_RATE and llm.available():             │
 │    ask Ollama to rewrite it more vividly, every name/date/fact pinned │
 │    in the prompt so none can be invented or dropped, e.g.:            │
@@ -320,7 +320,7 @@ run_history()
   │     for each resident: pick a place (weighted toward one with more
   │     recorded history), then either ask the LLM to invent someone
   │     grounded in that place's founder + a real anecdote from its
-  │     history, or fall back to a template-driven bio from characters.yaml.
+  │     history, or fall back to a template-driven bio from the theme's characters section.
   │     The web app passes characters_count=0 and adds residents on demand
   │     instead (POST /api/history/characters/preview + /characters, the
   │     "+ New agent" modal); the standalone CLI still defaults to 10.
@@ -335,17 +335,22 @@ run_history()
 
 ## Everything is tunable, not hardcoded
 
-Every knob mentioned above — figures/events per era, the LLM flourish
-rate, chat-model tiers by available RAM — lives in `data/config.yaml`,
-loaded once by `config.py`. All *content* — era
-definitions, 10 domains and 10 factions per era (`entities.yaml`, looked
-up by `domains_for_era()`/`factions_for_era()` so a figure only ever gets
-a domain/rival/ally that actually fits its own era), roles/place-types and
-which eras each is valid in (a place type can only be *founded* in its own eras -- no general stores
-opening in the 1950s, no taverns during Prohibition -- though an older one can survive into a later era),
-name word lists per era, event templates and
-their word pools, each era's real architectural style/material/feature
-word pools plus each place_type's building scale (`architecture.yaml`),
-character bio templates — lives in the matching `data/*.yaml` file, not in
-the `.py` files, which hold only behavior (see each module's docstring for
-exactly which YAML backs it).
+Two places, deliberately separate:
+
+- **The world** -- the eras, every role/place-type definition and which eras
+  each is valid in (a place type can only be *founded* in its own eras --
+  no general stores opening in the 1950s -- though an older one can
+  survive into a later era), 10 domains and 10 factions per era (looked up
+  by `domains_for_era()`/`factions_for_era()` so a figure only ever gets a
+  domain/rival/ally that fits its own era), name pools and naming patterns,
+  every event template and its word lists, each era's architectural
+  style/material/feature pools plus each place type's building scale,
+  resident templates, and every LLM prompt -- lives in a **theme file**:
+  `themes/noir_nyc.yaml` by default (see the root README's *Themes*). The
+  `.py` files read it through `theme.py` and hold only behavior, so a
+  different world (`themes/fantasy_realm.yaml`, or one you upload) needs
+  no code changes. A city keeps a copy of the theme it was generated with.
+- **Technical settings** -- figures/events per era, the seed, the LLM
+  flourish rate, chat-model tiers by available RAM -- live in
+  `data/config.yaml`, loaded once by `config.py`. The last year a history
+  reaches is the theme's `world.present_year`.

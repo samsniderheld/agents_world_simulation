@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { history } from '../api/client';
+import { history, themesApi } from '../api/client';
 import type { CitySummary } from '../api/types';
 import { NewCityModal } from './NewCityModal';
 import { navigate } from './router';
@@ -72,6 +72,12 @@ export function CitiesScreen() {
               <div className="city-card-header">
                 <span className="city-card-id">{c.id}</span>
                 {c.is_active && <span className="city-card-active">● active</span>}
+              </div>
+              <div className="city-card-theme">
+                {c.theme?.name ?? 'Film-noir New York, 1959'} ·{' '}
+                <a href={themesApi.cityFileUrl(c.id)} download>
+                  theme file
+                </a>
               </div>
               <p className="city-card-summary">{c.summary || 'No summary yet.'}</p>
               <div className="city-card-stats">

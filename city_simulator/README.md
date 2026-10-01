@@ -270,9 +270,9 @@ flips to an error the moment fal.ai is actually called.
 
 ## Using it
 
-**Cities** (`/`) lists every generated city as a card. "+ New City" opens a
-config modal (seed, figures per era, events per figure, use LLM) and kicks
-off generation as a background job; "open" activates that city and takes
+**Cities** (`/`) lists every generated city as a card, with the theme it was
+made with. "+ New City" opens a config modal (theme, seed, figures per era,
+events per figure, use LLM) and kicks off generation as a background job; "open" activates that city and takes
 you to its canvas; "delete" asks for confirmation, then permanently removes
 it.
 
@@ -347,17 +347,17 @@ city_simulator/
   history/           the history-generation engine + its API
     README.md          how the generator works, with a worked example
     data/              every YAML file -- edit these, not the .py files
-      config.yaml        every tunable knob
-      eras.yaml, entities.yaml, names.yaml, events.yaml, characters.yaml,
-      architecture.yaml  content: eras, domains/factions/roles/place
-                         types, name word lists, event templates, bio
-                         templates, architectural styles
+      config.yaml        technical knobs (counts, seed, LLM fill, model tiers);
+                         the world itself is in a theme file (themes/)
     config.py, llm.py, log.py
     eras.py, entities.py, events.py, grammar.py, names.py, architecture.py
     characters.py, summary.py
     generate.py        run_history() + a standalone CLI
     jobs.py            background-thread job state
     routes.py          Blueprint: /api/history/*
+
+  theme.py           city themes: load, validate, render prompts; theme_routes.py: /api/themes
+  themes/            built-in themes: noir_nyc.yaml (default), fantasy_realm.yaml
 
   agents/            the agent-simulation engine + its API
     README.md          how the agents work: memory, reflection, planning, the tick
@@ -468,7 +468,8 @@ the agent roster from the active city at startup) all call through
 | `app.py` | all | Flask app factory + entrypoint: registers every blueprint, serves the built SPA from `static/dist/` for every non-`/api` path, hydrates the agent roster from the active city (if any) at startup. |
 | `frontend/` | ui | The whole interface; see `frontend/README.md`. The parts worth knowing about from the backend's side: `api/client.ts` (every endpoint the UI calls, typed), `routes/router.ts` (the URL-per-canvas scope router), `flow/edgeRules.ts` (which ports connect), `flow/pipeline.ts` (what each node derives from its connections), `flow/usePersistedGraph.ts` (autosave). |
 | `history/data/config.yaml` / `history/config.py` / `history/llm.py` | history | Every tunable knob (LLM behavior, figure/event counts) lives in `data/config.yaml`; `config.py` just loads it and picks a chat-model tier for this machine. `llm.py` is a thin Ollama chat wrapper, tuned for many short name/prose-fill calls. |
-| `history/eras.py`, `entities.py`, `events.py`, `grammar.py`, `names.py`, `architecture.py` | history | The procedural-history engine itself -- modeled on Jason Grinblat's GDC talk on Caves of Qud's mythic-biography generator: entities as mutable-property bags, events resolved by reading current state (not simulated causality), text produced by a real replacement grammar (`grammar.py`). All *content* lives in the matching `.yaml` file in `data/`; the `.py` file loads it and holds only behavior. See `history/README.md`. |
+| `history/eras.py`, `entities.py`, `events.py`, `grammar.py`, `names.py`, `architecture.py` | history | The procedural-history engine itself -- modeled on Jason Grinblat's GDC talk on Caves of Qud's mythic-biography generator: entities as mutable-property bags, events resolved by reading current state (not simulated causality), text produced by a real replacement grammar (`grammar.py`). All *content* comes from the city's theme file (`theme.py`, `themes/`); the `.py` files hold only behavior. See `history/README.md`. |
+| `theme.py` / `theme_routes.py` / `themes/` | all | City themes: one YAML file per world (eras, names, place types, events, architecture, residents, city life, every LLM prompt). `theme.py` loads, validates and renders them and picks the active city's; `/api/themes` lists, uploads and downloads them. |
 | `history/characters.py` | history | Present-day residents, each grounded in one real place's founder/domain/history, with a bio that includes physical appearance and wardrobe (so image generation has something to work from). Generated on demand from the UI ("+ New agent": preview, edit, save), not as part of city generation. |
 | `history/summary.py` | history | One LLM call at the very end of a run: a short narrative summary of the city's history (the Inspector's overview). Falls back to a plain stats sentence with no LLM. |
 | `history/generate.py` | history | `run_history()` (called by `jobs.py`) and a standalone CLI (`python3 -m history.generate --seed 42`) that does the same thing plus writes `history.json`/`characters.json`. |
@@ -494,6 +495,34 @@ the agent roster from the active city at startup) all call through
 | `citystate/graph_library.py` | citystate | The *Saved graphs* library (`/api/graph-library/*`): named bundles of a canvas's nodes/edges plus every Storyboard's inner canvas, under `data/library/`. Opaque like `graph_store.py`; `frontend/src/flow/useGraphLibrary.ts` does the capture on save and the id remapping on load. |
 | `hardware.py` | history, agents | Detects available memory (Apple unified memory or NVIDIA VRAM) so each config can size its chat model to the machine it's running on. |
 | `jsonutil.py` | all | Shared `json_response()` helper every blueprint uses. |
+
+## Themes
+
+Everything that gives a city its world lives in one YAML **theme** file:
+its eras and present year, name pools and naming patterns, domains,
+factions, roles and place types, the event templates that write its
+history, architecture, resident templates, CITY-mode city life (jobs per
+place type, homes, haunts, routines, small talk), the fallback cast, the
+visual look, and every prompt the app sends a language model. Two are
+built in: `themes/noir_nyc.yaml` (the default: New Amsterdam in 1624 to a
+film-noir New York in 1959) and `themes/fantasy_realm.yaml` (the free city
+of Aldermere, 1000-1312). Technical settings -- models, concurrency,
+timeouts, memory weights -- are not part of a theme.
+
+**Making one:** in the New City dialog, pick a theme and *download this
+theme*, edit it (its header and comments explain each section), and
+*upload a theme…*. An upload is checked before it's accepted -- missing
+sections, eras without names or architecture, jobs at place types that
+don't exist, a prompt using a `{slot}` the app doesn't fill or dropping a
+reply marker the app reads (`NAME:`, `WHERE:`, `STORYBOARD:`...) -- and a
+small test history is generated with it; every problem is listed.
+`GET /api/themes/reference` lists every prompt and the slots it can use.
+
+**Per city:** a city keeps its own copy of the theme it was generated
+with (`citystate/data/cities/<id>/theme.yaml`, downloadable from its card),
+and everything for that city -- history, residents, both simulation modes,
+treatments, image prompts -- uses it. Editing or removing a theme later
+never changes an existing city. Cities from before themes use the default.
 
 ## Tests and benchmark
 

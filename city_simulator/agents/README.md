@@ -14,6 +14,10 @@ node in the UI (`POST /api/agents/run`), runs on a background thread, and
 streams every event to the frontend live. Afterward, a Treatment node can
 turn that run into a film treatment with a shot list.
 
+Every prompt in this package, and CITY mode's city-life content, comes
+from the city's theme file (`theme.py`, `themes/` -- see the root README's
+*Themes*); the code fills in the slots.
+
 ## Modes
 
 There are two ways to run the simulation. They share one job slot (only one
@@ -336,7 +340,7 @@ events to their record exactly as SCENE does, so either mode remembers the
 other's runs (the node's "persist hero memories" toggle, on by default).
 
 **Background residents** come from `city/population.py`: names from
-`history/data/names.yaml`, jobs that fit the city's active places (a
+the theme's name pools, jobs that fit the city's active places (a
 bartender works at a bar, a longshoreman at the docks), a haunt, a home, a
 day or night shift, and a one-line bio from `history/grammar.py`. No LLM
 calls, and deterministic from the seed; they're saved once per city in

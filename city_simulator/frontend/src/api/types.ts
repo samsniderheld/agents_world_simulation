@@ -20,6 +20,17 @@ export interface CitySummary {
   place_count: number;
   character_count: number;
   is_active: boolean;
+  // The theme the city was generated with (theme.py); none = the default.
+  theme?: { id: string; name: string } | null;
+}
+
+// GET /api/themes -- a city theme (themes/*.yaml, or uploaded).
+export interface ThemeSummary {
+  id: string;
+  name: string;
+  description: string;
+  present_year: number | null;
+  source: string; // "built-in" | "uploaded" | "city"
 }
 
 export interface Era {

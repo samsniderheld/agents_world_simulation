@@ -24,6 +24,7 @@ import type {
   CityZoomOptions,
   CityZoomResult,
   CityInsight,
+  ThemeSummary,
 } from './types';
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -62,6 +63,9 @@ export const history = {
     eventsPerFigure?: number;
     noLlm?: boolean;
     confirmOverwrite?: boolean;
+    // A theme id (GET /api/themes); omitted = the city's own theme when
+    // regenerating it, else the default theme.
+    themeId?: string;
   }) =>
     request<{ ok: boolean; error: string | null; needs_confirmation?: boolean }>(
       '/api/history/generate',
@@ -74,6 +78,7 @@ export const history = {
           events_per_figure: params.eventsPerFigure,
           no_llm: params.noLlm ?? false,
           confirm_overwrite: params.confirmOverwrite ?? false,
+          theme_id: params.themeId,
         }),
       },
     ),
@@ -474,4 +479,21 @@ export const stylesApi = {
     }),
 
   remove: (id: string) => request<{ ok: boolean }>(`/api/styles/${id}`, { method: 'DELETE' }),
+};
+
+// ---- city themes (/api/themes) -- theme.py / theme_routes.py
+export const themesApi = {
+  list: () => request<{ themes: ThemeSummary[]; default: string; active_city_theme: ThemeSummary | null }>('/api/themes'),
+  // Sends the YAML as the raw body. A rejected theme comes back as
+  // { ok: false, problems: [...] } (status 400) -- returned, not thrown, so
+  // the dialog can list every problem.
+  upload: async (text: string): Promise<{ ok: boolean; theme?: ThemeSummary; problems?: string[] }> => {
+    const res = await fetch('/api/themes', { method: 'POST', headers: { 'Content-Type': 'application/x-yaml' }, body: text });
+    const body = await res.json().catch(() => null);
+    if (body && typeof body.ok === 'boolean') return body;
+    return { ok: false, problems: [`upload failed (${res.status} ${res.statusText})`] };
+  },
+  remove: (id: string) => request<{ ok: boolean; error?: string }>(`/api/themes/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  fileUrl: (id: string) => `/api/themes/${encodeURIComponent(id)}/file`,
+  cityFileUrl: (cityId: string) => `/api/themes/city/${encodeURIComponent(cityId)}/file`,
 };
