@@ -19,6 +19,8 @@ import math
 import re
 import threading
 
+import theme
+
 from . import display
 from . import llm
 from . import recorder
@@ -233,15 +235,7 @@ def _rate_importance_batch(descriptions: list) -> list:
     unparseable rating falls back to 5 (middling), as the single-item
     version always did."""
     listing = "\n".join(f"{i}. {d}" for i, d in enumerate(descriptions, 1))
-    prompt = (
-        "On a scale of 1 to 10, where 1 is purely mundane "
-        "(e.g., brushing teeth, making a bed) and 10 is "
-        "extremely poignant (e.g., a breakup, a college acceptance), "
-        "rate the likely poignancy of each of the following events or thoughts.\n\n"
-        f"{listing}\n\n"
-        "Reply with one line per item, exactly in the form \"<item number>. <rating>\" -- "
-        "a single integer rating from 1 to 10 -- and nothing else."
-    )
+    prompt = theme.current().prompt("scene.importance", items=listing)
     reply = llm.complete(prompt, temperature=0.0)
     ratings = {}
     for line in reply.splitlines():

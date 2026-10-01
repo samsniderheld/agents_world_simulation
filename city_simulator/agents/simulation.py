@@ -7,6 +7,7 @@ frontend is watching the event log, not this function's return value.
 
 import datetime
 
+import theme
 from citystate import store as citystate
 
 from . import config
@@ -17,42 +18,15 @@ from .memory import MemoryStream
 from .world import World
 from . import recorder
 
-AGENT_ROSTER = {
-    "Oswald": dict(
-        age=58,
-        traits="seasoned bartender, patient, likeable, quiet, a good listener.",
-        currently="cleaning glasses in the bar, getting ready for the evening",
-        location="Ozzy's Bar",
-    ),
-    "Lou": dict(
-        age=45,
-        traits="down on his luck private eye detective, cynical, lonely, alcoholic",
-        currently="nursing a hangover at Ozzy's Bar",
-        location="Ozzy's Bar",
-    ),
-    "Veronica": dict(
-        age=32,
-        traits="sultry lounge singer, sharp-tongued, guarded, more dangerous than she lets on",
-        currently="rehearsing her set for tonight's show at Ozzy's Bar",
-        location="Ozzy's Bar",
-    ),
-    "Marsh": dict(
-        age=50,
-        traits="corrupt police detective, gruff, always working an angle, hides menace behind a friendly voice",
-        currently="stopping by Ozzy's Bar to collect a favor",
-        location="Ozzy's Bar",
-    ),
-    "Sal": dict(
-        age=61,
-        traits="aging mob boss, calm and courteous on the surface, ruthless underneath, expects respect",
-        currently="holding court in his usual booth at Ozzy's Bar",
-        location="Ozzy's Bar",
-    ),
-}
+def fallback_roster() -> dict:
+    """The cast a run uses when no city exists yet: the current theme's
+    fallback_cast (theme.py) -- for the noir theme, five regulars at a bar."""
+    return dict(theme.current()["fallback_cast"])
+
 
 # None until a history is generated (or one is hydrated from a saved city
 # at startup -- see app.py) -- _current_roster() below falls back to
-# AGENT_ROSTER until then.
+# fallback_roster() until then.
 _active_roster = None
 
 
@@ -88,13 +62,13 @@ def set_history_roster(history: dict = None):
 
 
 def _current_roster() -> dict:
-    # Deliberately not `_active_roster or AGENT_ROSTER` -- a real history
+    # Deliberately not `_active_roster or fallback_roster()` -- a real history
     # with zero characters yet (e.g. just generated, before anyone's used
     # the manual "Generate Character" flow) sets _active_roster to {},
     # which is falsy and would otherwise silently fall back to the
     # hardcoded noir cast. Only "no history at all" (_active_roster is
     # None) should fall back to it.
-    return AGENT_ROSTER if _active_roster is None else _active_roster
+    return fallback_roster() if _active_roster is None else _active_roster
 
 
 def roster_summary() -> list:
@@ -118,7 +92,7 @@ def _hydrate_agents(agents: list) -> None:
     against their citystate character, so a second (or Nth) run against
     the same generated cast remembers what happened before instead of
     starting blank. Only ever reached for the history roster -- the
-    hardcoded AGENT_ROSTER has no matching citystate characters, and
+    theme's fallback cast has no matching citystate characters, and
     build_agents() never calls this for it, so that cast behaves exactly
     as it always has."""
     city = citystate.get()

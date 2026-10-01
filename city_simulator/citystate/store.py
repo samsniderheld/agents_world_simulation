@@ -11,6 +11,7 @@ each thing is easy to find on disk instead of one growing JSON blob:
         agents/<id>/
           agent.json              -- the character record + "media", "plans", "runs"
           media/                  -- that agent's own image/video files
+        theme.yaml                -- the theme the city was generated with (theme.py)
         background.json           -- CITY mode's background residents (compact)
         city_runs/<stamp>.json    -- one compact summary per CITY run
 
@@ -627,3 +628,19 @@ def list_city_runs() -> list:
         out.append({"started_at": s.get("started_at"), "ticks": len(s.get("positions", [])),
                     "heroes": len(s.get("heroes", [])), "background": len(s.get("background", {}))})
     return out
+
+
+# --- City themes (theme.py) -------------------------------------------------
+# Each city keeps its own copy of the theme it was generated with, so editing
+# or deleting a theme later never changes an existing city's world.
+
+def city_theme_path(city_id: str) -> Path:
+    return _city_dir(city_id) / "theme.yaml"
+
+
+def save_city_theme(city_id: str, text: str) -> None:
+    path = city_theme_path(city_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".yaml.tmp")
+    tmp.write_text(text)
+    tmp.replace(path)

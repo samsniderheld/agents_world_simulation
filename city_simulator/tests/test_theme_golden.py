@@ -78,8 +78,8 @@ def history_snapshot(use_llm: bool) -> dict:
             figures, places, events_list = generate.generate(seed=7, figures_per_era=2, events_per_figure=4)
             chars = characters.generate_characters(places, figures, count=4, seed=7)
             one = characters.generate_one(places, figures, occupation="night watchman", sex="a woman", seed=3)
-            text = summary.generate_summary(figures, places, events_list, generate.ERAS if hasattr(generate, "ERAS")
-                                            else generate.eras_list())
+            from history import eras
+            text = summary.generate_summary(figures, places, events_list, eras.all_eras())
         payload = generate.to_json(figures, places, events_list, characters_list=chars + [one], summary_text=text)
     finally:
         for p in patches:

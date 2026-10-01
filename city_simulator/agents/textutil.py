@@ -2,6 +2,8 @@
 
 import re
 
+import theme
+
 _LIST_MARKER = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s*")
 _PREAMBLE_STARTS = (
     "here are", "here's", "sure", "okay", "ok", "certainly", "the following",
@@ -17,17 +19,8 @@ def cast_constraint(agent_name: str, known_names: list) -> str:
     """
     others = [n for n in (known_names or []) if n != agent_name]
     if others:
-        return (
-            f"The only other named people who exist in this simulation are: "
-            f"{', '.join(others)}. Do not invent or name any other person. "
-            "Refer to anyone else only in generic, unnamed terms "
-            "(e.g. 'the bartender', 'a passerby')."
-        )
-    return (
-        "No other named people exist in this simulation yet. Do not invent "
-        "or name anyone -- refer to anyone else only in generic, unnamed "
-        "terms (e.g. 'the bartender', 'a passerby')."
-    )
+        return theme.current().prompt("scene.cast_constraint", names=", ".join(others))
+    return theme.current().prompt("scene.cast_constraint_empty")
 
 
 def directive_block(directive: str) -> str:
@@ -41,10 +34,7 @@ def directive_block(directive: str) -> str:
     """
     if not directive or not directive.strip():
         return ""
-    return (
-        f"\n\nDirection for this scene (follow this where it's relevant, "
-        f"without ignoring who the character actually is): {directive.strip()}\n"
-    )
+    return "\n\n" + theme.current().prompt("scene.directive", directive=directive.strip()) + "\n"
 
 
 def extract_tagged_line(text: str, tag: str) -> tuple:

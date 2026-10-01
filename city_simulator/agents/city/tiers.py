@@ -21,6 +21,8 @@ import itertools
 import math
 import re
 
+import theme
+
 from ..agent import Agent
 from ..config import IMPORTANCE_WEIGHT, RECENCY_DECAY, RECENCY_WEIGHT, RELEVANCE_WEIGHT
 from ..memory import MemoryNode, MemoryStream, _normalize
@@ -162,8 +164,6 @@ ELSEWHERE = "elsewhere"
 _WORDS = re.compile(r"[A-Za-z']{3,}")
 _STOP = {"the", "and", "with", "about", "that", "this", "from", "they", "their", "them", "what", "who",
          "was", "were", "has", "have", "for", "are", "his", "her", "its", "into", "at"}
-_KEYWORDS = ("police", "cop", "money", "gun", "dead", "death", "murder", "love", "fight", "debt", "fire",
-             "arrest", "missing", "secret", "threat", "blood", "stolen", "raid", "fired", "wedding")
 
 
 def heuristic_importance(text: str, kind: str, with_hero: bool = False) -> float:
@@ -171,7 +171,7 @@ def heuristic_importance(text: str, kind: str, with_hero: bool = False) -> float
     if with_hero:
         base += 1.0
     lower = text.lower()
-    base += 2.0 * sum(1 for k in _KEYWORDS if k in lower)
+    base += 2.0 * sum(1 for k in theme.current()["city_life"]["importance_keywords"] if k in lower)
     return max(1.0, min(10.0, base))
 
 

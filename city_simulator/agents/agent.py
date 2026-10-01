@@ -1,6 +1,8 @@
 """The Agent: identity + memory stream + perceive/react behavior.
 (Conversations are written whole by world.py's _run_conversation.)"""
 
+import theme
+
 from . import display
 from . import llm
 from . import recorder
@@ -37,12 +39,8 @@ class Agent:
         # habitual routine as if they were still wherever that normally
         # happens, producing text totally disconnected from the tagged
         # location.
-        return (
-            f"{self.name} is a {self.age}-year-old. "
-            f"Personality: {self.traits}. "
-            f"Currently: {self.currently}. "
-            f"Right now, {self.name} is at {self.location}."
-        )
+        return theme.current().prompt("scene.identity", name=self.name, age=self.age, traits=self.traits,
+                                      currently=self.currently, location=self.location)
 
     def perceive(self, observation: str, tick: int):
         """Record something the agent has noticed as a new memory."""
@@ -65,22 +63,13 @@ class Agent:
         recorder.log("observe", tick, agent=self.name, text=observation)
 
         memories = self.memory.retrieve(observation, tick, k=6)
-        memory_text = "\n".join(f"- {m.description}" for m in memories) or "(none yet)"
+        t = theme.current()
+        memory_text = "\n".join(f"- {m.description}" for m in memories) or t.template("scene.react_no_memories")
 
-        prompt = (
-            f"{self.identity_summary()}\n\n"
-            f"{cast_constraint(self.name, known_names)}\n"
-            f"{directive_block(directive)}\n"
-            f"Relevant memories:\n{memory_text}\n\n"
-            f"{self.name}'s current planned action: {self.current_action}\n"
-            f"New observation: {observation}\n\n"
-            f"Should {self.name} keep doing the planned action, or react to the "
-            "observation with something different? "
-            "Reply with exactly one line in the form:\n"
-            "REACT: <new action description>\n"
-            "or:\n"
-            "CONTINUE"
-        )
+        prompt = t.prompt("scene.react", identity=self.identity_summary(),
+                          cast_constraint=cast_constraint(self.name, known_names),
+                          directive_block=directive_block(directive), memories=memory_text, name=self.name,
+                          action=self.current_action, observation=observation)
         reply = llm.complete(prompt, temperature=0.6)
         self.memory.add(f"Observed: {observation}", kind="observation", tick=tick,
                          agent_name=self.name, color=color, verbose=verbose)

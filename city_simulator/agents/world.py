@@ -28,6 +28,8 @@ import time
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 
+import theme
+
 from . import display
 from . import llm
 from . import planning
@@ -116,25 +118,17 @@ class World:
         logged as dialogue events one by one, exactly as before, and the
         full transcript is stored as a single 'chat' memory in both."""
         a.chatting_with, b.chatting_with = b, a
+        t = theme.current()
         about = {}
         for speaker, other in ((a, b), (b, a)):
             memories = speaker.memory.retrieve(f"{other.name}: a conversation with {other.name}", self.tick, k=5)
-            about[speaker.name] = "\n".join(f"- {m.description}" for m in memories) or "(nothing yet)"
-        prompt = (
-            f"Two people are face to face at {a.location}.\n\n"
-            f"SPEAKER: {a.name}\n{a.identity_summary()}\n"
-            f"{a.name} is currently: {a.current_action}\n"
-            f"What {a.name} remembers about {b.name} and related things:\n{about[a.name]}\n\n"
-            f"SPEAKER: {b.name}\n{b.identity_summary()}\n"
-            f"{b.name} is currently: {b.current_action}\n"
-            f"What {b.name} remembers about {a.name} and related things:\n{about[b.name]}\n"
-            f"{directive_block(self.directive)}\n"
-            f"Write the conversation between them: at most {max_turns} lines, alternating, "
-            f"{a.name} speaking first. Each line is exactly \"Name: what they say\" -- one or two "
-            "sentences of spoken words only, no stage directions or narration. They address each "
-            "other only by these two names; anyone else mentioned comes from their memories. "
-            "End early if the conversation reaches a natural close."
-        )
+            about[speaker.name] = ("\n".join(f"- {m.description}" for m in memories)
+                                   or t.template("scene.conversation_no_memories"))
+        prompt = t.prompt(
+            "scene.conversation", place=a.location, a_name=a.name, a_identity=a.identity_summary(),
+            a_doing=a.current_action, a_memories=about[a.name], b_name=b.name, b_identity=b.identity_summary(),
+            b_doing=b.current_action, b_memories=about[b.name], directive_block=directive_block(self.directive),
+            max_turns=max_turns)
         reply = llm.complete(prompt, temperature=0.8)
         lines = _parse_conversation(reply, a, b)[:max_turns]
 

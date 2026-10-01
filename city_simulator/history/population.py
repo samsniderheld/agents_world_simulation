@@ -27,6 +27,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 
+import theme
 from citystate import store as citystate
 from visuals import providers as visual_providers
 
@@ -67,22 +68,13 @@ def _square_image(prompt: str, style: dict = None):
 
 
 def _portrait_prompt(c: dict) -> str:
-    return (
-        f"Head-and-shoulders portrait photograph of {c['name']}, a {c.get('age', 40)}-year-old "
-        f"{c.get('occupation') or 'resident'} in New York City in the late 1950s. "
-        f"{c.get('bio', '')} "
-        "Facing the camera, plain neutral backdrop, natural light, period-accurate hair and "
-        "clothing, realistic photograph, no text."
-    )
+    return theme.current().prompt("images.portrait", name=c["name"], age=c.get("age", 40),
+                                  occupation=c.get("occupation") or "resident", bio=c.get("bio", ""))
 
 
 def _exterior_prompt(p: dict, noun: str) -> str:
-    return (
-        f"Exterior photograph of {p['name']}, a {noun} in New York City, seen from the street "
-        f"as it stands in the late 1950s. {p.get('architecture', '')} "
-        "Realistic street-level photograph, the whole building facade in frame, no people "
-        "blocking the view, no text or signage besides the establishment's own name."
-    )
+    return theme.current().prompt("images.exterior", name=p["name"], place_noun=noun,
+                                  architecture=p.get("architecture", ""))
 
 
 def _has_exterior(city: dict) -> set:
@@ -143,7 +135,7 @@ def _photograph(place: dict, style: dict) -> bool:
         _status["active"] += 1
         _status["current"] = f"{_status['active']} in progress"
     try:
-        noun = entities.PLACE_TYPE_NOUN.get(place.get("place_type"), "building")
+        noun = entities.place_type_noun(place.get("place_type"), "building")
         url, local, prompt = _square_image(_exterior_prompt(place, noun), style)
         citystate.add_media(place["id"], "image", url, local_path=local, prompt=prompt, tag="exterior")
         _log(f"+ exterior of {place['name']}")

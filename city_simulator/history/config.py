@@ -46,7 +46,7 @@ CHAT_CONTEXT_TOKENS = _RAW["chat_context_tokens"]
 FIGURES_PER_ERA = _RAW["generation"]["figures_per_era"]
 EVENTS_PER_FIGURE = _RAW["generation"]["events_per_figure"]
 RANDOM_SEED = _RAW["generation"]["random_seed"]
-MAX_YEAR = _RAW["generation"]["max_year"]
+# (The final year of a history is the theme's world.present_year -- theme.py.)
 
 # --- LLM-fill (see grammar.py / events.py) --------------------------------
 LLM_FILL_NAMES = _RAW["llm_fill"]["fill_names"]

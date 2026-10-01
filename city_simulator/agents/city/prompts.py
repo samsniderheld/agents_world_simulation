@@ -1,6 +1,5 @@
-"""CITY-mode prompts, schemas and parsers. SCENE mode's prompts (planning.py,
-agent.py, reflection.py, memory.py, world.py) are left exactly as they are;
-where CITY needs a different prompt or parser, it lives here.
+"""CITY-mode prompt builders, schemas and parsers. The prompt text itself is
+the current theme's `prompts.city` section (theme.py); this module fills it.
 
 Every prompt is built as four parts, in this order, so a server with prefix
 caching can reuse the KV cache across a batch (agents/gateway.py sorts each
@@ -14,10 +13,26 @@ tier in a run; the identity is identical for every call one agent makes.
 
 import re
 
+import theme
+
 from ..textutil import directive_block, parse_list_lines
 from . import config as ccfg
 
-YEAR = 1959
+
+def _t():
+    return theme.current()
+
+
+def __getattr__(name):
+    """HERO_TIER / BACKGROUND_TIER / NARRATOR_TIER: the current theme's tier
+    instructions (module attributes, so callers read them like constants)."""
+    keys = {"HERO_TIER": "city.hero_tier", "BACKGROUND_TIER": "city.background_tier",
+            "NARRATOR_TIER": "city.narrator_tier"}
+    if name in keys:
+        return _t().template(keys[name])
+    if name == "YEAR":
+        return _t().present_year
+    raise AttributeError(name)
 
 
 # --- The four parts ----------------------------------------------------------------------
@@ -27,60 +42,23 @@ def city_prefix(city: dict) -> str:
     summary = (city or {}).get("summary") or ""
     if len(summary) > 600:
         summary = summary[:600].rsplit(" ", 1)[0] + "..."
-    return (
-        f"This is a simulation of a city: an alternate-history New York City in {YEAR}, "
-        "a film-noir world of rain-slick streets, smoke-filled bars, cops on the take and "
-        "people keeping secrets. Everything happens in 1959: no anachronisms, nothing "
-        "supernatural.\n"
-        + (f"The city's history, briefly: {summary}\n" if summary else "")
-        + "Rules for every reply: only people named in the prompt exist -- never invent or "
-        "name anyone else; refer to anyone else generically ('the bartender', 'a cop'). "
-        "Answer in exactly the format asked for, with nothing before or after it."
-    )
-
-
-HERO_TIER = (
-    "You are writing for one of the story's main characters. Be specific, stay true to "
-    "their personality and memories, and keep each answer short."
-)
-
-BACKGROUND_TIER = (
-    "You are writing for a minor resident of the city. Keep it brief, plain and "
-    "routine -- ordinary life, not drama."
-)
-
-
-NARRATOR_TIER = (
-    "You are the city's observer: you read what the simulation recorded and explain it plainly and "
-    "accurately. Use only what the log shows -- never invent events, motives or people; say when the "
-    "log doesn't tell you."
-)
+    t = _t()
+    history = (t.prompt("city.prefix_history", summary=summary) + "\n") if summary else ""
+    return t.prompt("city.prefix", present_year=t.present_year, history=history)
 
 
 def city_report(header: str, lines: list, previous: str = None) -> str:
     """A briefing on the run so far (agents/city/insight.py)."""
-    earlier = (f"\nYour previous briefing, for comparison -- focus on what has changed since:\n{previous.strip()}\n"
+    t = _t()
+    earlier = ("\n" + t.prompt("city.report_previous", briefing=previous.strip()) + "\n"
                if previous and previous.strip() else "")
-    return (
-        f"{header}\n\nThe run's log (oldest first; it may start mid-run):\n" + "\n".join(lines) + "\n"
-        f"{earlier}\n"
-        "Write a short briefing on what is going on in the city, under these headings:\n"
-        "STORYLINES: the 2-5 main threads, each one or two sentences naming who is involved and where.\n"
-        "PLACES: where the crowds and the tension are.\n"
-        "PEOPLE TO WATCH: residents becoming important, and why.\n"
-        + ("CHANGES: what is new since the previous briefing.\n" if earlier else "")
-        + "Be concrete and brief; plain text, no markdown."
-    )
+    return t.prompt("city.report", header=header, log="\n".join(lines), previous=earlier,
+                    changes=(t.prompt("city.report_changes") + "\n") if earlier else "")
 
 
 def city_question(header: str, lines: list, question: str) -> str:
     """A question about the run, answered from the log (agents/city/insight.py)."""
-    return (
-        f"{header}\n\nWhat the run's log says that may be relevant (oldest first):\n" + "\n".join(lines) + "\n\n"
-        f"Question: {question}\n\n"
-        "Answer in a few sentences from the log alone, naming who said or did what, and when and where. "
-        "If the log doesn't answer it, say so and say what it does show. Plain text."
-    )
+    return _t().prompt("city.question", header=header, log="\n".join(lines), question=question)
 
 
 def hero_identity(hero) -> str:
@@ -88,8 +66,8 @@ def hero_identity(hero) -> str:
 
 
 def background_identity(b) -> str:
-    return (f"{b.name}, {b.age}, {b.occupation}. {b.bio} "
-            f"Right now, {b.name} is at {b.location_label()}.")
+    return _t().prompt("city.background_identity", name=b.name, age=b.age, occupation=b.occupation, bio=b.bio,
+                       location=b.location_label())
 
 
 # --- The cast constraint -------------------------------------------------------------------
@@ -101,28 +79,23 @@ def cast_line(speaker: str, names: list) -> str:
     agent in the run -- a thousand names would drown the prompt."""
     others = [n for n in dict.fromkeys(names or []) if n and n != speaker]
     if others:
-        return (f"People {speaker} might name here: {', '.join(others)}. Do not invent or name "
-                "any other person; refer to anyone else only generically.")
-    return f"{speaker} should not name anyone -- refer to other people only generically."
+        return _t().prompt("city.cast_line", name=speaker, names=", ".join(others))
+    return _t().prompt("city.cast_line_empty", name=speaker)
 
 
 # --- Directive -------------------------------------------------------------------------------
 
-_EVERYONE = ("everyone", "everybody", "the whole city", "all residents", "background", "the crowd",
-             "all the residents", "citywide", "city-wide")
-
-
 def directive_for_background(directive: str, agent) -> str:
     """The directive applies to heroes always, and to a background agent
     only when it explicitly involves them: it names them, their
-    occupation, or everyone."""
+    occupation, or everyone (the theme's city_life.everyone_words)."""
     if not directive:
         return None
     text = directive.lower()
     first = agent.name.split()[0].lower()
     if (agent.name.lower() in text or re.search(rf"\b{re.escape(first)}\b", text)
             or (agent.occupation and agent.occupation.lower() in text)
-            or any(k in text for k in _EVERYONE)):
+            or any(k in text for k in _t()["city_life"]["everyone_words"])):
         return directive
     return None
 
@@ -136,16 +109,11 @@ def plan_schema(n: int) -> dict:
 
 def hero_plan(hero, memories: list, cast: list, directive: str, horizon: str, per_item: str,
               n_items: int, now: str, until: str) -> str:
-    memory_text = "\n".join(f"- {m}" for m in memories) or "(no memories yet)"
-    return (
-        f"{cast_line(hero.name, cast)}\n{directive_block(directive)}\n"
-        f"What {hero.name} remembers from before -- context only, not a template to repeat:\n{memory_text}\n\n"
-        f"{hero.name} typically starts the day around: {hero.currently}.\n"
-        f"Plan what {hero.name} is trying to do over the next {horizon}, from {now} until {until}: "
-        "their goals for that stretch and what they'll actually spend it on, moving their story forward.\n"
-        f"Give exactly {n_items} items in order, each covering about {per_item}; each a short phrase, no times. "
-        'Reply as JSON: {"items": ["...", ...]}'
-    )
+    t = _t()
+    memory_text = "\n".join(f"- {m}" for m in memories) or t.template("city.plan_no_memories")
+    return t.prompt("city.plan", cast_line=cast_line(hero.name, cast), directive_block=directive_block(directive),
+                    name=hero.name, memories=memory_text, currently=hero.currently, horizon=horizon, now=now,
+                    until=until, n_items=n_items, per_item=per_item)
 
 
 def decompose_schema(n: int, places: list) -> dict:
@@ -159,31 +127,21 @@ def decompose_schema(n: int, places: list) -> dict:
 
 def hero_decompose(hero, broad_step: str, n: int, span: str, cast: list, directive: str,
                    now: str, places: list) -> str:
-    where = ""
-    if places:
-        where = (f' Also pick where {hero.name} should be for this whole step: one of the listed places, '
-                 f'or "STAY" to remain at {hero.location}. Places: {"; ".join(places)}.')
-    return (
-        f"{cast_line(hero.name, cast)}\n{directive_block(directive)}\n"
-        f"It is currently {now}. {hero.name}'s plan for this stretch: \"{broad_step}\"\n"
-        f"Break it into {n} sequential actions, {span} each, one short line per action.{where}\n"
-        'Reply as JSON: {"actions": ["...", ...]' + (', "where": "..."' if places else "") + "}"
-    )
+    t = _t()
+    where = (" " + t.prompt("city.decompose_where", name=hero.name, location=hero.location,
+                            places="; ".join(places))) if places else ""
+    return t.prompt("city.decompose", cast_line=cast_line(hero.name, cast), directive_block=directive_block(directive),
+                    now=now, name=hero.name, step=broad_step, n=n, span=span, where=where,
+                    where_json=', "where": "..."' if places else "")
 
 
 def hero_react(hero, other_name: str, other_doing: str, memories: list, cast: list,
                directive: str) -> str:
-    memory_text = "\n".join(f"- {m}" for m in memories) or "(none yet)"
-    return (
-        f"{cast_line(hero.name, cast)}\n{directive_block(directive)}\n"
-        f"Relevant memories:\n{memory_text}\n\n"
-        f"{hero.name}'s current planned action: {hero.current_action}\n"
-        f"New observation: {other_name} is nearby, currently: {other_doing}.\n\n"
-        f"What does {hero.name} do? Reply with exactly one line, one of:\n"
-        f"TALK: <what {hero.name} wants to talk to {other_name} about>\n"
-        "REACT: <a different action, without talking>\n"
-        "CONTINUE"
-    )
+    t = _t()
+    memory_text = "\n".join(f"- {m}" for m in memories) or t.template("city.react_no_memories")
+    return t.prompt("city.react", cast_line=cast_line(hero.name, cast), directive_block=directive_block(directive),
+                    memories=memory_text, name=hero.name, action=hero.current_action, other=other_name,
+                    other_doing=other_doing)
 
 
 def parse_react(reply: str):
@@ -207,20 +165,18 @@ def dialogue_line(speaker_is_hero: bool, speaker, listener_name: str, place: str
     the city advances one line per batch). A background speaker gets the
     same shape with fewer memories -- the tier prefix already tells the
     model to keep them plain."""
-    memory_text = "\n".join(f"- {m}" for m in memories) or "(nothing in particular)"
-    so_far = "\n".join(transcript) or "(nobody has spoken yet)"
-    opener = (f"{speaker.name} wants to talk about: {topic}\n" if topic and not transcript else "")
-    return (
-        f"{cast_line(speaker.name, cast)}\n{directive_block(directive) if speaker_is_hero else ''}\n"
-        f"{speaker.name} and {listener_name} are face to face at {place}.\n"
-        f"What {speaker.name} remembers about {listener_name} and related things:\n{memory_text}\n\n"
-        f"{opener}Conversation so far:\n{so_far}\n\n"
-        f"Write {speaker.name}'s next line: one or two sentences of spoken words only, no stage "
-        f"directions, addressing only {listener_name}. "
-        + (f"If the conversation has reached its natural end, reply with just {ccfg.END_MARKER}."
-           if turn >= 2 else "")
-        + (f" This is the last line (turn {turn + 1} of {max_turns})." if turn == max_turns - 1 else "")
-    )
+    t = _t()
+    memory_text = "\n".join(f"- {m}" for m in memories) or t.template("city.dialogue_no_memories")
+    so_far = "\n".join(transcript) or t.template("city.dialogue_nobody_yet")
+    opener = (t.prompt("city.dialogue_opener", name=speaker.name, topic=topic) + "\n"
+              if topic and not transcript else "")
+    return t.prompt(
+        "city.dialogue", cast_line=cast_line(speaker.name, cast),
+        directive_block=directive_block(directive) if speaker_is_hero else "", name=speaker.name,
+        listener=listener_name, place=place, memories=memory_text, opener=opener, transcript=so_far,
+        end_hint=t.prompt("city.dialogue_end_hint", end_marker=ccfg.END_MARKER) if turn >= 2 else "",
+        last_turn=(" " + t.prompt("city.dialogue_last_turn", turn=turn + 1, max_turns=max_turns))
+        if turn == max_turns - 1 else "")
 
 
 def parse_line(reply: str, speaker_name: str):
@@ -246,12 +202,7 @@ def importance_schema(n: int) -> dict:
 def importance(descriptions: list) -> str:
     """The same scale as SCENE's memory._rate_importance_batch, as JSON."""
     listing = "\n".join(f"{i}. {d}" for i, d in enumerate(descriptions, 1))
-    return (
-        "On a scale of 1 to 10, where 1 is purely mundane (e.g., brushing teeth, making a bed) "
-        "and 10 is extremely poignant (e.g., a breakup, a college acceptance), rate the likely "
-        f"poignancy of each of the following events or thoughts.\n\n{listing}\n\n"
-        f'Reply as JSON: {{"ratings": [one integer 1-10 per item, {len(descriptions)} in all, in order]}}'
-    )
+    return _t().prompt("city.importance", items=listing, count=len(descriptions))
 
 
 FOCAL_SCHEMA = {"type": "object", "required": ["questions"],
@@ -260,11 +211,7 @@ FOCAL_SCHEMA = {"type": "object", "required": ["questions"],
 
 def focal_points(hero, statements: list, n: int) -> str:
     listing = "\n".join(f"- {s}" for s in statements)
-    return (
-        f"Here are recent statements about {hero.name}:\n{listing}\n\n"
-        f"Given only this information, what are the {n} most salient high-level questions we can "
-        'ask about the subjects in these statements? Reply as JSON: {"questions": ["...", ...]}'
-    )
+    return _t().prompt("city.focal_points", name=hero.name, statements=listing, n=n)
 
 
 INSIGHT_SCHEMA = {"type": "object", "required": ["insights"], "properties": {"insights": {
@@ -275,12 +222,7 @@ INSIGHT_SCHEMA = {"type": "object", "required": ["insights"], "properties": {"in
 
 def insights(hero, focal: str, statements: list, n: int) -> str:
     listing = "\n".join(f"{i}. {s}" for i, s in enumerate(statements))
-    return (
-        f"Statements about {hero.name}:\n{listing}\n\n"
-        f"What {n} high-level insights can you infer from the above statements, in relation to: "
-        f'"{focal}"? For each, list the statement numbers it is based on. Reply as JSON: '
-        '{"insights": [{"text": "...", "because": [1, 3]}, ...]}'
-    )
+    return _t().prompt("city.insights", name=hero.name, statements=listing, n=n, focal=focal)
 
 
 # --- Calls: background -----------------------------------------------------------------------
@@ -295,27 +237,14 @@ def schedule_schema(places: list) -> dict:
 
 
 def background_schedule(b, places: list, day_label: str, directive: str) -> str:
-    return (
-        f"{directive_block(directive)}\n"
-        f"Write {b.name}'s schedule for {day_label}, midnight to midnight: 3 to 8 blocks in order, "
-        "each with a 24-hour start and end time (\"HH:MM\"), a short activity, and a place from "
-        f"this list only: {'; '.join(places)}. \"home\" is their own home; \"elsewhere\" is "
-        "anywhere else in the city. They work at "
-        f"{b.work or 'no fixed place'} and like to spend free time at {b.haunt or 'home'}.\n"
-        'Reply as JSON: {"schedule": [{"start": "07:00", "end": "08:00", "activity": "...", "place": "..."}, ...]}'
-    )
+    return _t().prompt("city.schedule", directive_block=directive_block(directive), name=b.name, day=day_label,
+                       places="; ".join(places), work=b.work or "no fixed place", haunt=b.haunt or "home")
 
 
 def bio_upgrade(b, place: str) -> str:
-    return (
-        f"{b.name} is a {b.age}-year-old {b.occupation} in this city in {YEAR}. What little is "
-        f"known: {b.bio}\nTheir usual haunts: {b.work or 'no fixed workplace'}, {b.haunt or 'home'}. "
-        f"They are about to appear in a scene at {place}.\n"
-        "Write a 4-5 sentence character dossier, third person, consistent with the facts above: "
-        "who they are, what they want, one secret or pressure in their life, and a concrete "
-        "PHYSICAL DESCRIPTION and WARDROBE a costume designer could use. Then, on its own last "
-        "line, 'QUIRK: <one distinctive habit, a few words>'."
-    )
+    t = _t()
+    return t.prompt("city.bio_upgrade", name=b.name, age=b.age, occupation=b.occupation, present_year=t.present_year,
+                    bio=b.bio, work=b.work or "no fixed workplace", haunt=b.haunt or "home", place=place)
 
 
 def split_list(text: str) -> list:

@@ -30,6 +30,8 @@ import hashlib
 import random
 import time
 
+import theme
+
 from .. import display
 from ..config import REFLECTION_IMPORTANCE_THRESHOLD, REFLECTION_INSIGHTS_PER_FOCAL_POINT, \
     REFLECTION_LOOKBACK, REFLECTION_NUM_FOCAL_POINTS
@@ -42,8 +44,6 @@ from . import prompts
 from . import recorder
 from .tiers import ELSEWHERE, HOME, BackgroundAgent, CityHero, clock_minutes, validate_schedule
 
-_TOPICS = ["the weather", "the ball game", "a rumor about the precinct", "rent going up", "the numbers",
-           "somebody's cousin", "the new place on the corner", "work", "an old debt", "the neighborhood"]
 
 
 class CityWorld:
@@ -352,7 +352,7 @@ class CityWorld:
                     hero_encounters.append((a, b, label))
                     self._log("encounter", a, text=f"ran into {b.name}", other=b.name, place=label)
                 else:
-                    topic = topics.choice(_TOPICS)
+                    topic = topics.choice(theme.current()["city_life"]["small_talk_topics"])
                     for x, y in ((a, b), (b, a)):
                         x.memory.add(self.tick, "encounter", f"Traded a few words with {y.name} at {label} about {topic}.")
                     self._log("encounter", a, text=f"traded a few words with {b.name} about {topic}",

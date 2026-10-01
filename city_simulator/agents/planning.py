@@ -4,6 +4,8 @@ chunks; this barebones version stops after one level of decomposition, which
 is enough for a short simulated run -- see README for how to extend it.)
 """
 
+import theme
+
 from . import display
 from . import llm
 from . import recorder
@@ -30,27 +32,16 @@ def generate_plan(agent: Agent, tick: int, horizon_minutes: int, n_items: int,
     memories = agent.memory.retrieve(
         f"{agent.name}'s past plans, goals, and what actually happened", tick, k=8,
     )
-    memory_text = "\n".join(f"- {m.description}" for m in memories) or "(no memories yet)"
+    t = theme.current()
+    memory_text = "\n".join(f"- {m.description}" for m in memories) or t.template("scene.plan_no_memories")
     horizon = _duration(horizon_minutes)
-    window = f", from {now} until {until}" if now and until else ""
+    window = t.prompt("scene.plan_window", now=now, until=until) if now and until else ""
 
-    prompt = (
-        f"{agent.identity_summary()}\n\n"
-        f"{cast_constraint(agent.name, known_names)}\n"
-        f"{directive_block(directive)}\n"
-        f"What {agent.name} remembers from before -- for context only, NOT a template "
-        f"to repeat:\n{memory_text}\n\n"
-        f"{agent.name} typically starts the day around: {agent.currently}.\n"
-        f"Plan what {agent.name} is trying to do over the next {horizon}{window}: their "
-        f"goals for that whole stretch and what they'll actually spend it on, sized to "
-        f"the stretch -- a week's plan is a week of intentions, not one day's errands. "
-        "This is NOT the same stretch as any of the memories above -- move the story "
-        "forward: pick up an unfinished thread, follow up on someone mentioned above, or "
-        "react to a consequence of what already happened.\n\n"
-        f"Give exactly {n_items} items in the order they'll happen, each covering "
-        f"roughly {_duration(horizon_minutes / n_items)}. Each item is a short phrase. "
-        "One item per line, no numbering, no times."
-    )
+    prompt = t.prompt("scene.plan", identity=agent.identity_summary(),
+                      cast_constraint=cast_constraint(agent.name, known_names),
+                      directive_block=directive_block(directive), name=agent.name, memories=memory_text,
+                      currently=agent.currently, horizon=horizon, window=window, n_items=n_items,
+                      per_item=_duration(horizon_minutes / n_items))
     reply = llm.complete(prompt, temperature=0.7)
     plan = parse_list_lines(reply)[:n_items]
 
@@ -78,13 +69,7 @@ def _where_prompt_block(agent: Agent, known_places: list = None) -> str:
     if len(places) < 2:
         return ""
     listing = "; ".join(places)
-    return (
-        f"\n\n{agent.name} is currently at \"{agent.location}\". Where should "
-        f"{agent.name} be for this whole step? Pick exactly one place from "
-        f"this list, or STAY to remain where {agent.name} is: {listing}\n"
-        "On its own final line, after the actions above, write:\n"
-        "WHERE: <one place name from the list, or STAY>"
-    )
+    return "\n\n" + theme.current().prompt("scene.where", name=agent.name, location=agent.location, places=listing)
 
 
 def _resolve_destination(where_raw, known_places: list, current_location: str):
@@ -150,7 +135,7 @@ def _now_line(now: str = None, extra: str = "") -> str:
     can start at any hour; see simulation.run()'s start_time)."""
     if not now:
         return ""
-    return f"It is currently {now}. {extra}".rstrip() + "\n\n"
+    return (theme.current().prompt("scene.now", now=now) + f" {extra}").rstrip() + "\n\n"
 
 
 def _substep_length(tick_minutes: int = None) -> str:
@@ -177,23 +162,14 @@ def decompose(agent: Agent, broad_step: str, tick: int, n_substeps: int = 3,
     docstring for why there's no travel time simulated. `directive` is the
     Simulation node's free-text scene guidance, if any (see
     textutil.directive_block)."""
-    prompt = (
-        f"{agent.identity_summary()}\n\n"
-        f"{cast_constraint(agent.name, known_names)}\n"
-        f"{directive_block(directive)}\n"
-        f"{_now_line(now)}"
-        + (
-            f"{agent.name}'s plan for this stretch: \"{broad_step}\"\n\n"
-            f"Describe what {agent.name} actually does over this stretch "
-            f"({_substep_length(tick_minutes)}) as ONE action -- a single short line, "
-            "no numbering."
-            if n_substeps == 1 else
-            f"{agent.name}'s broad plan step: \"{broad_step}\"\n\n"
-            f"Break this into {n_substeps} smaller, sequential actions "
-            f"({_substep_length(tick_minutes)} each). One action per line, no numbering."
-        )
-        + f"{_where_prompt_block(agent, known_places)}"
-    )
+    t = theme.current()
+    span = _substep_length(tick_minutes)
+    task = (t.prompt("scene.decompose_one", name=agent.name, step=broad_step, span=span) if n_substeps == 1 else
+            t.prompt("scene.decompose_many", name=agent.name, step=broad_step, n=n_substeps, span=span))
+    prompt = t.prompt("scene.decompose", identity=agent.identity_summary(),
+                      cast_constraint=cast_constraint(agent.name, known_names),
+                      directive_block=directive_block(directive), now_line=_now_line(now), task=task,
+                      where_block=_where_prompt_block(agent, known_places))
     reply = llm.complete(prompt, temperature=0.7)
     reply, where_raw = extract_tagged_line(reply, "WHERE")
     substeps = parse_list_lines(reply)[:n_substeps] or [broad_step]

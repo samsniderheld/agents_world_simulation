@@ -4,24 +4,18 @@ events.py's cause-rationalization (a figure's rivals/allies/domain) and
 written by event effects, so later events can reference what earlier ones
 established (see events.py's _pick_cause).
 
-The content lists/maps below (domains, factions, roles, place types) live
-in entities.yaml; this module just loads them.
+The content lists/maps (domains, factions, roles, place types) come from the
+current theme's `entities` section (theme.py).
 """
 
 import random
 import uuid
 from dataclasses import dataclass, field
-from pathlib import Path
 
-import yaml
+import theme
 
 from . import names
-from .eras import ERAS_BY_ID
-
-_YAML_PATH = Path(__file__).parent / "data" / "entities.yaml"
-
-with open(_YAML_PATH) as _f:
-    _RAW = yaml.safe_load(_f)
+from .eras import eras_by_id
 
 
 def new_id(prefix: str) -> str:
@@ -36,27 +30,33 @@ def new_id(prefix: str) -> str:
     return f"{prefix}{uuid.uuid4().hex[:8]}"
 
 
-_DOMAINS_BY_ERA = _RAW["domains"]
-_FACTIONS_BY_ERA = _RAW["factions"]
-ROLES = _RAW["roles"]
-PLACE_TYPES = _RAW["place_types"]
-PLACE_TYPE_NOUN = _RAW["place_type_nouns"]
+def _data() -> dict:
+    return theme.current()["entities"]
 
 
 def roles_for_era(era_id: str) -> list:
-    return [role for role, eras in ROLES.items() if eras is None or era_id in eras]
+    return [role for role, eras in _data()["roles"].items() if eras is None or era_id in eras]
 
 
 def place_types_for_era(era_id: str) -> list:
-    return [pt for pt, eras in PLACE_TYPES.items() if eras is None or era_id in eras]
+    return [pt for pt, eras in _data()["place_types"].items() if eras is None or era_id in eras]
 
 
 def domains_for_era(era_id: str) -> list:
-    return _DOMAINS_BY_ERA[era_id]
+    return _data()["domains"][era_id]
 
 
 def factions_for_era(era_id: str) -> list:
-    return _FACTIONS_BY_ERA[era_id]
+    return _data()["factions"][era_id]
+
+
+def place_type_noun(place_type: str, default: str = None) -> str:
+    """The plain noun for a place type ("Tavern/Bar" -> "tavern"); `default`
+    (or the type itself, lowercased) when the theme doesn't name one."""
+    nouns = _data().get("place_type_nouns") or {}
+    if place_type in nouns:
+        return nouns[place_type]
+    return default if default is not None else (place_type or "").lower()
 
 
 @dataclass
@@ -100,7 +100,7 @@ class Place:
 
 
 def new_figure(era_id: str, rng: random.Random) -> Figure:
-    era = ERAS_BY_ID[era_id]
+    era = eras_by_id()[era_id]
     role = rng.choice(roles_for_era(era_id))
     domain = rng.choice(domains_for_era(era_id))
     birth_year = rng.randint(era.start_year, era.end_year)
