@@ -24,6 +24,24 @@ export interface CitySummary {
   theme?: { id: string; name: string } | null;
 }
 
+// GET /api/agents/city/residents -- a CITY-mode background resident.
+export interface BackgroundResident {
+  id: string;
+  name: string;
+  age: number;
+  occupation: string;
+  work: string | null;
+  haunt: string | null;
+  home: string | null;
+  shift: string;
+  bio: string;
+  // Dealings with heroes in the latest CITY run (null = not in it).
+  hero_interactions: number | null;
+  // The saved character they became (zoom-in or the Gallery), if any.
+  promoted_to: string | null;
+  character_name: string | null;
+}
+
 // GET /api/themes -- a city theme (themes/*.yaml, or uploaded).
 export interface ThemeSummary {
   id: string;

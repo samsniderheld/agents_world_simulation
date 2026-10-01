@@ -251,6 +251,28 @@ def city_ask():
         return json_response({"error": str(e)}, status=502)
 
 
+@bp.get("/city/residents")
+def city_residents():
+    """The active city's background residents (agents/city/zoom.py), for
+    the Gallery."""
+    from .city import zoom
+    return json_response({"residents": zoom.residents()})
+
+
+@bp.post("/city/residents/<resident_id>/character")
+def city_resident_to_character(resident_id):
+    """Make one background resident a saved character (Gallery button)."""
+    from .city import zoom
+    try:
+        character = zoom.make_character(resident_id)
+    except ValueError as e:
+        return json_response({"error": str(e)}, status=404)
+    except RuntimeError as e:
+        return json_response({"error": str(e)}, status=502)
+    simulation.set_history_roster(citystate.get())   # SCENE's roster now includes them
+    return json_response({"character": character})
+
+
 @bp.get("/city/zoom")
 def city_zoom_options():
     """Places and tick times a CITY run can be zoomed into (the live run

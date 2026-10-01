@@ -212,7 +212,9 @@ async def _backfill(characters: list, summary: dict, recent: dict, whereabouts: 
 
 async def _promote(records: list, place: str, places: dict, summary: dict, recent: dict, whereabouts: dict,
                    transport) -> list:
-    meta = summary["meta"]
+    """`summary` (a CITY run's) may be None -- a resident made into a
+    character from the Gallery before any CITY run has seen them."""
+    meta = (summary or {}).get("meta") or {}
     profile = hardware.city_profile(meta.get("profile") or "auto")
     backends = backends_for_profile(profile, meta.get("provider"), meta.get("chat_model"),
                                     meta.get("background_provider"), meta.get("background_model"))
@@ -239,7 +241,8 @@ async def _promote(records: list, place: str, places: dict, summary: dict, recen
         }
         city_run.storage.add_character(character)
         city_run.storage.update_background_resident(r["id"], promoted_to=character["id"])
-        _save_memories(r["name"], summary, events)
+        if summary:
+            _save_memories(r["name"], summary, events)
         created.append(character)
     return created
 
@@ -262,3 +265,50 @@ class _Resident:
     def __init__(self, r: dict):
         self.name, self.age, self.occupation, self.bio = r["name"], r["age"], r["occupation"], r["bio"]
         self.work, self.haunt = r.get("work"), r.get("haunt")
+
+
+# --- The Gallery's background-residents section ---------------------------------------
+
+def residents() -> list:
+    """Every background resident of the active city, with how much they
+    dealt with heroes in the latest CITY run and the character they became
+    (if a zoom-in or the Gallery promoted them)."""
+    saved = city_run.storage.get_background()
+    summary = city_run.storage.get_city_run()
+    involvement = {}
+    if summary:
+        for rid, b in (summary.get("background") or {}).items():
+            involvement[rid] = b.get("hero_interactions", 0)
+        for h in summary.get("heroes", []):
+            if h.get("promoted_from"):
+                involvement.setdefault(h["promoted_from"], 0)
+    characters = {c["id"]: c["name"] for c in (city_run.storage.get() or {}).get("characters", [])}
+    out = []
+    for r in saved:
+        out.append({**{k: r.get(k) for k in ("id", "name", "age", "occupation", "work", "haunt", "home", "shift", "bio")},
+                    "hero_interactions": involvement.get(r["id"]),
+                    "promoted_to": r.get("promoted_to"), "character_name": characters.get(r.get("promoted_to"))})
+    return out
+
+
+def make_character(resident_id: str, transport=None) -> dict:
+    """Promote one background resident to a saved character -- the same
+    dossier upgrade (and, if the latest CITY run saw them, the same carried-
+    over memories) as a zoom-in. Returns the new character."""
+    record = next((r for r in city_run.storage.get_background() if r["id"] == resident_id), None)
+    if record is None:
+        raise ValueError(f"no such resident: {resident_id!r}")
+    city = city_run.storage.get() or {}
+    if record.get("promoted_to"):
+        existing = next((c for c in city.get("characters", []) if c["id"] == record["promoted_to"]), None)
+        if existing:
+            return existing
+    places = {p["name"]: p for p in city.get("places", [])}
+    place = record.get("work") or record.get("haunt") or next(iter(places), "the city")
+    summary = city_run.storage.get_city_run()
+    recent = {}
+    if summary:
+        recent = {b["name"]: b.get("recent", []) for b in (summary.get("background") or {}).values()}
+        recent.update(summary.get("promoted_memories") or {})
+    created = asyncio.run(_promote([record], place, places, summary, recent, {}, transport))
+    return created[0]

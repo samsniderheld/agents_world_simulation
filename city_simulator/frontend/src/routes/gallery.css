@@ -116,3 +116,44 @@
   border-color: var(--node-running);
   color: var(--node-running);
 }
+
+/* Background residents: compact text cards, search and paging. */
+.gallery-search,
+.gallery-sort {
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--node-border);
+  border-radius: var(--node-radius);
+  padding: 5px 8px;
+  font: inherit;
+  font-size: 12px;
+}
+.gallery-search {
+  min-width: 220px;
+}
+.gallery-resident {
+  cursor: default;
+}
+.gallery-resident:hover {
+  border-color: var(--node-border);
+}
+.gallery-resident.is-promoted {
+  border-color: var(--port-entity);
+}
+.gallery-resident-bio {
+  margin-top: 4px;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--node-text-dim);
+}
+.gallery-resident-badge {
+  margin-top: 6px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--accent);
+}
+.gallery-more {
+  margin-top: 14px;
+  align-self: flex-start;
+  flex: none;
+}

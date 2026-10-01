@@ -216,6 +216,39 @@ class ZoomMemoryTests(unittest.TestCase):
         self.assertTrue(self._memories(storage, name))
 
 
+class GalleryResidentsTests(unittest.TestCase):
+    def test_list_and_make_character(self):
+        server = StubServer(reply_fn=prompts.stub_reply)
+        storage = FakeStorage()
+        run_city(server, ticks=3, background_count=30, storage=storage)
+        with fake_storage(storage):
+            listed = zoom.residents()
+            self.assertEqual(len(listed), 30)
+            self.assertTrue(all(r["hero_interactions"] is not None for r in listed))
+            target = max(listed, key=lambda r: r["hero_interactions"])
+            made = zoom.make_character(target["id"], transport=server.transport())
+            again = zoom.make_character(target["id"], transport=server.transport())
+            after = {r["id"]: r for r in zoom.residents()}
+        self.assertEqual(made["name"], target["name"])
+        self.assertEqual(made["promoted_from"], target["id"])
+        self.assertEqual(again["id"], made["id"])                          # not made twice
+        self.assertEqual(after[target["id"]]["character_name"], target["name"])
+        self.assertEqual(len([c for c in storage.added if c["name"] == target["name"]]), 1)
+
+    def test_without_any_city_run(self):
+        server = StubServer(reply_fn=prompts.stub_reply)
+        storage = FakeStorage()
+        from agents.city import population as pop
+        storage.background = pop.generate(storage.city, 5, seed=2)
+        with fake_storage(storage):
+            self.assertEqual([r["hero_interactions"] for r in zoom.residents()], [None] * 5)
+            made = zoom.make_character(storage.background[0]["id"], transport=server.transport())
+        self.assertTrue(made["bio"])
+        self.assertEqual(storage.appended, [])          # no run to carry memories from
+        with fake_storage(storage), self.assertRaises(ValueError):
+            zoom.make_character("bg_nope", transport=server.transport())
+
+
 class TreatmentTests(unittest.TestCase):
     def test_city_transcript_narrowed_by_place_and_ticks(self):
         world, _ = run_city(ticks=4, background_count=60)

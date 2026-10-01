@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { history } from '../api/client';
-import type { HistoryData } from '../api/types';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { agentsApi, history } from '../api/client';
+import type { BackgroundResident, HistoryData } from '../api/types';
 import { firstImageUrl } from '../flow/entityNodeKit';
 import { useHiddenEntities } from '../flow/useHiddenEntities';
 import { useJobStore } from '../state/jobStore';
@@ -132,7 +132,133 @@ export function GalleryScreen({ cityId }: { cityId: string }) {
           </div>
         )}
       </section>
+
+      <BackgroundSection cityId={cityId} onCharacterMade={load} />
     </div>
+  );
+}
+
+const PAGE = 60;
+
+// CITY mode's background residents (agents/city/population.py) -- not
+// characters, so not on any canvas; up to a thousand of them, hence text
+// cards, search and paging. "make a character" gives one a full dossier
+// (the same as zooming into a scene does) so they can go on a canvas.
+function BackgroundSection({ cityId, onCharacterMade }: { cityId: string; onCharacterMade: () => void }) {
+  const [residents, setResidents] = useState<BackgroundResident[] | null>(null);
+  const [query, setQuery] = useState('');
+  const [sort, setSort] = useState<'involved' | 'name'>('involved');
+  const [shown, setShown] = useState(PAGE);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    agentsApi
+      .cityResidents()
+      .then((res) => setResidents(res.residents))
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)));
+  }, []);
+  useEffect(load, [load, cityId]);
+
+  const matching = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const list = (residents ?? []).filter(
+      (r) => !q || [r.name, r.occupation, r.work, r.haunt, r.bio].some((v) => v && v.toLowerCase().includes(q)),
+    );
+    return sort === 'name'
+      ? [...list].sort((a, b) => a.name.localeCompare(b.name))
+      : [...list].sort((a, b) => (b.hero_interactions ?? -1) - (a.hero_interactions ?? -1) || a.name.localeCompare(b.name));
+  }, [residents, query, sort]);
+
+  async function makeCharacter(r: BackgroundResident) {
+    setBusy(r.id);
+    setError(null);
+    try {
+      await agentsApi.cityResidentToCharacter(r.id);
+      load();
+      onCharacterMade();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <section className="gallery-section">
+      <div className="gallery-section-header">
+        <h2 className="gallery-section-title">
+          Background residents ({residents?.length ?? '…'})
+          {query && residents ? ` · ${matching.length} match` : ''}
+        </h2>
+        <input
+          className="gallery-search"
+          placeholder="Search name, job, place…"
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setShown(PAGE);
+          }}
+        />
+        <select className="gallery-sort" value={sort} onChange={(e) => setSort(e.target.value as 'involved' | 'name')}>
+          <option value="involved">most involved with heroes</option>
+          <option value="name">by name</option>
+        </select>
+      </div>
+      {error && <div className="node-error-text">{error}</div>}
+      {residents && residents.length === 0 ? (
+        <div className="canvas-empty">
+          No background residents yet -- they&rsquo;re created the first time a City Simulation runs with some.
+        </div>
+      ) : (
+        <>
+          <div className="gallery-grid">
+            {matching.slice(0, shown).map((r) => (
+              <div key={r.id} className={`gallery-card gallery-resident ${r.promoted_to ? 'is-promoted' : ''}`}>
+                <div className="gallery-card-body">
+                  <div className="gallery-card-name">{r.name}</div>
+                  <div className="gallery-card-subtitle">
+                    {r.age}, {r.occupation}
+                    {r.shift === 'night' ? ' · nights' : ''}
+                  </div>
+                  <div className="gallery-card-grounding">
+                    {r.work ? `works @ ${r.work}` : 'works off the map'}
+                    {r.haunt ? ` · drinks @ ${r.haunt}` : ''}
+                  </div>
+                  <div className="gallery-resident-bio">{r.bio}</div>
+                  {r.hero_interactions ? (
+                    <div className="gallery-resident-badge">{r.hero_interactions}× with heroes in the last run</div>
+                  ) : null}
+                </div>
+                {r.promoted_to ? (
+                  <button
+                    className="node-run-btn"
+                    title="This resident is a character now -- open them"
+                    onClick={() => navigate({ kind: 'agent', cityId, agentId: r.promoted_to!, from: { kind: 'gallery', cityId } })}
+                  >
+                    character: {r.character_name ?? 'open'}
+                  </button>
+                ) : (
+                  <button
+                    className="node-run-btn"
+                    disabled={busy !== null}
+                    title="Write them a full dossier and save them as a character, so they can go on a canvas"
+                    onClick={() => makeCharacter(r)}
+                  >
+                    {busy === r.id ? 'writing their dossier…' : 'make a character'}
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+          {matching.length > shown && (
+            <button className="node-run-btn gallery-more" onClick={() => setShown((n) => n + PAGE)}>
+              show more ({matching.length - shown} left)
+            </button>
+          )}
+        </>
+      )}
+    </section>
   );
 }
 
