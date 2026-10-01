@@ -11,6 +11,7 @@ out of sync.
 
 import threading
 
+import theme
 from citystate import store as citystate
 
 from . import generate as history_generate
@@ -29,10 +30,12 @@ _status = {
 }   # phase: idle | running | done | error
 
 
-def _worker(params: dict, city_id: str, on_done):
+def _worker(params: dict, city_id: str, on_done, theme_obj):
     try:
-        payload = history_generate.run_history(**params)
-        citystate.replace(payload, city_id=city_id)
+        payload = history_generate.run_history(theme_obj=theme_obj, **params)
+        target_id = citystate.replace(payload, city_id=city_id)
+        # The city keeps its own copy of the theme it was generated with.
+        citystate.save_city_theme(target_id, theme_obj.text)
         with _lock:
             _status["phase"] = "done"
         if on_done:
@@ -43,21 +46,25 @@ def _worker(params: dict, city_id: str, on_done):
             _status["error"] = str(e)
 
 
-def start(params: dict, city_id: str = None, on_done=None):
+def start(params: dict, city_id: str = None, on_done=None, theme_obj=None):
     """Returns (ok, error_message). `city_id` (an existing city, for a
     regenerate-in-place) is kept separate from `params` -- it's not one of
     run_history()'s own arguments, only citystate.replace()'s -- so it's
     threaded straight through to _worker rather than mixed into the
     **params spread. `on_done(payload)` is called (outside the lock) once
     generation finishes successfully -- routes.py uses this to hand the
-    result to agents.jobs.set_history_roster()."""
+    result to agents.jobs.set_history_roster(). `theme_obj` (theme.py) is
+    the world to generate: by default the city's own theme when
+    regenerating it, else the default theme."""
     global _thread
+    if theme_obj is None:
+        theme_obj = theme.for_city(city_id) if city_id else theme.default()
     with _lock:
         if _thread and _thread.is_alive():
             return False, "a history generation is already in progress"
         _status["phase"] = "running"
         _status["error"] = None
-        _thread = threading.Thread(target=_worker, args=(params, city_id, on_done), daemon=True)
+        _thread = threading.Thread(target=_worker, args=(params, city_id, on_done, theme_obj), daemon=True)
         _thread.start()
     return True, None
 

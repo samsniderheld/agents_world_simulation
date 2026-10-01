@@ -303,6 +303,9 @@ def list_cities() -> list:
         summaries.append({
             "id": city_dir.name,
             "generated_at": history.get("generated_at"),
+            # The theme the city was generated with (theme.py); cities from
+            # before themes have none and use the default.
+            "theme": history.get("theme"),
             "summary": history.get("summary", ""),
             "figure_count": len(history.get("figures", [])),
             "place_count": place_count,

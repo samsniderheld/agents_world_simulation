@@ -3,6 +3,7 @@ parse the request and delegate to jobs.py; the actual generation logic
 lives in generate.py.
 """
 
+import theme
 from types import SimpleNamespace
 
 from flask import Blueprint, request
@@ -58,6 +59,13 @@ def generate():
                 "error": "This city already exists and will be permanently replaced.",
             }, status=409)
 
+    theme_obj = None
+    if body.get("theme_id"):
+        try:
+            theme_obj = theme.get(body["theme_id"])
+        except KeyError as e:
+            return json_response({"ok": False, "error": str(e)}, status=400)
+
     params = {
         "seed": body.get("seed"),
         "figures_per_era": body.get("figures_per_era") or None,
@@ -69,7 +77,7 @@ def generate():
         "characters_count": 0,
         "use_llm": not bool(body.get("no_llm", False)),
     }
-    ok, error = jobs.start(params, city_id=city_id, on_done=agents_jobs.set_history_roster)
+    ok, error = jobs.start(params, city_id=city_id, on_done=agents_jobs.set_history_roster, theme_obj=theme_obj)
     return json_response({"ok": ok, "error": error}, status=200 if ok else 409)
 
 

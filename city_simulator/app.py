@@ -33,6 +33,7 @@ from citystate.graph_routes import bp as graph_bp
 from citystate.graph_routes import library_bp as graph_library_bp
 from citystate.routes import bp as city_bp
 from history.routes import bp as history_bp
+from theme_routes import bp as themes_bp
 from visuals.routes import bp as visuals_bp
 from visuals.styles_routes import bp as styles_bp
 
@@ -52,6 +53,7 @@ def create_app() -> Flask:
     app.register_blueprint(graph_bp)
     app.register_blueprint(graph_library_bp)
     app.register_blueprint(styles_bp)
+    app.register_blueprint(themes_bp)
 
     # citystate.store.get() lazily reads a previously-saved city off disk
     # on its own -- the one thing it can't derive by itself is the agent
