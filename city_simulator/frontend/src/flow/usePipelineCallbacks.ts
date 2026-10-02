@@ -2,10 +2,10 @@
 // logic regardless of which canvas hosts them (they only ever mutate
 // this canvas's own nodes/edges state), so every canvas wanting the full
 // node palette shares this one implementation rather than re-deriving it.
-import { useCallback } from 'react';
+import { useCallback, useRef } from 'react';
 import type { Node, Edge } from '@xyflow/react';
 import { graph, stylesApi } from '../api/client';
-import type { GraphEdge, GraphNode, Style } from '../api/types';
+import type { CityZoomResult, GraphEdge, GraphNode, Style } from '../api/types';
 import { newNodeId } from './graphIds';
 import { nonOverlappingGridPositions, type Rect } from './layout';
 import type { FrameNodeData } from './nodes/FrameNode';
@@ -20,7 +20,7 @@ import type { PipelineCallbacks } from './pipeline';
 // meant to be pixel-exact. Media nodes' floor comes straight from
 // FrameNode/ImageNode/VideoNode's own NodeShell minWidth/minHeight.
 const MEDIA_NODE_TYPES = new Set(['frame', 'video', 'photo']);
-const WIDE_NODE_TYPES = new Set(['sim', 'treatment', 'style']);
+const WIDE_NODE_TYPES = new Set(['sim', 'citysim', 'treatment', 'style']);
 
 function nodeFootprint(n: Node): { width: number; height: number } {
   if (n.measured?.width && n.measured?.height) return { width: n.measured.width, height: n.measured.height };
@@ -59,7 +59,23 @@ export function usePipelineCallbacks(
     setNodes((prev) => (prev ? prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, startTime } } : n)) : prev));
   }, [setNodes]);
 
-  const onPopulationChange = useCallback((nodeId: string, patch: { count?: number }) => {
+  const onPopulationChange = useCallback((nodeId: string, patch: { count?: number; withImages?: boolean }) => {
+    setNodes((prev) => (prev ? prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, ...patch } } : n)) : prev));
+  }, [setNodes]);
+
+  const onCitySimChange = useCallback((nodeId: string, patch: Record<string, unknown>) => {
+    setNodes((prev) => (prev ? prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, ...patch } } : n)) : prev));
+  }, [setNodes]);
+
+  const zoomHandler = useRef<((cityNodeId: string, result: CityZoomResult) => void) | null>(null);
+  const registerZoomHandler = useCallback((handler: ((cityNodeId: string, result: CityZoomResult) => void) | null) => {
+    zoomHandler.current = handler;
+  }, []);
+  const onZoomIn = useCallback((cityNodeId: string, result: CityZoomResult) => {
+    zoomHandler.current?.(cityNodeId, result);
+  }, []);
+
+  const onTreatmentCityChange = useCallback((nodeId: string, patch: Record<string, unknown>) => {
     setNodes((prev) => (prev ? prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, ...patch } } : n)) : prev));
   }, [setNodes]);
 
@@ -305,6 +321,10 @@ export function usePipelineCallbacks(
     onCreateStoryboard,
     onExpandStoryboard,
     onPopulationChange,
+    onCitySimChange,
+    onZoomIn,
+    registerZoomHandler,
+    onTreatmentCityChange,
     onCityChanged,
     onFrameUpdate,
     onPhotoUpdate,

@@ -21,6 +21,7 @@ import { MissingNode } from '../flow/nodes/MissingNode';
 import { ScratchMusicNode, type ScratchMusicNodeData } from '../flow/nodes/ScratchMusicNode';
 import { PopulationNode } from '../flow/nodes/PopulationNode';
 import { SimulationNode } from '../flow/nodes/SimulationNode';
+import { CitySimulationNode } from '../flow/nodes/CitySimulationNode';
 import { StoryboardNode } from '../flow/nodes/StoryboardNode';
 import { StyleNode } from '../flow/nodes/StyleNode';
 import { TextViewerNode } from '../flow/nodes/TextViewerNode';
@@ -43,6 +44,7 @@ const nodeTypes = {
   location: LocationNode,
   missing: MissingNode,
   sim: SimulationNode,
+  citysim: CitySimulationNode,
   population: PopulationNode,
   treatment: TreatmentNode,
   frame: FrameNode,
@@ -54,7 +56,7 @@ const nodeTypes = {
   'scratch-music': ScratchMusicNode,
 };
 
-const PIPELINE_TYPES = new Set(['photo', 'population', 'sim', 'treatment', 'frame', 'video', 'style', 'storyboard', 'text-viewer']);
+const PIPELINE_TYPES = new Set(['photo', 'population', 'sim', 'citysim', 'treatment', 'frame', 'video', 'style', 'storyboard', 'text-viewer']);
 const SCRATCH_TYPES = new Set(['scratch-music']);
 
 // A Scratch board still has the full node palette (Agent/Location/
@@ -130,6 +132,7 @@ function ScratchCanvasInner({
   const { addToCanvas, addPipelineNode, addStyleNode, addNewAgent, placeAgentNode, addScratchNode } = useAddNodeActions({
     data: cityData ?? null,
     setNodes,
+    setEdges,
     onExpandAgent,
     onExpandPlace,
     onRemoveMissing,
@@ -245,7 +248,7 @@ function ScratchCanvasInner({
       if (kind === 'scratch') addScratchNode('scratch-music', position);
       else if (kind === 'style' && rest[0] === 'new') addStyleNode(position);
       else if (kind === 'style') addStyleNode(position, styles.find((s) => s.id === rest[0]));
-      else if (kind === 'pipeline') addPipelineNode(rest[0] as 'sim' | 'treatment' | 'video' | 'text-viewer' | 'frame' | 'storyboard' | 'population' | 'photo', position);
+      else if (kind === 'pipeline') addPipelineNode(rest[0] as 'sim' | 'treatment' | 'video' | 'text-viewer' | 'frame' | 'storyboard' | 'population' | 'photo' | 'citysim', position);
       else if (kind === 'agent' && rest[0] === 'new') addNewAgent(position);
       else if (kind === 'agent') addToCanvas({ id: rest[0], kind: 'agent' }, position);
       else if (kind === 'location') addToCanvas({ id: rest[0], kind: 'location' }, position);
@@ -265,6 +268,7 @@ function ScratchCanvasInner({
         { id: 'music', label: '+ Music', dragPayload: 'scratch:scratch-music', onAdd: () => addScratchNode('scratch-music') },
         { id: 'population', label: 'Population', sublabel: 'a new resident + portraits for N locations', dragPayload: 'pipeline:population', onAdd: () => addPipelineNode('population') },
         { id: 'sim', label: 'Simulation', dragPayload: 'pipeline:sim', onAdd: () => addPipelineNode('sim') },
+        { id: 'citysim', label: 'City Simulation', sublabel: 'heroes + up to 1000 background residents', dragPayload: 'pipeline:citysim', onAdd: () => addPipelineNode('citysim') },
         { id: 'treatment', label: 'Treatment', dragPayload: 'pipeline:treatment', onAdd: () => addPipelineNode('treatment') },
         { id: 'image', label: 'Image', dragPayload: 'pipeline:frame', onAdd: () => addPipelineNode('frame') },
         { id: 'photo', label: 'Photo', sublabel: 'upload an image from your computer', dragPayload: 'pipeline:photo', onAdd: () => addPipelineNode('photo') },

@@ -4,8 +4,9 @@ founder, and a real recorded incident there -- rather than being generic
 NPCs. The LLM is genuinely better at weaving specific facts into a natural
 bio than a template is, so it's the primary path here (unlike the grammar-
 first approach for the bulk of history generation); a plain fallback (its
-sentence pools live in characters.yaml) still keeps this working with
-Ollama offline.
+sentence pools are the theme's `characters` section) still keeps this working with
+Ollama offline. All of it -- prompts, templates, the present year -- comes
+from the current theme (theme.py).
 
 Each character also gets their own `history` -- a short chronological
 list of `{year, gospel_text}` entries in the same shape as a Place's own
@@ -17,24 +18,24 @@ history is already finalized.
 """
 
 import random
-from pathlib import Path
 
-import yaml
+import theme
 
 from . import config
 from . import entities
 from . import llm
 from . import names
+from .eras import era_for_year
 
-_YAML_PATH = Path(__file__).parent / "data" / "characters.yaml"
 
-with open(_YAML_PATH) as _f:
-    _RAW = yaml.safe_load(_f)
+def _data() -> dict:
+    # relationship_hints {"active", "gone"}, bio_templates, life_event_templates
+    # {"early", "arrival", "recent"}, appearance_templates
+    return theme.current()["characters"]
 
-_RELATIONSHIP_HINTS = _RAW["relationship_hints"]  # {"active": [...], "gone": [...]}
-_BIO_TEMPLATES = _RAW["bio_templates"]             # {"active_with_founder": [...], ...}
-_LIFE_EVENT_TEMPLATES = _RAW["life_event_templates"]  # {"early": [...], "arrival": [...], "recent": [...]}
-_APPEARANCE_TEMPLATES = _RAW["appearance_templates"]  # [...] -- see characters.yaml's own comment
+
+def _present_year() -> int:
+    return theme.current().present_year
 
 
 def _pick_grounding(places: list, figures: list, rng: random.Random, exclude: set,
@@ -51,7 +52,7 @@ def _pick_grounding(places: list, figures: list, rng: random.Random, exclude: se
         place = rng.choices(candidates, weights=weights, k=1)[0]
     founder = figures_by_id.get(place.founding_figure_id)
     anecdote = rng.choice(place.history) if place.history else None
-    hints = _RELATIONSHIP_HINTS["active"] if place.status == "active" else _RELATIONSHIP_HINTS["gone"]
+    hints = _data()["relationship_hints"]["active"] if place.status == "active" else _data()["relationship_hints"]["gone"]
     return {
         "place": place, "founder": founder, "anecdote": anecdote,
         "relationship": rng.choice(hints),
@@ -60,45 +61,27 @@ def _pick_grounding(places: list, figures: list, rng: random.Random, exclude: se
 
 def _llm_character(grounding: dict, occupation: str = None, sex: str = None):
     place, founder, anecdote = grounding["place"], grounding["founder"], grounding["anecdote"]
-    place_noun = entities.PLACE_TYPE_NOUN.get(place.place_type, place.place_type.lower())
-    lines = [
-        f"Place: {place.name}, a {place_noun}, founded {place.founded_year}, "
-        f"thematically associated with \"{place.domain}\". Current status: {place.status}.",
-    ]
+    place_noun = entities.place_type_noun(place.place_type)
+    t = theme.current()
+    lines = [t.prompt("history.character_place", place=place.name, place_noun=place_noun,
+                      founded=place.founded_year, domain=place.domain, status=place.status)]
     if founder:
-        lines.append(f"Founded by: {founder.name}, a {founder.role.lower()}.")
+        lines.append(t.prompt("history.character_founder", founder=founder.name, founder_role=founder.role.lower()))
     if anecdote:
-        lines.append(f"A recorded incident there: {anecdote['gospel_text']}")
-    lines.append(f"Write this character as {grounding['relationship']}.")
+        lines.append(t.prompt("history.character_anecdote", anecdote=anecdote["gospel_text"]))
+    lines.append(t.prompt("history.character_relationship", relationship=grounding["relationship"]))
     if occupation:
-        lines.append(f"This character's occupation must be: {occupation}.")
+        lines.append(t.prompt("history.character_occupation", occupation=occupation))
     if sex:
-        lines.append(f"This character is {sex}.")
+        lines.append(t.prompt("history.character_sex", sex=sex))
 
     constraint = ""
     if occupation:
-        constraint += f", whose occupation is exactly \"{occupation}\""
+        constraint += t.prompt("history.character_constraint_occupation", occupation=occupation)
     if sex:
-        constraint += f" and who is {sex}"
+        constraint += t.prompt("history.character_constraint_sex", sex=sex)
 
-    prompt = (
-        "You are writing a short character dossier for a resident of an alternate-history "
-        "New York City, living around 1959, in a film noir style world. "
-        "the character should feel like an archetype from those types of movies."
-        "Here is a real piece of that city's generated "
-        "history:\n\n" + "\n".join(lines) +
-        f"\n\nInvent ONE person deeply connected to this specific history{constraint}. "
-        "Reply in exactly this format, nothing else:\n"
-        "NAME: <full name>\n"
-        "AGE: <integer between 20 and 75>\n"
-        "OCCUPATION: <short phrase>\n"
-        "QUIRK: <one distinctive habit or trait, a few words>\n"
-        "BIO: <4-6 sentences, third person, naturally weaving in the place name, its domain, "
-        "and the historical detail above -- specific to this history, not generic. Within "
-        "this, include a vivid PHYSICAL DESCRIPTION -- build, face, notable features -- and "
-        "their WARDROBE, what they typically wear -- concrete visual details a costume and "
-        "production designer could actually use, not just personality or backstory.>"
-    )
+    prompt = t.prompt("history.character_dossier", history_lines="\n".join(lines), constraint=constraint)
     reply = llm.complete(prompt, temperature=0.95)
 
     fields = {}
@@ -131,38 +114,38 @@ def _llm_character(grounding: dict, occupation: str = None, sex: str = None):
 def _fallback_character(grounding: dict, rng: random.Random,
                          occupation: str = None, sex: str = None) -> dict:
     place, founder = grounding["place"], grounding["founder"]
+    t = theme.current()
     if not occupation:
-        occupation = f"Keeper of {place.name}" if place.status == "active" else f"Historian of {place.name}"
-    # `sex` isn't honored here -- names.yaml's word lists aren't split by
+        occupation = t.prompt("history.character_fallback_occupation_active" if place.status == "active"
+                              else "history.character_fallback_occupation_gone", place=place.name)
+    # `sex` isn't honored here -- the theme's name lists aren't split by
     # gender (a pre-existing limitation this grammar fallback shares with
     # historical-figure naming), so there's no signal to bias the name
     # pick on. Only the LLM path above can actually act on it.
-    name = names.figure_name("depression_war", occupation, rng)
+    name = names.figure_name(era_for_year(_present_year()).id, occupation, rng)
 
     # Separate template pools per (still-standing vs. gone) x (has a known
     # founder to reference or not) -- each a complete, self-contained
     # sentence, so a "no blood relation" hint can never get a contradictory
     # "descended from" clause spliced into it, and {place} never dangles
     # awkwardly at a sentence's end.
+    bio_templates = _data()["bio_templates"]
     if place.status == "active":
-        pool = _BIO_TEMPLATES["active_with_founder"] if founder else _BIO_TEMPLATES["active_no_founder"]
+        pool = bio_templates["active_with_founder"] if founder else bio_templates["active_no_founder"]
     else:
-        pool = _BIO_TEMPLATES["gone_with_founder"] if founder else _BIO_TEMPLATES["gone_no_founder"]
+        pool = bio_templates["gone_with_founder"] if founder else bio_templates["gone_no_founder"]
     relationship_sentence = rng.choice(pool).format(
         name=name, place=place.name, founder=founder.name if founder else "",
     )
 
-    place_noun = entities.PLACE_TYPE_NOUN.get(place.place_type, place.place_type.lower())
-    appearance = rng.choice(_APPEARANCE_TEMPLATES).format(name=name)
-    bio = (
-        f"{relationship_sentence} {place.name} is the old {place_noun} "
-        f"steeped in {place.domain}. Ask {name.split()[0]} about it and they will talk your ear off. "
-        f"{appearance}"
-    )
+    place_noun = entities.place_type_noun(place.place_type)
+    appearance = rng.choice(_data()["appearance_templates"]).format(name=name)
+    bio = t.prompt("history.character_fallback_bio", relationship_sentence=relationship_sentence, place=place.name,
+                   place_noun=place_noun, domain=place.domain, first_name=name.split()[0], appearance=appearance)
     return {
         "id": entities.new_id("char_"),
         "name": name, "age": rng.randint(24, 72), "occupation": occupation,
-        "quirk": f"can't stop talking about {place.domain}", "bio": bio,
+        "quirk": t.prompt("history.character_fallback_quirk", domain=place.domain), "bio": bio,
         "place_id": place.id, "place_name": place.name,
         "founder_id": founder.id if founder else None,
     }
@@ -178,20 +161,14 @@ def _llm_life_history(character: dict, grounding: dict, rng: random.Random) -> l
     an already-finalized history other characters may already be grounded
     in."""
     place = grounding["place"]
-    birth_year = config.MAX_YEAR - character["age"]
+    present = _present_year()
+    birth_year = present - character["age"]
     count = rng.randint(4, 6)
 
-    prompt = (
-        f"{character['name']} is a {character['age']}-year-old {character['occupation']} "
-        f"in an alternate-history New York City in {config.MAX_YEAR}, born around {birth_year}.\n\n"
-        f"Their dossier: {character['bio']}\n\n"
-        f"Write {count} short chronological life events spanning {character['name'].split()[0]}'s "
-        f"whole life, from around {birth_year} to {config.MAX_YEAR} -- childhood, how they came "
-        f"to {place.name}, turning points, that sort of thing. Each a single sentence, third "
-        "person, in the same vivid period prose style as the dossier above. Reply with ONLY "
-        "the events, one per line, oldest first, in exactly this format:\n"
-        "<year>: <event sentence>"
-    )
+    prompt = theme.current().prompt(
+        "history.life_history", name=character["name"], age=character["age"], occupation=character["occupation"],
+        present_year=present, birth_year=birth_year, bio=character["bio"], count=count,
+        first_name=character["name"].split()[0], place=place.name)
     reply = llm.complete(prompt, temperature=0.9)
 
     events = []
@@ -203,7 +180,7 @@ def _llm_life_history(character: dict, grounding: dict, rng: random.Random) -> l
         text = text.strip()
         if not digits or not text:
             continue
-        year = max(birth_year, min(config.MAX_YEAR, int(digits[:4])))
+        year = max(birth_year, min(present, int(digits[:4])))
         events.append({"year": year, "gospel_text": text})
     events.sort(key=lambda e: e["year"])
     return events
@@ -211,21 +188,22 @@ def _llm_life_history(character: dict, grounding: dict, rng: random.Random) -> l
 
 def _fallback_life_history(character: dict, grounding: dict, rng: random.Random) -> list:
     place = grounding["place"]
-    birth_year = config.MAX_YEAR - character["age"]
-    span = max(config.MAX_YEAR - birth_year, 1)
+    present = _present_year()
+    birth_year = present - character["age"]
+    span = max(present - birth_year, 1)
 
     # One event per life phase, in order, so even the offline fallback
     # reads as a real (if brief) arc rather than three unrelated facts.
     years = sorted([
         birth_year + rng.randint(0, max(span // 6, 1)),
         birth_year + span // 2 + rng.randint(-2, 2),
-        config.MAX_YEAR - rng.randint(0, max(span // 8, 1)),
+        present - rng.randint(0, max(span // 8, 1)),
     ])
-    years = [max(birth_year, min(config.MAX_YEAR, y)) for y in years]
+    years = [max(birth_year, min(present, y)) for y in years]
 
     events = []
     for year, phase in zip(years, ("early", "arrival", "recent")):
-        text = rng.choice(_LIFE_EVENT_TEMPLATES[phase]).format(
+        text = rng.choice(_data()["life_event_templates"][phase]).format(
             name=character["name"], place=place.name, domain=place.domain,
         )
         events.append({"year": year, "gospel_text": text})

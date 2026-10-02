@@ -20,6 +20,49 @@ export interface CitySummary {
   place_count: number;
   character_count: number;
   is_active: boolean;
+  // The theme the city was generated with (theme.py); none = the default.
+  theme?: { id: string; name: string } | null;
+}
+
+// GET /api/agents/city/residents -- a CITY-mode background resident.
+export interface BackgroundResident {
+  id: string;
+  name: string;
+  age: number;
+  occupation: string;
+  work: string | null;
+  haunt: string | null;
+  home: string | null;
+  shift: string;
+  bio: string;
+  // Dealings with heroes in the latest CITY run (null = not in it).
+  hero_interactions: number | null;
+  // The saved character they became (zoom-in or the Gallery), if any.
+  promoted_to: string | null;
+  character_name: string | null;
+}
+
+// GET /api/agents/city/residents/<id> -- one resident's page.
+export interface ResidentDetail extends Omit<BackgroundResident, 'hero_interactions'> {
+  run: null | {
+    started_at: string;
+    in_run: boolean;
+    became_hero: boolean;
+    hero_interactions: number | null;
+    schedule: string | null; // "llm" | "template"
+    acquaintances: { name: string; count: number; hero: boolean }[];
+    memories: { time: string; kind: string; text: string }[];
+    stays: { place: string; from: string; until: string }[];
+  };
+}
+
+// GET /api/themes -- a city theme (themes/*.yaml, or uploaded).
+export interface ThemeSummary {
+  id: string;
+  name: string;
+  description: string;
+  present_year: number | null;
+  source: string; // "built-in" | "uploaded" | "city"
 }
 
 export interface Era {
@@ -139,7 +182,16 @@ export type AgentEventKind =
   | 'dialogue'
   | 'move'
   | 'reflect_pause'
-  | 'treatment';
+  | 'treatment'
+  // CITY mode (agents/city/recorder.py) only:
+  | 'status'
+  | 'encounter'
+  | 'promotion'
+  | 'metrics'
+  | 'schedule'
+  | 'schedules'
+  | 'moves'
+  | 'tick_summary';
 
 export interface AgentEvent {
   kind: AgentEventKind;
@@ -210,20 +262,54 @@ export type JobPhase = 'idle' | 'running' | 'done' | 'error';
 export interface JobStatus {
   phase: JobPhase;
   error: string | null;
+  // /api/agents/state only, and only for a CITY run: "city".
+  mode?: string;
 }
 
 export interface AgentsState {
   status: JobStatus;
+  // For a CITY run, only the heroes -- background residents are counted
+  // in `population`, not listed.
   agents: AgentStateRow[];
   meta: {
+    // "scene" or "city"; a run from before modes existed has none (= scene).
+    mode?: string;
     provider: string;
     chat_model: string;
     embed_model: string | null;
     context_tokens: number | null;
     ticks: number;
+    [key: string]: unknown;
   };
   started_at: string | null;
   event_count: number;
+  population?: { heroes: number; background: number; [key: string]: unknown };
+  // CITY runs: the last tick's metrics event.
+  metrics?: CityMetrics | null;
+}
+
+// One CITY tick's "metrics" event (agents/city/world.py's _record_metrics).
+export interface CityMetrics {
+  tick: number;
+  time?: string;
+  seconds: number;
+  waves: Record<string, number>;
+  requests: number;
+  tokens_in: number;
+  tokens_out: number;
+  retries: number;
+  failures: number;
+  repairs: number;
+  backpressure: number;
+  tokens_per_second: number;
+  calls_by_tier: Record<string, number>;
+  calls_by_kind: Record<string, number>;
+  calls_per_hero: number;
+  calls_per_background: number;
+  heroes: number;
+  background: number;
+  encounters: number;
+  conversations: number;
 }
 
 // GET /api/visuals/providers's capabilities block -- what the canvas can
@@ -374,4 +460,43 @@ export interface PopulationStatus {
 export interface PopulationStyle {
   prompt: string;
   reference_images: string[];
+}
+
+// GET /api/agents/city/zoom -- what a CITY run can be zoomed into.
+export interface CityZoomOptions {
+  started_at: string;
+  places: { name: string; place_id: string; heroes: number; people: number }[];
+  ticks: number;
+  times: string[];
+  tick_minutes: number;
+  start_time: string;
+}
+
+// POST /api/agents/city/zoom -- a SCENE run's cast, place and time for one
+// place and window of a CITY run (agents/city/zoom.py). `characters` are
+// background residents just promoted to saved characters.
+export interface CityZoomResult {
+  started_at: string;
+  place: string;
+  place_id: string | null;
+  tick_from: number;
+  tick_to: number;
+  start_time: string;
+  tick_minutes: number;
+  ticks: number;
+  directive: string | null;
+  agent_names: string[];
+  agent_ids: string[];
+  characters: Character[];
+  promoted: string[];
+}
+
+// POST /api/agents/city/report and /city/ask.
+export interface CityInsight {
+  text: string;
+  lines_used: number;
+  lines_total: number;
+  // "live" (the run in memory) or "saved" (the latest saved run, after a restart)
+  source: string;
+  started_at: string;
 }

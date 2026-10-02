@@ -21,6 +21,12 @@ import type {
   Style,
   Treatment,
   VisualsResult,
+  CityZoomOptions,
+  CityZoomResult,
+  CityInsight,
+  ThemeSummary,
+  BackgroundResident,
+  ResidentDetail,
 } from './types';
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -59,6 +65,9 @@ export const history = {
     eventsPerFigure?: number;
     noLlm?: boolean;
     confirmOverwrite?: boolean;
+    // A theme id (GET /api/themes); omitted = the city's own theme when
+    // regenerating it, else the default theme.
+    themeId?: string;
   }) =>
     request<{ ok: boolean; error: string | null; needs_confirmation?: boolean }>(
       '/api/history/generate',
@@ -71,6 +80,7 @@ export const history = {
           events_per_figure: params.eventsPerFigure,
           no_llm: params.noLlm ?? false,
           confirm_overwrite: params.confirmOverwrite ?? false,
+          theme_id: params.themeId,
         }),
       },
     ),
@@ -124,8 +134,12 @@ export const agentsApi = {
 
   state: () => request<AgentsState>('/api/agents/state'),
 
-  events: (since = 0) =>
-    request<{ events: unknown[]; next: number }>(`/api/agents/events?since=${since}`),
+  // For a CITY run `since` is a cursor and `tier` picks "hero" (default),
+  // "background" or "all"; SCENE runs ignore it.
+  events: (since = 0, tier?: string) =>
+    request<{ events: unknown[]; next: number; dropped?: number; started_at?: string | null }>(
+      `/api/agents/events?since=${since}${tier ? `&tier=${tier}` : ''}`,
+    ),
 
   run: (params: {
     agentNames: string[];
@@ -168,11 +182,86 @@ export const agentsApi = {
       }),
     }),
 
+  // A CITY run (agents/city/) -- same /run endpoint and job slot as a
+  // SCENE run, with mode "city".
+  runCity: (params: {
+    agentNames: string[];
+    backgroundCount: number;
+    profile?: string;
+    heroProvider?: string;
+    heroModel?: string;
+    backgroundProvider?: string;
+    backgroundModel?: string;
+    ticks: number;
+    tickMinutes?: number;
+    startTime?: string;
+    directive?: string;
+    placeId?: string;
+    persistHeroMemories?: boolean;
+    seed?: number;
+  }) =>
+    request<{ ok: boolean; error: string | null }>('/api/agents/run', {
+      method: 'POST',
+      body: json({
+        mode: 'city',
+        agent_names: params.agentNames,
+        background_count: params.backgroundCount,
+        profile: params.profile,
+        hero_provider: params.heroProvider,
+        hero_model: params.heroModel,
+        background_provider: params.backgroundProvider,
+        background_model: params.backgroundModel,
+        ticks: params.ticks,
+        tick_minutes: params.tickMinutes,
+        start_time: params.startTime,
+        directive: params.directive,
+        place_id: params.placeId,
+        location_mode: params.placeId ? 'convene' : 'grounded',
+        persist_hero_memories: params.persistHeroMemories ?? true,
+        seed: params.seed,
+      }),
+    }),
+
   stop: () => request<{ ok: boolean }>('/api/agents/stop', { method: 'POST' }),
+
+  // CITY-only controls (agents/routes.py's /city/*).
+  cityPause: () => request<{ ok: boolean; error?: string }>('/api/agents/city/pause', { method: 'POST' }),
+  cityResume: () => request<{ ok: boolean }>('/api/agents/city/resume', { method: 'POST' }),
+  cityPromote: (name: string) =>
+    request<{ ok: boolean; error: string | null }>('/api/agents/city/promote', { method: 'POST', body: json({ name }) }),
+  // "What's going on in the city": a briefing, or a question answered from
+  // the current/latest CITY run's log (agents/city/insight.py).
+  cityReport: (previous?: string) =>
+    request<CityInsight>('/api/agents/city/report', { method: 'POST', body: json({ previous }) }),
+  cityAsk: (question: string) =>
+    request<CityInsight>('/api/agents/city/ask', { method: 'POST', body: json({ question }) }),
+  cityResidents: () => request<{ residents: BackgroundResident[] }>('/api/agents/city/residents'),
+  cityResident: (id: string) => request<ResidentDetail>(`/api/agents/city/residents/${encodeURIComponent(id)}`),
+  cityResidentToCharacter: (id: string) =>
+    request<{ character: Character }>(`/api/agents/city/residents/${encodeURIComponent(id)}/character`, { method: 'POST' }),
+  cityZoomOptions: () => request<CityZoomOptions>('/api/agents/city/zoom'),
+  cityZoom: (params: { place: string; tickFrom: number; tickTo: number; startedAt?: string }) =>
+    request<CityZoomResult>('/api/agents/city/zoom', {
+      method: 'POST',
+      body: json({ place: params.place, tick_from: params.tickFrom, tick_to: params.tickTo, started_at: params.startedAt }),
+    }),
+  cityProfiles: () =>
+    request<{ profiles: Record<string, { label: string; population_cap: number; hero_cap: number }>; detected: string }>(
+      '/api/agents/city/profiles',
+    ),
 
   generateTreatment: (
     agentId: string,
-    params?: { provider?: string; model?: string; agentIds?: string[]; placeIds?: string[] },
+    params?: {
+      provider?: string;
+      model?: string;
+      agentIds?: string[];
+      placeIds?: string[];
+      // CITY runs only: narrow the transcript to one place / window of ticks.
+      place?: string;
+      tickFrom?: number;
+      tickTo?: number;
+    },
   ) =>
     request<{ treatment: Treatment }>('/api/agents/treatment', {
       method: 'POST',
@@ -186,6 +275,9 @@ export const agentsApi = {
         // POST /treatment docstring).
         agent_ids: params?.agentIds,
         place_ids: params?.placeIds,
+        place: params?.place,
+        tick_from: params?.tickFrom,
+        tick_to: params?.tickTo,
       }),
     }),
 
@@ -338,13 +430,14 @@ export const graph = {
 // ---- the Population node (/api/history/population) -- history/population.py
 
 export const populationApi = {
-  start: (params: { count: number; characterStyle?: PopulationStyle; locationStyle?: PopulationStyle }) =>
+  start: (params: { count: number; characterStyle?: PopulationStyle; locationStyle?: PopulationStyle; withImages?: boolean }) =>
     request<{ ok: boolean; error: string | null }>('/api/history/population', {
       method: 'POST',
       body: json({
         count: params.count,
         character_style: params.characterStyle,
         location_style: params.locationStyle,
+        with_images: params.withImages ?? true,
       }),
     }),
   status: () => request<PopulationStatus>('/api/history/population'),
@@ -393,4 +486,21 @@ export const stylesApi = {
     }),
 
   remove: (id: string) => request<{ ok: boolean }>(`/api/styles/${id}`, { method: 'DELETE' }),
+};
+
+// ---- city themes (/api/themes) -- theme.py / theme_routes.py
+export const themesApi = {
+  list: () => request<{ themes: ThemeSummary[]; default: string; active_city_theme: ThemeSummary | null }>('/api/themes'),
+  // Sends the YAML as the raw body. A rejected theme comes back as
+  // { ok: false, problems: [...] } (status 400) -- returned, not thrown, so
+  // the dialog can list every problem.
+  upload: async (text: string): Promise<{ ok: boolean; theme?: ThemeSummary; problems?: string[] }> => {
+    const res = await fetch('/api/themes', { method: 'POST', headers: { 'Content-Type': 'application/x-yaml' }, body: text });
+    const body = await res.json().catch(() => null);
+    if (body && typeof body.ok === 'boolean') return body;
+    return { ok: false, problems: [`upload failed (${res.status} ${res.statusText})`] };
+  },
+  remove: (id: string) => request<{ ok: boolean; error?: string }>(`/api/themes/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  fileUrl: (id: string) => `/api/themes/${encodeURIComponent(id)}/file`,
+  cityFileUrl: (cityId: string) => `/api/themes/city/${encodeURIComponent(cityId)}/file`,
 };

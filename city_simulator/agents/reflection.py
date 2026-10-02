@@ -13,6 +13,8 @@ the last reflection crosses REFLECTION_IMPORTANCE_THRESHOLD. When it fires:
 
 import re
 
+import theme
+
 from . import display
 from . import llm
 from . import recorder
@@ -33,15 +35,11 @@ def should_reflect(agent: Agent) -> bool:
 def _generate_focal_points(agent: Agent, tick: int, verbose: bool = False, color: str = "") -> list[str]:
     recent = agent.memory.recent(REFLECTION_LOOKBACK, kinds=("observation",))
     statements = "\n".join(f"- {m.description}" for m in recent)
-    prompt = (
-        f"Here are a number of recent statements about {agent.name}:\n{statements}\n\n"
-        f"Given only this information, what are the {REFLECTION_NUM_FOCAL_POINTS} most "
-        f"salient high-level questions we can ask about the subjects in these statements? "
-        "Reply with one question per line, no numbering."
-    )
+    prompt = theme.current().prompt("scene.focal_points", name=agent.name, statements=statements,
+                                    n=REFLECTION_NUM_FOCAL_POINTS)
     reply = llm.complete(prompt, temperature=0.6)
     questions = parse_list_lines(reply)
-    focal_points = questions[:REFLECTION_NUM_FOCAL_POINTS] or [f"What matters most to {agent.name} right now?"]
+    focal_points = questions[:REFLECTION_NUM_FOCAL_POINTS] or [theme.current().prompt("scene.focal_fallback", name=agent.name)]
     for question in focal_points:
         if verbose:
             print(display.focal_line(agent.name, color, question))
@@ -56,14 +54,8 @@ def _generate_insights(agent: Agent, focal_point: str, tick: int,
         return
     statements = "\n".join(f"{i}. {n.description}" for i, n in enumerate(nodes))
 
-    prompt = (
-        f"Statements about {agent.name}:\n{statements}\n\n"
-        f"What {REFLECTION_INSIGHTS_PER_FOCAL_POINT} high-level insights can you infer "
-        f"from the above statements, in relation to: \"{focal_point}\"?\n"
-        "Reply with one insight per line, in exactly this format:\n"
-        "<insight> (because of 1, 3)\n"
-        "where the numbers in parentheses are the statement numbers it's based on."
-    )
+    prompt = theme.current().prompt("scene.insights", name=agent.name, statements=statements,
+                                    n=REFLECTION_INSIGHTS_PER_FOCAL_POINT, focal=focal_point)
     reply = llm.complete(prompt, temperature=0.6)
 
     for line in parse_list_lines(reply):

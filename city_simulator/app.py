@@ -10,11 +10,20 @@ package's jobs.py), so the frontend can drive them independently.
 Usage:
     python3 app.py                                   # serve the built SPA
     (cd frontend && npm run dev)                      # SPA dev server, proxies /api to this process
+
+Serving beyond this machine (e.g. a RunPod public URL): set APP_PASSWORD
+(and optionally APP_USER, default "admin") so every page and API call needs
+a login, and APP_HOST=0.0.0.0 so it listens on all interfaces. The app
+refuses to listen beyond localhost without a password -- anyone who could
+reach it could otherwise run jobs on your GPU and delete your cities.
 """
 
+import hmac
 import logging
+import os
+import sys
 
-from flask import Flask, send_from_directory
+from flask import Flask, Response, request, send_from_directory
 from werkzeug.serving import make_server
 
 from agents import jobs as agents_jobs
@@ -24,6 +33,7 @@ from citystate.graph_routes import bp as graph_bp
 from citystate.graph_routes import library_bp as graph_library_bp
 from citystate.routes import bp as city_bp
 from history.routes import bp as history_bp
+from theme_routes import bp as themes_bp
 from visuals.routes import bp as visuals_bp
 from visuals.styles_routes import bp as styles_bp
 
@@ -43,6 +53,7 @@ def create_app() -> Flask:
     app.register_blueprint(graph_bp)
     app.register_blueprint(graph_library_bp)
     app.register_blueprint(styles_bp)
+    app.register_blueprint(themes_bp)
 
     # citystate.store.get() lazily reads a previously-saved city off disk
     # on its own -- the one thing it can't derive by itself is the agent
@@ -50,6 +61,8 @@ def create_app() -> Flask:
     saved_city = citystate.get()
     if saved_city is not None:
         agents_jobs.set_history_roster(saved_city)
+
+    _install_login(app)
 
     # The SPA owns client-side routing (/, /c/<city>, /c/<city>/agent/<id>,
     # /c/<city>/place/<id>, /c/<city>/gallery, /scratch/<id>,
@@ -70,6 +83,24 @@ def create_app() -> Flask:
     return app
 
 
+def _install_login(app: Flask) -> None:
+    """HTTP Basic auth on every request when APP_PASSWORD is set. The
+    browser asks once and then sends the credentials with every page and
+    API request on its own, so the frontend needs no changes."""
+    password = os.environ.get("APP_PASSWORD")
+    if not password:
+        return
+    user = os.environ.get("APP_USER", "admin")
+
+    @app.before_request
+    def require_login():
+        auth = request.authorization
+        if auth and hmac.compare_digest(auth.username or "", user) and \
+                hmac.compare_digest(auth.password or "", password):
+            return None
+        return Response("Login required.", 401, {"WWW-Authenticate": 'Basic realm="City Simulator"'})
+
+
 # Fixed, not ephemeral -- the URL survives a restart, so the workflow is
 # refreshing whatever tab you already have open rather than a new one
 # opening every time (see main()). If something else on this machine is
@@ -78,12 +109,16 @@ PORT = 8420
 
 
 def main():
+    host = os.environ.get("APP_HOST", "127.0.0.1")
+    if host not in ("127.0.0.1", "localhost") and not os.environ.get("APP_PASSWORD"):
+        sys.exit(f"Refusing to listen on {host} without a login: set APP_PASSWORD (and optionally APP_USER).")
     app = create_app()
     # make_server (not app.run()) so threaded=True is available -- a slow
     # job-status poll or media download must not block other requests.
-    srv = make_server("127.0.0.1", PORT, app, threaded=True)
-    url = f"http://127.0.0.1:{srv.server_port}/"
-    print(f"Serving City Simulator at {url} -- refresh your existing tab, or open it (Ctrl+C to stop)")
+    srv = make_server(host, PORT, app, threaded=True)
+    url = f"http://{host}:{srv.server_port}/"
+    login = " (login required)" if os.environ.get("APP_PASSWORD") else ""
+    print(f"Serving City Simulator at {url}{login} -- refresh your existing tab, or open it (Ctrl+C to stop)")
     try:
         srv.serve_forever()
     except KeyboardInterrupt:

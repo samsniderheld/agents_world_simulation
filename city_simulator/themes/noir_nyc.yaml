@@ -1,0 +1,1937 @@
+# A city theme: everything that gives a generated city its world, in one file.
+#
+# History generation (history/), both simulation modes (agents/), treatments
+# and image prompts read their content and prompts from here -- swap this file
+# for another theme (fantasy, sci-fi...) and nothing in the code changes. A city
+# keeps its own copy of the theme it was generated with.
+#
+# Prompt templates: {slot} is filled in by the app with the slot names listed
+# in the theme reference (theme.py's PROMPT_SLOTS); only lowercase {names} are
+# slots, so JSON examples such as {"items": [...]} are left exactly as written.
+# Some prompts end with a reply format the code parses (NAME:/AGE:/BIO:,
+# WHERE:, TALK:/REACT:/CONTINUE, STORYBOARD:, QUIRK:) -- keep those markers.
+#
+# Technical settings (models, concurrency, timeouts, memory weights) are not
+# part of a theme: see agents/config.py, history/data/config.yaml, hardware.py.
+theme:
+  id: noir_nyc
+  name: Film-noir New York, 1959
+  description: An alternate-history New York City from Dutch New Amsterdam (1624) to a rain-slick, film-noir 1959.
+
+# ============================================================================
+# WORLD
+# The setting's fixed facts, used inside several prompts.
+# ============================================================================
+world:
+  present_year: 1959
+  visual_look: 'moody film noir aesthetic: high-contrast black-and-white lighting, hard venetian-blind shadows,
+    wet city streets, dramatic low-key lighting, deep chiaroscuro shadow, 1940s wardrobe and production design.the
+    background should look like a painting, in the style of edward hopper.'
+
+# ============================================================================
+# ERAS
+# The history is generated era by era, from the first to the present.
+# Every era id here must have entries in entities (domains, factions),
+# names (era_name_groups) and architecture (eras).
+# ============================================================================
+# The eras the generated history is segmented into. Each spawns
+# config.FIGURES_PER_ERA new Figures whose event chains run within that
+# era's years, but whose events can act on Places founded in any earlier
+# era -- see generate.py.
+eras:
+  - id: dutch_colonial
+    name: "New Amsterdam (Dutch Colonial)"
+    start_year: 1624
+    end_year: 1664
+    description: "A fur-trading outpost of the Dutch West India Company at the tip of Manhattan island."
+  - id: english_colonial
+    name: "New York (English Colonial)"
+    start_year: 1664
+    end_year: 1783
+    description: "Renamed and ruled by the English crown; a growing port city under royal governors."
+  - id: early_republic
+    name: "Early Republic"
+    start_year: 1783
+    end_year: 1825
+    description: "The young nation's largest city, rebuilding after the Revolutionary War."
+  - id: antebellum
+    name: "Antebellum & Immigration Boom"
+    start_year: 1825
+    end_year: 1861
+    description: "Waves of Irish and German immigration swell the city as canals and rail make it a commercial hub."
+  - id: gilded_age
+    name: "Civil War & Gilded Age"
+    start_year: 1861
+    end_year: 1900
+    description: "Industrial fortunes, political machines, and a skyline beginning to climb."
+  - id: progressive
+    name: "Progressive Era & Tenement City"
+    start_year: 1900
+    end_year: 1917
+    description: "Reformers battle tenement squalor and machine politics as the subway opens and skyscrapers rise."
+  - id: prohibition
+    name: "Prohibition & Jazz Age"
+    start_year: 1920
+    end_year: 1933
+    description: "Speakeasies, bootleggers, and nightlife flourish in defiance of the Volstead Act."
+  - id: depression_war
+    name: "Depression, War & Postwar"
+    start_year: 1933
+    end_year: 1959
+    description: "The Depression, the Second World War, and a postwar boom remake the city once more."
+
+# ============================================================================
+# NAMES
+# Person and place names: word lists per period, and how each place type is
+# named (naming_style -> naming_patterns). Pattern slots: {surname},
+# {domain_title}, {place_type_short}, {number}, {call_letters}, or any word
+# list under place_name_words (one picked at random).
+# ============================================================================
+names:
+  # Pure-grammar word lists, grouped by rough time period rather than
+  # duplicated per era -- era_name_groups below maps each era onto one of
+  # these groups.
+  name_groups:
+    dutch:
+      given: [Jan, Pieter, Willem, Cornelis, Hendrick, Anneke, Griet, Marritje, Trijntje, Aeltje,
+              Dirk, Jacob, Barent, Gerrit, Claes, Femmetje, Geertruyd, Lysbeth, Neeltje, Styntje]
+      surname: ["Van der Berg", "De Groot", Bogaert, "Van Dyck", Kuyper, Stuyvesant, Verplanck, Rutgers,
+                "Van Wyck", "De Witt", "Van Cortlandt", "Ten Eyck", "Van Der Donck", Schuyler, Brouwer,
+                "Van Zandt", "De Peyster", Bleecker]
+    english:
+      given: [William, John, Thomas, Samuel, Elizabeth, Margaret, Abigail, Josiah, Nathaniel, Prudence,
+              Benjamin, Richard, Edward, Charles, Hannah, Sarah, Mercy, Increase, Jonathan, Deborah]
+      surname: [Beekman, Livingston, Morris, Hamilton, Bayard, Fish, Roosevelt, Whitfield,
+                "Van Rensselaer", Clinton, Duane, Jay, Schermerhorn, Rhinelander, Cruger, Waddington,
+                Ludlow, Pell]
+    "19c":
+      given: [Patrick, Seamus, Bridget, Katharina, Heinrich, Mary, Michael, Anna, Cornelius, Delia,
+              Liam, Fiona, Wilhelm, Greta, Sean, Kathleen, Otto, Margarethe, Declan, Aoife]
+      surname: ["O'Malley", Schmidt, Muller, Fitzgerald, Costello, Weber, Doyle, Kessler,
+                Kelly, Braun, Sullivan, Hoffmann, Byrne, Krueger, Flanagan, Zimmerman, Casey, Wagner]
+    "20c":
+      given: [Rose, Sal, Frank, Dorothy, Irving, Ruth, Vincent, Gloria, Moe, Sadie,
+              Tony, Esther, Nick, Pearl, Sam, Angela, Murray, Lucille, Benny, Fannie]
+      surname: [Russo, Cohen, Bianchi, Kowalski, Moretti, Feldman, Lombardi, Sullivan,
+                Greco, Silverman, Marino, Novak, Rizzo, Katz, Romano, Walsh, Esposito, Goldstein]
+
+  # era id -> which name_groups entry it draws from. An era with no entry
+  # here falls back to "english" (see names.py's _names_for_era).
+  era_name_groups:
+    dutch_colonial: dutch
+    english_colonial: english
+    early_republic: english
+    antebellum: "19c"
+    gilded_age: "19c"
+    progressive: "20c"
+    prohibition: "20c"
+    depression_war: "20c"
+
+  place_name_words:
+    adjectives: [Gilded, Broken, Crooked, Copper, Weeping, Rusty, Silver, Drowsy, Iron, "Salt-worn",
+                 Faded, Hollow, Battered, Restless, Tarnished, Weathered, Forgotten, Lucky, Stubborn,
+                 Threadbare]
+    animals: [Sparrow, Anchor, Fox, Gull, Stag, Eel, Raven, Hare,
+              Crow, Wolf, Heron, Pike, Owl, Terrier, Falcon, Otter, Wren, Boar]
+    saints_virtues: ["St. Nicholas", "St. Andrew", "the Redeemer", Grace, "the Good Shepherd", "St. Brigid",
+                     "St. Patrick", "St. Anthony", "the Sacred Heart", Mercy, "St. Joseph", "the Holy Cross",
+                     Charity, "St. Agnes", "the Ascension", "St. Francis"]
+    press_words: [Herald, Ledger, Courier, Gazette, Tribune, Sentinel,
+                  Chronicle, Dispatch, Bulletin, Register, Observer, Standard, Examiner, Post, Record, Beacon]
+    streets: ["Mulberry Street", "Cherry Street", "Orchard Street", "Bowery Lane", "Water Street", "Delancey Street",
+              "Hester Street", "Ludlow Street", "Rivington Street", "Canal Street", "Pearl Street",
+              "Fulton Street", "Grand Street", "Essex Street", "Stanton Street", "Broome Street"]
+    products: [Ironworks, Textile, Foundry, Glassworks, Tannery, Print,
+               Brewing, Milling, Rope, Brass, Lumber, Leather, Chemical, Machine, Boiler, Wire]
+
+  # place_type -> which naming pattern _grammar_place_name uses for it.
+  naming_style:
+    Tavern/Bar: tavern
+    Inn: tavern
+    Coffee House: tavern
+    Speakeasy: tavern
+    Cocktail Lounge: tavern
+    Nightclub/Jazz Club: tavern
+    Dance Hall: tavern
+    Pool Hall: tavern
+    Theater/Hall: tavern
+    Social/Fraternal Club: tavern
+    Brewery: firm
+    Trading Post: firm
+    Bank/Counting House: firm
+    Shipyard/Dock/Warehouse: firm
+    Craftsman's Workshop: works
+    Factory/Mill: works
+    Restaurant: surname_possessive
+    Diner/Automat: surname_possessive
+    Hotel/Boarding House: surname_possessive
+    General Store/Shop: surname_possessive
+    Grocery/Corner Store: surname_possessive
+    Supermarket: surname_possessive
+    Market: surname_possessive
+    Department Store: surname_possessive
+    Pawnshop: surname_possessive
+    Garage/Filling Station: surname_possessive
+    Nickelodeon: surname_possessive
+    Movie Palace: surname_possessive
+    Church/House of Worship: civic_church
+    Park/Public Square: civic
+    Government/Civic Building: civic
+    School: civic
+    Hospital: civic
+    Union Hall: civic
+    Fort/Garrison: civic_fort
+    Housing Project: civic_houses
+    Newspaper/Print Shop: press
+    Radio Station: call_letters
+    Tenement/Residence: address
+    Brownstone/Townhouse: address
+    Apartment House: address
+    Policy Shop/Gambling Den: address
+  naming_patterns:
+    tavern: The {adjectives} {animals}
+    firm: '{surname} & Sons'
+    works: '{surname} {products} Works'
+    civic: '{surname} {place_type_short}'
+    civic_church: '{saints_virtues}'
+    civic_fort: Fort {surname}
+    civic_houses: '{surname} Houses'
+    call_letters: W{call_letters}
+    press: The {domain_title} {press_words}
+    address: '{number} {streets}'
+    surname_possessive: '{surname}''s'
+  default_naming_style: surname_possessive
+  default_name_group: english
+
+# ============================================================================
+# PEOPLE AND PLACES
+# Domains and factions per era, historical roles, and place types
+# (which eras each can be founded in, and its plain noun).
+# ============================================================================
+entities:
+  # Recurring thematic motifs assigned to a Figure at creation (Qud's
+  # fire/ice "domain") -- inherited by any Place they found, coloring that
+  # place's language for its whole history even after ownership changes.
+  # Keyed by era id so a figure's domain always reflects what that era was
+  # actually about (the fur trade in New Amsterdam, bootlegging in the Jazz
+  # Age) instead of one flat list shared across all 330 years -- see
+  # entities.py's domains_for_era().
+  domains:
+    dutch_colonial:
+      - "the fur trade"
+      - "wampum"
+      - "the palisade wall"
+      - "the West India Company"
+      - "tobacco"
+      - "the tide"
+      - "brandy"
+      - "the counting house"
+      - "the Reformed Church"
+      - "salt"
+    english_colonial:
+      - "the harbor"
+      - "tea"
+      - "the Crown"
+      - "indigo"
+      - "rum"
+      - "the militia"
+      - "the printing press"
+      - "smallpox"
+      - "privateering"
+      - "the assembly"
+    early_republic:
+      - "the ledger"
+      - "banking"
+      - "the turnpike"
+      - "yellow fever"
+      - "the federalist press"
+      - "shipping"
+      - "the almshouse"
+      - "speculation"
+      - "the customs house"
+      - "temperance"
+    antebellum:
+      - "the canal"
+      - "immigration"
+      - "the tenement"
+      - "abolition"
+      - "the telegraph"
+      - "cholera"
+      - "brass"
+      - "the docks"
+      - "nativism"
+      - "cotton"
+    gilded_age:
+      - "iron"
+      - "steel"
+      - "the railroad"
+      - "the stock exchange"
+      - "tammany"
+      - "steam"
+      - "the slaughterhouse"
+      - "granite"
+      - "electricity"
+      - "the tenement house law"
+    progressive:
+      - "the subway"
+      - "reform"
+      - "the settlement house"
+      - "the sweatshop"
+      - "the vote"
+      - "muckraking"
+      - "the skyscraper"
+      - "tuberculosis"
+      - "child labor"
+      - "the union hall"
+    prohibition:
+      - "bootlegging"
+      - "jazz"
+      - "the speakeasy"
+      - "bathtub gin"
+      - "the numbers racket"
+      - "flappers"
+      - "the radio"
+      - "graft"
+      - "the ward machine"
+      - "velvet"
+    depression_war:
+      - "the breadline"
+      - "the WPA"
+      - "rationing"
+      - "the draft"
+      - "the shipyard"
+      - "the picket line"
+      - "television"
+      - "the suburbs"
+      - "the Cold War"
+      - "the pulpit"
+
+  # Abstract allegiance targets a figure can become allied/rival with --
+  # the direct analog of the talk's "frogs"/"cats" factions. Also keyed by
+  # era id, for the same reason as domains above (a Sons of Liberty rivalry
+  # doesn't make sense for a figure born in 1950) -- see
+  # entities.py's factions_for_era().
+  factions:
+    dutch_colonial:
+      - "the West India Company directors"
+      - "the consistory"
+      - "the schout's watch"
+      - "the patroons"
+      - "the fur traders' guild"
+      - "the tavern keepers"
+      - "the dockhands"
+      - "the burgher guard"
+      - "the shipwrights"
+      - "the almshouse deacons"
+    english_colonial:
+      - "the royal governor's council"
+      - "the Sons of Liberty"
+      - "the vestry"
+      - "the merchants' exchange"
+      - "the harbor pilots"
+      - "the colonial militia"
+      - "the printers' guild"
+      - "the Loyalists"
+      - "the Committee of Correspondence"
+      - "the privateers"
+    early_republic:
+      - "the Federalists"
+      - "the Democratic-Republicans"
+      - "the Tammany Society"
+      - "the bank directors"
+      - "the customs officers"
+      - "the shipowners' association"
+      - "the volunteer firemen"
+      - "the almshouse trustees"
+      - "the turnpike company"
+      - "the stagecoach lines"
+    antebellum:
+      - "the immigrant aid society"
+      - "the Know-Nothings"
+      - "the abolitionists"
+      - "the ward bosses"
+      - "the longshoremen"
+      - "the temperance league"
+      - "the canal company"
+      - "the dockworkers"
+      - "the parish poor"
+      - "the volunteer fire companies"
+    gilded_age:
+      - "the Tammany Ring"
+      - "the railroad barons"
+      - "the volunteer fire gangs"
+      - "the draft board"
+      - "the stock exchange men"
+      - "the street gangs"
+      - "the reform league"
+      - "the suffragists"
+      - "the tenement inspectors"
+      - "the longshoremen's union"
+    progressive:
+      - "the settlement house"
+      - "the muckrakers"
+      - "the garment workers' union"
+      - "the tenement reformers"
+      - "the suffragists' league"
+      - "the police captains"
+      - "the ward machine"
+      - "the child labor reformers"
+      - "the building inspectors"
+      - "the stagehands' union"
+    prohibition:
+      - "the bootleggers"
+      - "the speakeasy owners"
+      - "the temperance enforcers"
+      - "the numbers runners"
+      - "the jazz musicians' union"
+      - "the machine bosses"
+      - "the flappers"
+      - "the federal agents"
+      - "the mob"
+      - "the radio men"
+    depression_war:
+      - "the WPA workers"
+      - "the picket lines"
+      - "the ration board"
+      - "the shipyard workers"
+      - "the veterans' association"
+      - "the civil defense corps"
+      - "the union organizers"
+      - "the relief office"
+      - "the suburban developers"
+      - "the Cold War hawks"
+
+  # role -> list of valid era ids, or null for "any era"
+  roles:
+    Merchant: null
+    Ship Captain: [dutch_colonial, english_colonial, early_republic, antebellum, gilded_age]
+    Alderman: [english_colonial, early_republic, antebellum, gilded_age, progressive]
+    Reverend: null
+    Tavern Keeper: null
+    Madam: [antebellum, gilded_age, progressive, prohibition]
+    Gang Boss: [antebellum, gilded_age, progressive, prohibition]
+    Industrialist: [gilded_age, progressive, depression_war]
+    Newspaper Editor: [early_republic, antebellum, gilded_age, progressive, prohibition, depression_war]
+    Union Organizer: [progressive, prohibition, depression_war]
+    Speakeasy Owner: [prohibition]
+    Physician: null
+    Architect: [early_republic, antebellum, gilded_age, progressive, depression_war]
+    Immigrant Entrepreneur: [antebellum, gilded_age, progressive, prohibition, depression_war]
+    Society Matron: [gilded_age, progressive, depression_war]
+    Police Captain: [antebellum, gilded_age, progressive, prohibition, depression_war]
+    Detective: [progressive, prohibition, depression_war]
+    Reporter: [progressive, prohibition, depression_war]
+
+  # place_type -> list of valid era ids, or null for "any era"
+  place_types:
+    # Which eras a place of this type can be *founded* in (null = any era). A
+    # place founded earlier can still stand in a later era -- a 1720 general
+    # store can survive into the 1950s as an old establishment; this only
+    # decides what's newly opened when. Era ids: dutch_colonial 1624-64,
+    # english_colonial 1664-1783, early_republic 1783-1825, antebellum
+    # 1825-61, gilded_age 1861-1900, progressive 1900-17, prohibition
+    # 1920-33, depression_war 1933-59.
+
+    # --- drink, food, lodging
+    Tavern/Bar: [dutch_colonial, english_colonial, early_republic, antebellum, gilded_age, progressive, depression_war]
+    Inn: [dutch_colonial, english_colonial]
+    Coffee House: [english_colonial, early_republic]
+    Speakeasy: [prohibition]
+    Cocktail Lounge: [depression_war]
+    Brewery: [dutch_colonial, english_colonial, early_republic, antebellum, gilded_age, progressive, depression_war]
+    Restaurant: [antebellum, gilded_age, progressive, prohibition, depression_war]
+    Diner/Automat: [progressive, prohibition, depression_war]
+    Hotel/Boarding House: [early_republic, antebellum, gilded_age, progressive, prohibition, depression_war]
+
+    # --- trade and shops
+    Trading Post: [dutch_colonial, english_colonial]
+    General Store/Shop: [dutch_colonial, english_colonial, early_republic, antebellum]
+    Grocery/Corner Store: [gilded_age, progressive, prohibition, depression_war]
+    Supermarket: [depression_war]
+    Market: null
+    Department Store: [gilded_age, progressive, prohibition, depression_war]
+    Pawnshop: [antebellum, gilded_age, progressive, prohibition, depression_war]
+    Garage/Filling Station: [prohibition, depression_war]
+
+    # --- work and money
+    Craftsman's Workshop: [dutch_colonial, english_colonial, early_republic, antebellum]
+    Factory/Mill: [antebellum, gilded_age, progressive, prohibition, depression_war]
+    Shipyard/Dock/Warehouse: null
+    Bank/Counting House: null
+    Union Hall: [gilded_age, progressive, prohibition, depression_war]
+    Newspaper/Print Shop: [english_colonial, early_republic, antebellum, gilded_age, progressive, prohibition, depression_war]
+    Radio Station: [prohibition, depression_war]
+
+    # --- entertainment and vice
+    Theater/Hall: [early_republic, antebellum, gilded_age, progressive, prohibition, depression_war]
+    Dance Hall: [gilded_age, progressive, prohibition]
+    Nickelodeon: [progressive]
+    Movie Palace: [prohibition, depression_war]
+    Nightclub/Jazz Club: [prohibition, depression_war]
+    Pool Hall: [gilded_age, progressive, prohibition, depression_war]
+    Policy Shop/Gambling Den: [gilded_age, progressive, prohibition, depression_war]
+
+    # --- homes
+    Brownstone/Townhouse: [antebellum, gilded_age]
+    Tenement/Residence: [antebellum, gilded_age, progressive, prohibition]
+    Apartment House: [prohibition, depression_war]
+    Housing Project: [depression_war]
+
+    # --- civic life
+    Church/House of Worship: null
+    School: null
+    Park/Public Square: null
+    Government/Civic Building: null
+    Fort/Garrison: [dutch_colonial, english_colonial]
+    Hospital: [antebellum, gilded_age, progressive, prohibition, depression_war]
+    Social/Fraternal Club: [english_colonial, early_republic, antebellum, gilded_age, progressive, prohibition, depression_war]
+
+  place_type_nouns:
+    Tavern/Bar: tavern
+    Inn: inn
+    Coffee House: coffee house
+    Speakeasy: speakeasy
+    Cocktail Lounge: cocktail lounge
+    Brewery: brewery
+    Restaurant: restaurant
+    Diner/Automat: diner
+    Hotel/Boarding House: hotel
+    Trading Post: trading post
+    General Store/Shop: general store
+    Grocery/Corner Store: grocery
+    Supermarket: supermarket
+    Market: market
+    Department Store: department store
+    Pawnshop: pawnshop
+    Garage/Filling Station: garage
+    Craftsman's Workshop: workshop
+    Factory/Mill: mill
+    Shipyard/Dock/Warehouse: shipyard
+    Bank/Counting House: bank
+    Union Hall: union hall
+    Newspaper/Print Shop: print shop
+    Radio Station: radio station
+    Theater/Hall: theater
+    Dance Hall: dance hall
+    Nickelodeon: nickelodeon
+    Movie Palace: movie palace
+    Nightclub/Jazz Club: nightclub
+    Pool Hall: pool hall
+    Policy Shop/Gambling Den: policy shop
+    Brownstone/Townhouse: brownstone
+    Tenement/Residence: tenement
+    Apartment House: apartment house
+    Housing Project: housing project
+    Church/House of Worship: church
+    School: schoolhouse
+    Park/Public Square: public square
+    Government/Civic Building: civic hall
+    Fort/Garrison: fort
+    Hospital: hospital
+    Social/Fraternal Club: social club
+
+# ============================================================================
+# EVENTS
+# The event templates that write the history, and their word lists.
+# effects / place_filter / precondition name behaviours in history/events.py.
+# ============================================================================
+events:
+  # domain values may themselves start with "the" (e.g. "the press"), so
+  # these deliberately don't prepend their own article before {domain}.
+  generic_causes:
+    - "a matter of {domain}"
+    - "reasons the old records leave unclear"
+    - "a dispute no one now remembers clearly"
+    - "what was once called simply \"{domain} business\""
+    - "an old grudge nobody could quite explain"
+    - "a matter tied up with {domain} somehow"
+    - "money that changed hands more than once"
+    - "a promise made and later regretted"
+    - "a falling-out no one wanted to discuss"
+    - "whatever was left unsaid about {domain}"
+    - "a debt several people claimed to have forgotten"
+    - "words exchanged that couldn't be taken back"
+    - "a secret that was never quite kept"
+    - "a bet that went badly for someone"
+
+  # Mixed articles are deliberate: every template phrases these as
+  # "lost to {disaster}" / "consumed by {disaster}", which both read fine
+  # whether or not the phrase itself carries an article.
+  disasters:
+    - fire
+    - a storm
+    - a riot
+    - a flood
+    - an explosion
+    - a collapse
+    - a blackout
+    - vandals
+    - a gas leak
+    - looters
+    - a blizzard
+    - a boiler burst
+    - an epidemic
+    - the wrecking crews
+
+  scandal_tags:
+    - bribery
+    - smuggling
+    - adultery
+    - embezzlement
+    - blasphemy
+    - forgery
+    - perjury
+    - arson
+    - counterfeiting
+    - extortion
+    - nepotism
+    - profiteering
+    - desertion
+    - bigamy
+    - sedition
+    - graft
+
+  political_outcomes:
+    - a night in the Tombs
+    - a heavy fine
+    - a public apology
+    - quiet exile from the ward
+    - a pardon bought with favors
+    - a suspended sentence
+    - a transfer to another precinct
+    - a closed-door settlement
+    - a demotion no one dared mention
+    - a favor owed to the judge
+    - a story that never made the papers
+    - a resignation dressed up as retirement
+    - a stern word from the alderman
+    - a wager settled quietly
+    - a debt paid in political capital
+
+  # A subset of dramatic event kinds get a shot at an LLM prose flourish
+  # (config.LLM_FLOURISH_RATE); everything else stays pure grammar output.
+  notable_template_ids:
+    - found_place
+    - place_destroyed
+    - rebuilt_place
+    - expansion
+
+  # Each template: id (unique string), requires_place ("new" | "existing" |
+  # null), place_filter (optional, only for "existing" -- name of a function
+  # in events.py's _PLACE_FILTERS), precondition (optional -- name of a
+  # function in _PRECONDITIONS, gates whether this template is even eligible
+  # this turn), effects (name of a function in _EFFECTS -- mutates
+  # figure/place in place and returns extra Gospel-text context slots), and
+  # grammar (a grammar.expand() dict; must have a "TEXT" symbol, may have
+  # others, including alternate text symbols an effects function can
+  # redirect to via the special "_text_symbol" context key -- see
+  # feud_violence's TEXT_DEATH branch).
+  event_templates:
+    - id: found_place
+      requires_place: new
+      effects: found_place
+      grammar:
+        TEXT:
+          - "In {year}, {figure} of {domain} founded {place}, a {place_noun}, {founding_flourish}."
+          - "{figure} opened the doors of {place} in {year}, a {place_noun} that would carry the mark of {domain} for years to come."
+          - "{figure} laid the first stone of {place} in {year}, {founding_flourish}."
+          - "{place} first opened for business in {year}, {figure}'s answer to {domain}."
+          - "By {year}, {figure} had turned a notion into {place}, a new {place_noun} {founding_flourish}."
+          - "{figure} christened {place} in {year}, a {place_noun} built {founding_flourish}."
+          - "In {year}, what would become {place} started as little more than {figure}'s idea, {founding_flourish}."
+          - "{figure} threw open the doors of {place}, a {place_noun}, {founding_flourish}, in {year}."
+          - "{place} owes its start to {figure}, who founded it in {year} {founding_flourish}."
+          - "{figure} staked everything on {place} in {year}, a {place_noun} devoted to {domain}."
+          - "The {place_noun} known as {place} began, in {year}, as {figure}'s gamble on {domain}."
+          - "{figure} broke ground on {place} in {year}, {founding_flourish}."
+        founding_flourish:
+          - "on a corner that was then little more than mud and ambition"
+          - "with borrowed money and a great deal of nerve"
+          - "in the shadow of the harbor"
+          - "on ground still remembered as farmland"
+          - "against the advice of everyone who knew better"
+          - "with nothing but a lease and good timing"
+          - "after years of saving every spare cent"
+          - "on the strength of a single good idea"
+          - "in a building nobody else wanted"
+          - "with a partner who didn't last the year"
+          - "using money that wasn't entirely their own"
+          - "on a street that hadn't yet found its name"
+          - "with more hope than capital"
+          - "in the space where a failed venture had stood before"
+
+    - id: expansion
+      requires_place: new
+      effects: expansion
+      precondition: has_founded_a_place
+      grammar:
+        TEXT:
+          - "Flush with earlier success, {figure} opened a second {place_noun}, {place}, in {year}."
+          - "By {year}, {figure}'s ambitions had outgrown one address; {place}, a new {place_noun}, followed."
+          - "{figure} couldn't resist opening a second location, {place}, in {year}."
+          - "In {year}, {figure} bet on a second {place_noun}: {place}."
+          - "One {place_noun} wasn't enough for {figure}, who opened {place} in {year}."
+          - "{figure} expanded into {place}, a new {place_noun}, by {year}."
+          - "Success bred more success in {year}, when {figure} opened {place}."
+          - "{figure} doubled down in {year}, adding {place} to what they already had."
+          - "By {year}, {figure} had a second {place_noun} to their name: {place}."
+          - "{place} was {figure}'s attempt to repeat what had already worked, opened in {year}."
+          - "{figure} took the profits from one venture and sank them into {place} in {year}."
+          - "In {year}, {figure} answered demand the only way they knew how -- with {place}, a second {place_noun}."
+
+    - id: place_destroyed
+      requires_place: existing
+      place_filter: active_place
+      effects: place_destroyed
+      grammar:
+        TEXT:
+          - "In {year}, {place} was lost to {disaster}; some blamed {cause}."
+          - "{place} was consumed by {disaster} in {year}, leaving little of what {figure} had built there."
+          - "{place} did not survive {year}'s {disaster}."
+          - "{figure} watched {place} go down to {disaster} in {year}, and blamed {cause}."
+          - "By {year}, {disaster} had taken {place}, the {place_noun} {figure} had built."
+          - "{place} was gone by {year}, undone by {disaster}."
+          - "In {year}, {disaster} left nothing standing of {place}."
+          - "The {place_noun} called {place} met its end in {year}'s {disaster}."
+          - "{figure}'s {place_noun}, {place}, fell to {disaster} in {year} -- some pointed to {cause}."
+          - "{place} was reduced to nothing by {disaster} in {year}."
+          - "After {disaster} struck in {year}, {place} never reopened."
+          - "{year} was the year {disaster} finally caught up with {place}."
+
+    - id: rebuilt_place
+      requires_place: existing
+      place_filter: destroyed_place
+      effects: rebuilt_place
+      grammar:
+        TEXT:
+          - "{figure} rebuilt {place} in {year}, raising it again as a {place_noun}."
+          - "Where ashes had stood, {figure} raised {place} anew in {year}."
+          - "{place} rose again in {year}, thanks to {figure}."
+          - "{figure} refused to let {place} stay closed, and rebuilt it by {year}."
+          - "By {year}, {figure} had restored {place} to something like its old self."
+          - "{place} reopened in {year}, rebuilt from the ground up by {figure}."
+          - "{figure} put everything into rebuilding {place}, finishing in {year}."
+          - "In {year}, {place} returned, the {place_noun} {figure} wouldn't abandon."
+          - "{figure} would not let {place} die, and reopened its doors in {year}."
+          - "The {place_noun} known as {place} came back in {year}, rebuilt board by board."
+          - "{place} was reborn in {year} under {figure}'s hand."
+          - "{figure} rebuilt {place} from nothing in {year}, out of stubbornness as much as anything."
+
+    - id: ownership_change
+      requires_place: existing
+      place_filter: active_place
+      effects: ownership_change
+      grammar:
+        TEXT:
+          - "{place}, the old {place_noun}, changed hands in {year} when {figure} took it over."
+          - "In {year}, {figure} bought out the previous proprietor of {place}, citing {cause}."
+          - "{figure} took over {place} in {year}, over {cause}."
+          - "By {year}, {place} belonged to {figure}."
+          - "{place} passed to {figure} in {year}, the latest in a line of owners."
+          - "{figure} won control of {place} in {year}, a story involving {cause}."
+          - "The {place_noun} called {place} had a new owner by {year}: {figure}."
+          - "{figure} signed the papers on {place} in {year}, citing {cause}."
+          - "In {year}, {place} quietly changed hands, ending up with {figure}."
+          - "{figure} acquired {place} in {year}, though the details involved {cause}."
+          - "{place} became {figure}'s in {year}, for reasons tied to {cause}."
+          - "By {year}, {figure} had maneuvered their way into owning {place}."
+
+    - id: renamed
+      requires_place: existing
+      place_filter: active_place
+      effects: renamed
+      grammar:
+        TEXT:
+          - "{figure} renamed the old {place_noun} -- once known as {old_name} -- to {place} in {year}."
+          - "In {year}, {figure} gave the {place_noun} a new name: {place}, replacing {old_name}."
+          - "{old_name} became {place} in {year}, at {figure}'s insistence."
+          - "{figure} decided {old_name} no longer suited the place, and renamed it {place} in {year}."
+          - "By {year}, the sign over the door read {place}, not {old_name}, thanks to {figure}."
+          - "{figure} rechristened {old_name} as {place} in {year}."
+          - "The {place_noun} once called {old_name} became {place} under {figure} in {year}."
+          - "{year} saw {old_name} disappear, replaced by {figure}'s choice: {place}."
+          - "{figure} had little patience for {old_name}, and renamed it {place} in {year}."
+          - "In {year}, {place} was born from what had been {old_name}, at {figure}'s hand."
+          - "{figure} painted over {old_name} in {year}, and {place} took its place."
+
+    - id: alliance_formed
+      requires_place: null
+      effects: alliance_formed
+      grammar:
+        TEXT:
+          - "By {year}, {figure} had made fast friends with {faction}, a bond that would shape years to come."
+          - "{figure} threw in with {faction} in {year}, for {domain}'s sake if nothing else."
+          - "In {year}, {figure} and {faction} found common cause."
+          - "{figure} allied with {faction} in {year}, a partnership neither would forget."
+          - "By {year}, {figure} could count {faction} among their friends."
+          - "{figure} struck a bargain with {faction} in {year} that would outlast the decade."
+          - "{year} marked the start of an understanding between {figure} and {faction}."
+          - "{figure} and {faction} became unlikely allies in {year}."
+          - "In {year}, {figure} found a useful friend in {faction}."
+          - "{figure} owed {faction} a favor after {year}, and both knew it."
+          - "By {year}, {figure}'s fortunes were tied to {faction}'s goodwill."
+          - "{figure} cast their lot with {faction} in {year}."
+
+    - id: rivalry_formed
+      requires_place: null
+      effects: rivalry_formed
+      grammar:
+        TEXT:
+          - "In {year}, {figure} earned the lasting enmity of {faction}."
+          - "{figure} and {faction} became bitter rivals in {year}, over {domain} as much as anything else."
+          - "By {year}, {figure} and {faction} were openly at odds."
+          - "{figure} made an enemy of {faction} in {year}."
+          - "{year} marked the start of a feud between {figure} and {faction}."
+          - "{figure} crossed {faction} in {year}, and paid for it for years after."
+          - "In {year}, {faction} decided {figure} was a problem worth solving."
+          - "{figure} never forgave {faction} for what happened in {year}."
+          - "By {year}, {figure} counted {faction} among their enemies."
+          - "{figure} and {faction} traded grudges starting in {year}."
+          - "{year} was when {figure} first crossed swords with {faction}."
+          - "{figure} drew the lasting suspicion of {faction} in {year}."
+
+    - id: scandal
+      requires_place: null
+      effects: scandal
+      grammar:
+        TEXT:
+          - "Rumors of {tag} dogged {figure} from {year} onward, whispered to be over {cause}."
+          - "In {year}, whispers of {tag} began following {figure} everywhere."
+          - "{figure}'s name became attached to {tag} in {year}, fairly or not."
+          - "By {year}, half the ward was talking about {figure} and {tag}."
+          - "{year} brought {figure} a reputation for {tag} that never quite faded."
+          - "Talk of {tag} trailed {figure} from {year} on, tied to {cause}."
+          - "{figure} could not shake the talk of {tag} that started in {year}."
+          - "In {year}, {figure} became a byword for {tag} in certain circles."
+          - "The rumors started in {year}: {figure}, and {tag}."
+          - "{figure}'s reputation never recovered after {year}'s talk of {tag}."
+          - "By {year}, {tag} had become the word most often used alongside {figure}'s name."
+
+    - id: political_trouble
+      requires_place: null
+      effects: political_trouble
+      grammar:
+        TEXT:
+          - "{figure} was hauled before the magistrates in {year} over {cause}, and it ended in {outcome}."
+          - "In {year}, {figure} found themselves answering questions about {cause}, which led to {outcome}."
+          - "{figure} ran afoul of the law in {year} over {cause}; {outcome} followed."
+          - "By {year}, {figure}'s troubles over {cause} had become public, ending in {outcome}."
+          - "{year} brought {figure} face to face with the authorities over {cause}, and {outcome}."
+          - "{figure} was called to account in {year} for {cause}, settled with {outcome}."
+          - "Questions were asked in {year} about {figure} and {cause}; the answer was {outcome}."
+          - "{figure} spent {year} explaining {cause} to people who didn't want excuses, and got {outcome}."
+          - "In {year}, {cause} caught up with {figure}, resulting in {outcome}."
+          - "{figure}'s dealings with {cause} came to a head in {year}: {outcome}."
+          - "By {year}, {figure} had traded {cause} for {outcome}, one way or another."
+
+    - id: philanthropy
+      requires_place: existing
+      place_filter: active_place
+      effects: philanthropy
+      grammar:
+        TEXT:
+          - "{figure} funded repairs to {place} in {year}, out of devotion to {domain} -- or so it was said."
+          - "In {year}, {figure} quietly paid for repairs at {place}."
+          - "{figure} gave generously to {place} in {year}, and made sure people knew it."
+          - "By {year}, {figure} had become the {place_noun}'s most reliable benefactor."
+          - "{figure} funded a new wing at {place} in {year}."
+          - "{year} saw {figure} pour money into {place}, calling it a debt to {domain}."
+          - "{figure} covered the costs at {place} in {year} without being asked twice."
+          - "In {year}, {place} owed its survival to {figure}'s generosity."
+          - "{figure} endowed {place} in {year}, in the name of {domain}."
+          - "By {year}, {figure}'s name was etched somewhere in {place}, in gratitude."
+          - "{figure} quietly kept {place} solvent through {year}, and never spoke of it."
+
+    - id: feud_violence
+      requires_place: existing
+      place_filter: active_place
+      effects: feud_violence
+      grammar:
+        TEXT:
+          - "Blood was spilled at {place} in {year} over {cause}."
+          - "A brawl broke out at {place} in {year}, said to be about {cause}."
+          - "{place} saw violence in {year}, the cause traced back to {cause}."
+          - "In {year}, a dispute over {cause} turned bloody at {place}."
+          - "{figure} was caught up in violence at {place} in {year}, over {cause}."
+          - "{year} brought a beating at {place}, the reason given as {cause}."
+          - "Knives came out at {place} in {year}, over {cause}."
+          - "{place} earned a reputation for trouble after {year}'s violence, tied to {cause}."
+          - "A fight at {place} in {year} left more than bruises, all over {cause}."
+          - "In {year}, {cause} led to blows at {place}."
+          - "{figure} settled {cause} with fists at {place} in {year}."
+          - "{place} was the scene of an ugly dispute in {year}, over {cause}."
+        TEXT_DEATH:
+          - "{figure} was killed in a brawl at {place} in {year} over {cause} -- the {place_noun} was never quite the same."
+          - "{figure} did not walk away from the fight at {place} in {year} -- {cause} saw to that."
+          - "In {year}, {figure} was struck down at {place} over {cause}."
+          - "{place} was where {figure}'s life ended, in {year}, over {cause}."
+          - "{figure} paid with their life at {place} in {year}, all over {cause}."
+          - "The brawl at {place} in {year} left {figure} dead, the cause traced to {cause}."
+          - "{figure} bled out at {place} in {year}, a dispute over {cause} gone too far."
+          - "{year} was the year {place} claimed {figure}'s life, over {cause}."
+          - "{figure} never left {place} alive after {year}'s violence over {cause}."
+          - "What started as {cause} ended with {figure} dead at {place} in {year}."
+          - "{figure} was buried not long after the trouble at {place} in {year}, over {cause}."
+
+    - id: visited_by_notable
+      requires_place: existing
+      place_filter: active_place_not_own
+      effects: visited_by_notable
+      grammar:
+        TEXT:
+          - "{figure} was known to frequent {place} around {year}, and the old {place_noun} was never quite the same after."
+          - "In {year}, {figure} became a regular at {place}, and everyone noticed."
+          - "{place} gained a certain notoriety once {figure} started showing up, around {year}."
+          - "By {year}, {figure}'s visits to {place} were the talk of the neighborhood."
+          - "{figure} was seen at {place} often enough by {year} that people took note."
+          - "{place} became fashionable in {year}, once {figure} was seen there."
+          - "{year} brought {figure} through the doors of {place} more than once."
+          - "{figure} made a habit of {place} around {year}, for reasons of their own."
+          - "The {place_noun} called {place} saw an unusual visitor in {figure}, starting around {year}."
+          - "In {year}, {figure}'s presence at {place} raised more than a few eyebrows."
+          - "{place} was never quite an ordinary {place_noun} again after {figure} started coming around in {year}."
+
+    - id: prospered
+      requires_place: existing
+      place_filter: active_place
+      effects: prospered
+      grammar:
+        TEXT:
+          - "{place} prospered under {figure}'s hand, and by {year} its name was known across the city."
+          - "By {year}, {place} was thriving under {figure}'s watch."
+          - "{figure} turned {place} into a genuine success by {year}."
+          - "In {year}, {place} was doing better than anyone expected."
+          - "{place} became the envy of the neighborhood by {year}, thanks to {figure}."
+          - "By {year}, {figure}'s {place_noun} was the talk of the ward, for once in a good way."
+          - "{place} flourished through {year}, and {figure} took the credit gladly."
+          - "{figure} built {place} into something people traveled for, by {year}."
+          - "In {year}, {place} was as busy as it had ever been."
+          - "{place}'s fortunes turned upward by {year}, and stayed there for a while."
+          - "By {year}, {figure} had made {place} a name worth knowing."
+
+    - id: decline
+      requires_place: existing
+      place_filter: active_place
+      effects: decline
+      grammar:
+        TEXT:
+          - "By {year}, {place} had fallen on hard times, a decline some blamed on {cause}."
+          - "{place} was fading fast by {year}, and {cause} took the blame."
+          - "In {year}, {place} was a shadow of what it had been, over {cause}."
+          - "By {year}, fewer and fewer came to {place}, a decline tied to {cause}."
+          - "{place} struggled through {year}, weighed down by {cause}."
+          - "{year} was not kind to {place}, thanks to {cause}."
+          - "{figure}'s {place_noun} slid into decline by {year}, over {cause}."
+          - "By {year}, {place} was barely holding on, and {cause} was why."
+          - "{place} had seen better days by {year}, all because of {cause}."
+          - "In {year}, {place}'s best years were clearly behind it, thanks to {cause}."
+          - "{place} limped through {year}, undone slowly by {cause}."
+
+  death_template:
+    id: death
+    grammar:
+      TEXT:
+        - "{figure} died in {year}, remembered -- if at all -- for their ties to {domain}."
+        - "By {year}, {figure} was gone, and whatever they had built was left to others to keep or lose."
+        - "{figure} passed in {year}, one more name folded into the city's history."
+        - "By {year}, {figure} was gone, though {domain} outlasted them."
+        - "{figure} died in {year}, having spent a life tangled up in {domain}."
+        - "In {year}, {figure}'s story ended, quietly or otherwise."
+        - "{figure} did not live to see {year} out."
+        - "By {year}, {figure} had gone the way of everyone eventually does."
+        - "{figure}'s death in {year} closed a chapter few had been paying attention to."
+        - "{figure} was buried in {year}, remembered mostly for {domain}."
+        - "The city carried on without {figure} after {year}."
+        - "{figure} left this world in {year}, as tied to {domain} at the end as at the start."
+  causes:
+    rival: the persecution of {who}
+    ally: a debt owed to {who}
+
+# ============================================================================
+# ARCHITECTURE
+# Building styles per era and the kind of structure each place type is.
+# ============================================================================
+architecture:
+  # Real architectural styles/materials/features per era, used to ground
+  # both the offline grammar fallback and the LLM prompt in architecture.py's
+  # describe() -- crossed with place_scale below (what kind of building this
+  # place_type actually is) so a description is never just "an era-styled
+  # building" but "a cramped tenement" vs. "an imposing counting house" built
+  # in that era's real style.
+  eras:
+    dutch_colonial:
+      style: "Dutch Colonial"
+      materials:
+        - "red brick laid in cross-bond"
+        - "rough-hewn fieldstone"
+        - "heavy timber framing"
+        - "hand-split cedar shingles"
+      features:
+        - "a stepped gable facing the street"
+        - "small leaded-glass windows"
+        - "a steep jerkinhead roof"
+        - "a low stone stoop worn smooth"
+        - "shutters banded in hand-forged iron"
+      adjectives: ["squat", "narrow-fronted", "steep-roofed", "sturdy"]
+
+    english_colonial:
+      style: "Georgian"
+      materials:
+        - "brick laid in Flemish bond"
+        - "white-painted clapboard"
+        - "dressed stone lintels"
+        - "hand-planed wood paneling"
+      features:
+        - "a symmetrical facade of tall sash windows"
+        - "a fanlight over the door"
+        - "a hipped roof with dormers"
+        - "paneled shutters"
+        - "a modillioned cornice"
+      adjectives: ["formal", "symmetrical", "boxy", "dignified"]
+
+    early_republic:
+      style: "Federal"
+      materials:
+        - "red brick with white marble trim"
+        - "polished marble stoops"
+        - "wrought iron railings"
+        - "Flemish-bond brick"
+      features:
+        - "a fanlight and sidelights framing the door"
+        - "tall narrow windows with six-over-six panes"
+        - "a low-pitched roof hidden behind a parapet"
+        - "delicate iron balconies"
+        - "a plain, restrained doorway"
+      adjectives: ["restrained", "elegant", "austere", "upright"]
+
+    antebellum:
+      style: "Greek Revival"
+      materials:
+        - "brownstone"
+        - "cast iron"
+        - "brick with stone quoins"
+        - "painted stucco"
+      features:
+        - "a pedimented doorway framed by columns"
+        - "tall parlor-floor windows"
+        - "a heavy projecting cornice"
+        - "an iron areaway fence"
+        - "a raised stone stoop"
+      adjectives: ["imposing", "temple-fronted", "heavy", "severe"]
+
+    gilded_age:
+      style: "Romanesque Revival / Beaux-Arts"
+      materials:
+        - "rusticated brownstone"
+        - "cast iron storefront columns"
+        - "carved limestone"
+        - "glazed terracotta ornament"
+      features:
+        - "an ornate cornice crowded with carved detail"
+        - "round-arched windows"
+        - "a steep mansard roof"
+        - "elaborate wrought-iron grillwork"
+        - "a heavy stone porte-cochere"
+      adjectives: ["ornate", "monumental", "opulent", "soot-blackened"]
+
+    progressive:
+      style: "early steel-frame / Beaux-Arts commercial"
+      materials:
+        - "glazed white terracotta"
+        - "exposed structural steel"
+        - "pressed brick"
+        - "plate glass"
+      features:
+        - "a fire escape zigzagging up the facade"
+        - "a narrow dumbbell air shaft"
+        - "large plate-glass storefront windows"
+        - "a cornice of stamped tin"
+        - "a wooden water tower on the roof"
+      adjectives: ["crowded", "utilitarian", "soot-stained", "teeming"]
+
+    prohibition:
+      style: "Art Deco"
+      materials:
+        - "polished black granite"
+        - "chrome and glass"
+        - "dark enameled panels"
+        - "glazed terracotta"
+      features:
+        - "a stepped, setback silhouette"
+        - "geometric zigzag ornament over the door"
+        - "a discreet, unmarked entrance"
+        - "neon lettering in the window"
+        - "a blacked-out basement doorway"
+      adjectives: ["sleek", "angular", "shadowy", "understated"]
+
+    depression_war:
+      style: "Streamline Moderne / postwar utilitarian"
+      materials:
+        - "poured concrete"
+        - "glass block"
+        - "painted cinderblock"
+        - "aluminum trim"
+      features:
+        - "rounded corners and horizontal banding"
+        - "a wall of glass-block windows"
+        - "a plain flat roof"
+        - "a hand-lettered sign over the door"
+        - "blackout curtains still hanging in the windows"
+      adjectives: ["spare", "functional", "weathered", "unassuming"]
+
+  # place_type -> what scale/kind of structure it actually is, independent
+  # of era -- this is the other half of the cross product, so a counting
+  # house and a tenement built in the same year still read as different
+  # buildings, not just the same box in different paint.
+  place_scale:
+    Tavern/Bar: "a modest storefront tavern"
+    Inn: "a low roadside inn with a stable yard"
+    Coffee House: "a crowded two-room coffee house"
+    Speakeasy: "an unmarked storefront"
+    Cocktail Lounge: "a dim, narrow cocktail lounge"
+    Brewery: "a squat brick brewery with a malting floor"
+    Restaurant: "a modest storefront restaurant"
+    Diner/Automat: "a bright, narrow lunchroom"
+    Hotel/Boarding House: "a many-windowed lodging house"
+    Trading Post: "a stockaded trading post"
+    General Store/Shop: "a narrow storefront shop"
+    Grocery/Corner Store: "a cramped corner grocery"
+    Supermarket: "a wide, low self-service market"
+    Market: "an open-fronted market stall"
+    Department Store: "a many-storied emporium"
+    Pawnshop: "a barred-window pawnshop"
+    Garage/Filling Station: "a corner garage with a fuel pump out front"
+    Craftsman's Workshop: "a small working craftsman's shop"
+    Factory/Mill: "a sprawling industrial mill"
+    Shipyard/Dock/Warehouse: "a sprawling waterfront warehouse"
+    Bank/Counting House: "an imposing counting house"
+    Union Hall: "a plain meeting hall above a storefront"
+    Newspaper/Print Shop: "a working print shop"
+    Radio Station: "a studio building crowned with a transmitter mast"
+    Theater/Hall: "a grand public hall"
+    Dance Hall: "a long upstairs dance hall"
+    Nickelodeon: "a converted storefront picture house"
+    Movie Palace: "an ornate movie palace"
+    Nightclub/Jazz Club: "a basement nightclub"
+    Pool Hall: "a long, smoky pool hall"
+    Policy Shop/Gambling Den: "a back room behind a cigar store"
+    Brownstone/Townhouse: "a narrow row house"
+    Tenement/Residence: "a cramped multi-family tenement"
+    Apartment House: "a tall elevator apartment house"
+    Housing Project: "a cluster of plain brick towers"
+    Church/House of Worship: "an imposing house of worship"
+    School: "a plain schoolhouse"
+    Park/Public Square: "an open public square"
+    Government/Civic Building: "a monumental civic building"
+    Fort/Garrison: "a walled earthwork fort"
+    Hospital: "a long institutional hospital"
+    Social/Fraternal Club: "a private clubhouse"
+  landscape_place_types:
+  - Park/Public Square
+
+# ============================================================================
+# RESIDENTS
+# Templates for present-day residents generated without the LLM.
+# ============================================================================
+characters:
+  # Fallback (no-LLM) personal life-history sentences -- see characters.py's
+  # _fallback_life_history(). Three phase pools spanning a resident's own
+  # lifetime (birth -> present), each a complete sentence with
+  # {name}/{place}/{domain} slots, one line drawn from each phase in order
+  # so even the offline fallback reads as a real (if brief) life arc rather
+  # than three unrelated facts.
+  life_event_templates:
+    early:
+      - "{name} was born into a family that never had much money, but never went without."
+      - "{name} grew up in a cramped tenement full of noise and cousins."
+      - "{name} showed an early stubborn streak that never really went away."
+      - "{name} lost a parent young, and grew up faster for it."
+      - "{name} was, by all accounts, an unremarkable child, right up until they weren't."
+    arrival:
+      - "{name} first came to {place} looking for work, and never really left."
+      - "{name} took up with {place} almost by accident, and stayed out of habit."
+      - "{name} arrived in the neighborhood with little more than a suitcase and an address."
+      - "{name} found steady footing at {place} after a string of jobs that didn't stick."
+      - "{name} settled into the rhythm of life at {place}, for better or worse."
+    recent:
+      - "{name} has become a fixture around {place}, whether anyone asked for that or not."
+      - "{name} earned a quiet reputation locally, tied up with {domain} more than anything."
+      - "{name} still can't say exactly how the years added up so fast."
+      - "{name} keeps mostly to old routines these days, and doesn't apologize for it."
+      - "{name} has seen enough of the neighborhood change to have opinions about all of it."
+
+  # Free-prose hints handed to the LLM (loose instructions, not filled-in
+  # sentences) describing a resident's relationship to their grounding place.
+  relationship_hints:
+    active:
+      - "a descendant of the founder, who still runs the place today"
+      - "the current owner, unrelated by blood but a little obsessed with its history"
+      - "a longtime employee who knows every story the walls could tell"
+      - "a regular who has practically lived there for decades"
+      - "a former rival owner who bought in rather than lose out entirely"
+      - "the bartender who's poured drinks there since before most of the regulars were born"
+      - "a silent partner who never wanted their name on the sign"
+      - "the founder's estranged relative, back in town and trying to make peace with the place"
+      - "someone who won a stake in the place in a card game and never left"
+      - "the cook who's been in the kitchen so long the recipes are unofficially theirs"
+      - "a former employee who bought out the owner when they retired"
+      - "the neighborhood fixture who treats the place like a second home"
+      - "a distant cousin of the founder who showed up one day and simply stayed"
+      - "the one who remembers every regular's order and most of their secrets"
+    gone:
+      - "a descendant of the founder, who never quite got over losing it"
+      - "someone who grew up on family stories about the place, told long after it was gone"
+      - "a local historian fixated on what the place used to be"
+      - "an old-timer who still tells stories about it to anyone who'll listen"
+      - "the last employee to lock up before it closed for good"
+      - "someone who still walks past the empty lot out of habit"
+      - "a former regular who never found anywhere quite like it again"
+      - "the founder's grandchild, raised on stories of a place they never saw standing"
+      - "someone who keeps a photograph of it on their wall"
+      - "the one who tried and failed to save it from closing"
+      - "a former rival who somehow misses it more than anyone expected"
+      - "someone who still refers to the block by its old name"
+      - "the last person to hold a key to a door that no longer exists"
+      - "someone who blames themselves, fairly or not, for what happened to it"
+
+  # Fallback (no-LLM) bio sentences -- separate pools per (place still
+  # standing vs. gone) x (a founder exists to reference or not), each a
+  # complete sentence with {name}/{place}/{founder} slots, unlike the free
+  # prose hints above which only need to work as loose LLM instructions. Kept
+  # as four separate pools (rather than one generic template) so a "no blood
+  # relation" hint can never get a contradictory "descended from" clause
+  # spliced into it, and {place} never dangles awkwardly at a sentence's end.
+  bio_templates:
+    active_with_founder:
+      - "{name}, descended from {founder}, still runs {place} to this day."
+      - >-
+        {name} owns {place} now -- no blood relation to {founder}, the
+        original founder, but you would never know it from how they talk
+        about the place.
+      - "{name} took over from {founder} years ago and has run {place} exactly the same way ever since."
+      - "{name} never met {founder}, but keeps their photograph behind the counter at {place} all the same."
+      - "{name} married into the family that founded {place}, and stayed long after {founder} was gone."
+      - "{name} was handed the keys to {place} by {founder} personally, with a single word of advice."
+      - "{name} bought {place} from {founder}'s estate and refuses to change a single fixture."
+      - "{name} apprenticed under {founder} at {place} and never left."
+      - "{name} is {founder}'s great-nephew, and the only one in the family who still wanted {place}."
+      - "{name} inherited {place} from {founder} along with debts nobody mentioned until later."
+      - "{name} promised {founder} on their deathbed that {place} would never close, and it hasn't."
+      - "{name} was {founder}'s rival for years before ending up as the one who kept {place} alive."
+    active_no_founder:
+      - "{name} has worked at {place} so long that half the neighborhood assumes they own it."
+      - "{name} has been a regular at {place} for as long as anyone can remember."
+      - "{name} started sweeping the floors at {place} as a kid and simply never stopped coming back."
+      - "{name} moved to the neighborhood specifically to be closer to {place}."
+      - "{name} has a permanent seat at {place} that everyone knows better than to take."
+      - "{name} took over {place} sight unseen and has never regretted it."
+      - "{name} treats {place} like an office, a living room, and a confessional all at once."
+      - "{name} has kept {place} running through more hard years than they like to count."
+      - "{name} learned the trade at {place} and never saw a reason to work anywhere else."
+      - "{name} shows up at {place} so reliably that the staff set their clocks by it."
+      - "{name} talks about {place} the way other people talk about family."
+      - "{name} has quietly kept {place} afloat more than once, and never mentions it."
+    gone_with_founder:
+      - "{name}, descended from {founder}, never quite got over losing {place}."
+      - "{name} grew up on family stories about {place}, stories that always started with {founder}."
+      - "{name} was the last person {founder} trusted with the keys to {place}, for all the good it did."
+      - "{name} still has the ledger {founder} kept at {place}, and can't bring themselves to throw it out."
+      - "{name} watched {founder}'s life's work at {place} disappear and never quite forgave the city for it."
+      - "{name} was {founder}'s apprentice at {place} right up until there was nothing left to apprentice at."
+      - "{name} carries {founder}'s watch, the one thing salvaged from {place} before it closed."
+      - "{name} promised {founder} they'd reopen {place} one day, and still means it."
+      - "{name} was too young to know {founder}, but grew up hearing exactly what {place} meant to them."
+      - "{name} blames themselves for not being there the night {place} went under, the same way {founder} once was."
+      - "{name} kept {founder}'s old sign from {place} in a garage, waiting for a reason to hang it up again."
+      - "{name} is the last living relative of {founder} who still talks about {place} like it's coming back."
+    gone_no_founder:
+      - "{name} is the closest thing the neighborhood has to a historian of {place}."
+      - "{name} still tells stories about {place} to anyone who'll listen."
+      - "{name} can point to the exact spot where {place} used to stand."
+      - "{name} still has a matchbook from {place} tucked in a drawer somewhere."
+      - "{name} was there the night {place} closed for good and has never quite gotten over it."
+      - "{name} keeps a scrapbook of newspaper clippings about {place}, just in case anyone asks."
+      - "{name} can recite the entire layout of {place} from memory, decades on."
+      - "{name} still meets old friends near where {place} used to be, out of habit more than anything."
+      - "{name} was practically raised inside {place} before it disappeared."
+      - "{name} has never quite trusted whatever replaced {place} on that corner."
+      - "{name} can tell you exactly what {place} smelled like, if you ask."
+      - "{name} still marks the anniversary of the day {place} closed."
+
+  # Fallback (no-LLM) physical appearance + wardrobe sentences -- appended
+  # to the bio (see characters.py's _fallback_character()) so a resident
+  # always has SOME concrete visual description a costume/production
+  # designer (or a Treatment's storyboard prompt, see treatment.py's
+  # _cast_block) could actually use, not just personality/relationship
+  # facts. Deliberately gender-neutral (names.yaml's word lists aren't
+  # split by gender either, see _fallback_character's docstring) and noir-
+  # appropriate, one self-contained sentence with a {name} slot.
+  appearance_templates:
+    - "{name} has a weathered face and the kind of build that comes from years of honest work, and is rarely seen without a battered felt hat."
+    - "{name} dresses plainly but neatly -- a worn wool coat, always buttoned, no matter the weather."
+    - "{name} has sharp, watchful eyes and keeps their hair slicked back out of old habit."
+    - "{name} favors a single good suit, pressed within an inch of its life, over an otherwise threadbare wardrobe."
+    - "{name} has calloused hands and rolled-up sleeves that say more about a day's work than any words would."
+    - "{name} wears a long dark overcoat like armor, collar up, rain or shine."
+    - "{name} has a lean, wiry frame and the restless energy of someone who never quite sits still."
+    - "{name} keeps a cigarette perpetually at hand and a tie perpetually loosened."
+    - "{name} has soft, ink-stained fingers and wire-rimmed spectacles pushed low on the nose."
+    - "{name} carries themselves with an old-fashioned formality, right down to the polished shoes and the pocket watch."
+    - "{name} has a broad, sturdy build and sleeves that never quite stay rolled down."
+    - "{name} favors muted, practical colors -- greys and browns -- and a hat pulled low."
+
+# ============================================================================
+# CITY LIFE
+# CITY mode's background residents: jobs per place type, homes and haunts,
+# their one-line bios (history/grammar.py rules), routine activities, small
+# talk, and the words that make a memory or a direction matter to them.
+# ============================================================================
+city_life:
+  resident_name_groups:
+  - 20c
+  - 19c
+  work_roles:
+    Tavern/Bar:
+    - bartender
+    - barback
+    - cocktail waitress
+    - short-order cook
+    Inn:
+    - innkeeper
+    - chambermaid
+    Coffee House:
+    - counterman
+    - waitress
+    Speakeasy:
+    - doorman
+    - bartender
+    Cocktail Lounge:
+    - lounge pianist
+    - cocktail waitress
+    - bartender
+    - hat-check girl
+    Nightclub/Jazz Club:
+    - jazz trumpeter
+    - cigarette girl
+    - bouncer
+    - club singer
+    - drummer
+    Brewery:
+    - brewer
+    - delivery driver
+    - bottler
+    Restaurant:
+    - waiter
+    - line cook
+    - dishwasher
+    - maître d'
+    Diner/Automat:
+    - short-order cook
+    - waitress
+    - counterman
+    - busboy
+    Hotel/Boarding House:
+    - desk clerk
+    - bellhop
+    - chambermaid
+    - night porter
+    Grocery/Corner Store:
+    - grocer's clerk
+    - stock boy
+    - delivery boy
+    Supermarket:
+    - checkout girl
+    - butcher
+    - stock clerk
+    Market:
+    - fishmonger
+    - produce vendor
+    - butcher
+    Department Store:
+    - shopgirl
+    - floorwalker
+    - window dresser
+    - elevator operator
+    Pawnshop:
+    - pawnbroker's clerk
+    Garage/Filling Station:
+    - mechanic
+    - pump jockey
+    - tow-truck driver
+    Factory/Mill:
+    - machinist
+    - foreman
+    - loom operator
+    - shift worker
+    Shipyard/Dock/Warehouse:
+    - longshoreman
+    - crane operator
+    - night watchman
+    - dock clerk
+    - teamster
+    Bank/Counting House:
+    - bank teller
+    - loan officer
+    - security guard
+    Union Hall:
+    - union steward
+    - hall secretary
+    Newspaper/Print Shop:
+    - copy boy
+    - typesetter
+    - beat reporter
+    - press operator
+    Radio Station:
+    - radio announcer
+    - sound engineer
+    - switchboard operator
+    Theater/Hall:
+    - usher
+    - stagehand
+    - box-office clerk
+    - chorus girl
+    Dance Hall:
+    - taxi dancer
+    - bandleader
+    Movie Palace:
+    - projectionist
+    - usher
+    - candy-counter girl
+    Pool Hall:
+    - pool hustler
+    - rack boy
+    Policy Shop/Gambling Den:
+    - numbers runner
+    - bookie's clerk
+    - lookout
+    Church/House of Worship:
+    - sexton
+    - choir director
+    - parish secretary
+    School:
+    - schoolteacher
+    - janitor
+    - school nurse
+    Hospital:
+    - nurse
+    - orderly
+    - ambulance driver
+    - night-shift intern
+    Government/Civic Building:
+    - city clerk
+    - beat cop
+    - court stenographer
+    - building inspector
+    Social/Fraternal Club:
+    - club steward
+    - card dealer
+    Park/Public Square:
+    - parks attendant
+    - hot-dog vendor
+    - shoeshine boy
+    Apartment House:
+    - building superintendent
+    - doorman
+    Housing Project:
+    - housing caretaker
+  off_map_roles:
+  - cab driver
+  - subway motorman
+  - garment worker
+  - insurance salesman
+  - housewife
+  - retired longshoreman
+  - seamstress
+  - out-of-work boxer
+  - milkman
+  - typist
+  - door-to-door salesman
+  - widow living on a pension
+  - night-school student
+  - private-duty nurse
+  - pensioner
+  night_roles:
+  - bandleader
+  - barback
+  - bartender
+  - bouncer
+  - card dealer
+  - cigarette girl
+  - club singer
+  - cocktail waitress
+  - doorman
+  - drummer
+  - hat-check girl
+  - jazz trumpeter
+  - lookout
+  - lounge pianist
+  - night porter
+  - night watchman
+  - night-shift intern
+  - numbers runner
+  - projectionist
+  - taxi dancer
+  retired_roles:
+  - retiree
+  - pensioner
+  - widow living on a pension
+  retiree: retiree
+  residential_place_types:
+  - Apartment House
+  - Brownstone/Townhouse
+  - Hotel/Boarding House
+  - Housing Project
+  - Tenement/Residence
+  leisure_place_types:
+  - Church/House of Worship
+  - Cocktail Lounge
+  - Coffee House
+  - Dance Hall
+  - Department Store
+  - Diner/Automat
+  - Market
+  - Movie Palace
+  - Nightclub/Jazz Club
+  - Park/Public Square
+  - Policy Shop/Gambling Den
+  - Pool Hall
+  - Restaurant
+  - Social/Fraternal Club
+  - Speakeasy
+  - Tavern/Bar
+  - Theater/Hall
+  bio_grammar:
+    bio:
+    - '{name} is a {occupation} {where}, {trait}.'
+    - '{name} works as a {occupation} {where} and {habit}.'
+    - A {occupation} {where}, {name} {habit}.
+    - '{name}, {occupation} {where}, is {trait}.'
+    trait:
+    - known for never missing a day
+    - quiet and hard to read
+    - quick with a joke and slow to trust
+    - saving every spare dime for something nobody else knows about
+    - a little too curious about other people's business
+    - tired in a way sleep doesn't fix
+    - proud of a neighborhood that has seen better days
+    - careful to stay on the right side of the cops
+    - owed money by half the block
+    - still sending money home to family overseas
+    - the first to hear any rumor on the street
+    habit:
+    - reads the racing form on every break
+    - keeps a flask in a coat pocket
+    - hums old songs under their breath
+    - never sits with their back to the door
+    - feeds the pigeons on the way home
+    - plays the numbers every single day
+    - writes letters nobody answers
+    - knows every beat cop by first name
+    - counts their change twice
+    - walks the long way home to avoid someone
+  where_at_work: at {work}
+  where_off_map: across town
+  where_retired: in the neighborhood
+  schedule_activities:
+    working: working as a {occupation}
+    asleep: asleep
+    retired_breakfast: breakfast and the morning paper
+    retired_haunt: passing the time
+    retired_errands: running errands
+    retired_supper: an early supper and conversation
+    retired_night: the radio, then bed
+    night_breakfast: coffee and a late breakfast
+    night_errands: errands around town
+    night_haunt: killing time before the shift
+    day_getting_ready: getting ready for work
+    day_lunch: lunch
+    day_unwinding: unwinding after work
+    day_home: at home for the night
+  small_talk_topics:
+  - the weather
+  - the ball game
+  - a rumor about the precinct
+  - rent going up
+  - the numbers
+  - somebody's cousin
+  - the new place on the corner
+  - work
+  - an old debt
+  - the neighborhood
+  importance_keywords:
+  - police
+  - cop
+  - money
+  - gun
+  - dead
+  - death
+  - murder
+  - love
+  - fight
+  - debt
+  - fire
+  - arrest
+  - missing
+  - secret
+  - threat
+  - blood
+  - stolen
+  - raid
+  - fired
+  - wedding
+  everyone_words:
+  - everyone
+  - everybody
+  - the whole city
+  - all residents
+  - background
+  - the crowd
+  - all the residents
+  - citywide
+  - city-wide
+
+# ============================================================================
+# SCENE FALLBACK CAST
+# Who a SCENE run uses when no city has been generated yet.
+# ============================================================================
+fallback_cast:
+  Oswald:
+    age: 58
+    traits: seasoned bartender, patient, likeable, quiet, a good listener.
+    currently: cleaning glasses in the bar, getting ready for the evening
+    location: Ozzy's Bar
+  Lou:
+    age: 45
+    traits: down on his luck private eye detective, cynical, lonely, alcoholic
+    currently: nursing a hangover at Ozzy's Bar
+    location: Ozzy's Bar
+  Veronica:
+    age: 32
+    traits: sultry lounge singer, sharp-tongued, guarded, more dangerous than she lets on
+    currently: rehearsing her set for tonight's show at Ozzy's Bar
+    location: Ozzy's Bar
+  Marsh:
+    age: 50
+    traits: corrupt police detective, gruff, always working an angle, hides menace behind a friendly voice
+    currently: stopping by Ozzy's Bar to collect a favor
+    location: Ozzy's Bar
+  Sal:
+    age: 61
+    traits: aging mob boss, calm and courteous on the surface, ruthless underneath, expects respect
+    currently: holding court in his usual booth at Ozzy's Bar
+    location: Ozzy's Bar
+
+# ============================================================================
+# PROMPTS
+# Every prompt the app sends a language model, as templates.
+# ============================================================================
+prompts:
+  history:
+    figure_name: Give one plausible full person name (first and last) for a {role} living in New York City during
+      {era_name} (roughly {era_start}-{era_end}). Reply with ONLY the name, nothing else -- no titles, no explanation.
+    figure_name_no_era: Give one plausible full person name for a {role} in old New York City. Reply with ONLY the
+      name, nothing else -- no titles, no explanation.
+    place_name: Give one short, period-appropriate business/place name for a {place_type} in New York City around
+      {year}, founded by someone surnamed {surname}, thematically associated with "{domain}". Reply with ONLY the
+      name, nothing else.
+    event_flourish: |-
+      Rewrite the following sentence describing a historical event in old New York City so it reads as slightly more vivid, period-flavored prose. Keep every proper noun, name, date, and fact EXACTLY as given -- do not invent or remove any of them, and keep it to one sentence. Reply with ONLY the rewritten sentence.
+
+      Sentence: {text}
+    architecture: Describe, in exactly one vivid sentence, the architecture and physical appearance of a {place_noun}
+      in New York City, built during the "{era_name}" era ({era_start}-{era_end}). The dominant architectural style
+      of that era is {style}. Reference real, period-appropriate materials and details, sized appropriately for
+      a {place_noun} specifically -- not a mansion or a monument, unless that's genuinely what a {place_noun} would
+      be. Reply with ONLY the sentence, no preamble.
+    architecture_fallback_building: '{scale}, {adjective} and built of {material}, notable for {feature}.'
+    architecture_fallback_landscape: '{scale}, laid out in a {adjective} {style} taste, with {feature}.'
+    summary: |-
+      You are a local historian writing the opening passage of a chronicle of a single east coast instpired city, from its Dutch colonial founding through the late 1950s. Below is the complete chronological record of everything that happened there -- every founding, fire, feud, scandal, and death.
+
+      {record}
+
+      Write a short narrative summary (3-5 paragraphs) of this city's history: its overall arc across the eras, a few of its most vivid or consequential moments, and what ties it all together. Third person, engaging prose, as if opening a book about the city. Reply with ONLY the summary text -- no heading, no preamble.
+    summary_fallback: A history spanning {first_year}-{last_year}, encompassing {figures} notable figures and {places}
+      places across {events} recorded events.
+    character_place: 'Place: {place}, a {place_noun}, founded {founded}, thematically associated with "{domain}".
+      Current status: {status}.'
+    character_founder: 'Founded by: {founder}, a {founder_role}.'
+    character_anecdote: 'A recorded incident there: {anecdote}'
+    character_relationship: Write this character as {relationship}.
+    character_occupation: 'This character''s occupation must be: {occupation}.'
+    character_sex: This character is {sex}.
+    character_constraint_occupation: ', whose occupation is exactly "{occupation}"'
+    character_constraint_sex: ' and who is {sex}'
+    character_dossier: |-
+      You are writing a short character dossier for a resident of an alternate-history New York City, living around 1959, in a film noir style world. the character should feel like an archetype from those types of movies.Here is a real piece of that city's generated history:
+
+      {history_lines}
+
+      Invent ONE person deeply connected to this specific history{constraint}. Reply in exactly this format, nothing else:
+      NAME: <full name>
+      AGE: <integer between 20 and 75>
+      OCCUPATION: <short phrase>
+      QUIRK: <one distinctive habit or trait, a few words>
+      BIO: <4-6 sentences, third person, naturally weaving in the place name, its domain, and the historical detail above -- specific to this history, not generic. Within this, include a vivid PHYSICAL DESCRIPTION -- build, face, notable features -- and their WARDROBE, what they typically wear -- concrete visual details a costume and production designer could actually use, not just personality or backstory.>
+    life_history: |-
+      {name} is a {age}-year-old {occupation} in an alternate-history New York City in {present_year}, born around {birth_year}.
+
+      Their dossier: {bio}
+
+      Write {count} short chronological life events spanning {first_name}'s whole life, from around {birth_year} to {present_year} -- childhood, how they came to {place}, turning points, that sort of thing. Each a single sentence, third person, in the same vivid period prose style as the dossier above. Reply with ONLY the events, one per line, oldest first, in exactly this format:
+      <year>: <event sentence>
+    character_fallback_occupation_active: Keeper of {place}
+    character_fallback_occupation_gone: Historian of {place}
+    character_fallback_bio: '{relationship_sentence} {place} is the old {place_noun} steeped in {domain}. Ask {first_name}
+      about it and they will talk your ear off. {appearance}'
+    character_fallback_quirk: can't stop talking about {domain}
+  images:
+    portrait: Head-and-shoulders portrait photograph of {name}, a {age}-year-old {occupation} in New York City in
+      the late 1950s. {bio} Facing the camera, plain neutral backdrop, natural light, period-accurate hair and clothing,
+      realistic photograph, no text.
+    exterior: Exterior photograph of {name}, a {place_noun} in New York City, seen from the street as it stands
+      in the late 1950s. {architecture} Realistic street-level photograph, the whole building facade in frame, no
+      people blocking the view, no text or signage besides the establishment's own name.
+  scene:
+    identity: '{name} is a {age}-year-old. Personality: {traits}. Currently: {currently}. Right now, {name} is at
+      {location}.'
+    cast_constraint: 'The only other named people who exist in this simulation are: {names}. Do not invent or name
+      any other person. Refer to anyone else only in generic, unnamed terms (e.g. ''the bartender'', ''a passerby'').'
+    cast_constraint_empty: No other named people exist in this simulation yet. Do not invent or name anyone -- refer
+      to anyone else only in generic, unnamed terms (e.g. 'the bartender', 'a passerby').
+    directive: 'Direction for this scene (follow this where it''s relevant, without ignoring who the character actually
+      is): {directive}'
+    plan: |-
+      {identity}
+
+      {cast_constraint}
+      {directive_block}
+      What {name} remembers from before -- for context only, NOT a template to repeat:
+      {memories}
+
+      {name} typically starts the day around: {currently}.
+      Plan what {name} is trying to do over the next {horizon}{window}: their goals for that whole stretch and what they'll actually spend it on, sized to the stretch -- a week's plan is a week of intentions, not one day's errands. This is NOT the same stretch as any of the memories above -- move the story forward: pick up an unfinished thread, follow up on someone mentioned above, or react to a consequence of what already happened.
+
+      Give exactly {n_items} items in the order they'll happen, each covering roughly {per_item}. Each item is a short phrase. One item per line, no numbering, no times.
+    plan_window: ', from {now} until {until}'
+    plan_no_memories: (no memories yet)
+    now: It is currently {now}.
+    decompose: |-
+      {identity}
+
+      {cast_constraint}
+      {directive_block}
+      {now_line}{task}{where_block}
+    decompose_one: |-
+      {name}'s plan for this stretch: "{step}"
+
+      Describe what {name} actually does over this stretch ({span}) as ONE action -- a single short line, no numbering.
+    decompose_many: |-
+      {name}'s broad plan step: "{step}"
+
+      Break this into {n} smaller, sequential actions ({span} each). One action per line, no numbering.
+    where: |-
+      {name} is currently at "{location}". Where should {name} be for this whole step? Pick exactly one place from this list, or STAY to remain where {name} is: {places}
+      On its own final line, after the actions above, write:
+      WHERE: <one place name from the list, or STAY>
+    react: |-
+      {identity}
+
+      {cast_constraint}
+      {directive_block}
+      Relevant memories:
+      {memories}
+
+      {name}'s current planned action: {action}
+      New observation: {observation}
+
+      Should {name} keep doing the planned action, or react to the observation with something different? Reply with exactly one line in the form:
+      REACT: <new action description>
+      or:
+      CONTINUE
+    react_no_memories: (none yet)
+    conversation: |-
+      Two people are face to face at {place}.
+
+      SPEAKER: {a_name}
+      {a_identity}
+      {a_name} is currently: {a_doing}
+      What {a_name} remembers about {b_name} and related things:
+      {a_memories}
+
+      SPEAKER: {b_name}
+      {b_identity}
+      {b_name} is currently: {b_doing}
+      What {b_name} remembers about {a_name} and related things:
+      {b_memories}
+      {directive_block}
+      Write the conversation between them: at most {max_turns} lines, alternating, {a_name} speaking first. Each line is exactly "Name: what they say" -- one or two sentences of spoken words only, no stage directions or narration. They address each other only by these two names; anyone else mentioned comes from their memories. End early if the conversation reaches a natural close.
+    conversation_no_memories: (nothing yet)
+    importance: |-
+      On a scale of 1 to 10, where 1 is purely mundane (e.g., brushing teeth, making a bed) and 10 is extremely poignant (e.g., a breakup, a college acceptance), rate the likely poignancy of each of the following events or thoughts.
+
+      {items}
+
+      Reply with one line per item, exactly in the form "<item number>. <rating>" -- a single integer rating from 1 to 10 -- and nothing else.
+    focal_points: |-
+      Here are a number of recent statements about {name}:
+      {statements}
+
+      Given only this information, what are the {n} most salient high-level questions we can ask about the subjects in these statements? Reply with one question per line, no numbering.
+    focal_fallback: What matters most to {name} right now?
+    insights: |-
+      Statements about {name}:
+      {statements}
+
+      What {n} high-level insights can you infer from the above statements, in relation to: "{focal}"?
+      Reply with one insight per line, in exactly this format:
+      <insight> (because of 1, 3)
+      where the numbers in parentheses are the statement numbers it's based on.
+  treatment:
+    main: |-
+      You are a film treatment writer adapting a scene transcript into a short video vignette pitch, in a film noir style.
+
+      Cast available in this scene: {cast_names}. Only write about characters who actually appear in the transcript below; do not invent any other named characters.
+
+      {cast_block}{setting_block}{direction_block}Transcript:
+      {transcript}
+
+      Write the treatment in exactly this format, with no extra commentary before or after it:
+
+      CHARACTERS:
+      - <name> -- <one-line description of their role in this vignette>
+      (one line per character who actually appears)
+
+      SYNOPSIS:
+      <a tight paragraph, 4-8 sentences, describing what happens in this vignette, written as noir prose>
+
+      STORYBOARD:
+      1. <shot description> | Character: <physical description of whoever appears in this shot -- their build, face, and wardrobe, drawn from the cast appearance reference above, not invented -- or "none" for a shot with no one in frame> | Art direction: <set/production design notes> | Lighting: <lighting setup> | DOP: <camera angle, lens, and movement>
+      (exactly 6 numbered shots in this format, each a different beat of the story, all consistent with a {visual_look}. Each shot line is used on its own, standalone, to generate that shot's actual image later -- the Character field must repeat enough of their real appearance that the shot still reads correctly by itself, without needing the rest of this treatment for context.)
+
+      The direction should take into account the Japanese concept of MA, focusing on individual moments, the characters within them, and how those characters experience their environment.
+    empty_transcript: (nothing happened)
+    setting: |-
+      Setting: this entire scene takes place at {place_names}. Below is each place's REAL recorded appearance -- base every shot's art direction on this, not on what the name alone suggests, and do not invent or drift to any other location:
+      {places}
+    setting_place: '- {name}: {architecture}'
+    setting_place_unknown: '- {name} (no recorded architecture)'
+    cast: |-
+      Cast appearance reference -- use these real descriptions for how each character looks and what they wear, do not invent conflicting physical details:
+      {people}
+    cast_person: '- {name}: {bio}'
+    cast_person_unknown: '- {name} (no recorded description)'
+    direction: 'SCENE DIRECTION (what this scene was set up to be about -- let it shape the synopsis and shots,
+      consistent with the transcript): {directive}'
+  city:
+    prefix: |-
+      This is a simulation of a city: an alternate-history New York City in {present_year}, a film-noir world of rain-slick streets, smoke-filled bars, cops on the take and people keeping secrets. Everything happens in {present_year}: no anachronisms, nothing supernatural.
+      {history}Rules for every reply: only people named in the prompt exist -- never invent or name anyone else; refer to anyone else generically ('the bartender', 'a cop'). Answer in exactly the format asked for, with nothing before or after it.
+    prefix_history: 'The city''s history, briefly: {summary}'
+    hero_tier: You are writing for one of the story's main characters. Be specific, stay true to their personality
+      and memories, and keep each answer short.
+    background_tier: You are writing for a minor resident of the city. Keep it brief, plain and routine -- ordinary
+      life, not drama.
+    narrator_tier: 'You are the city''s observer: you read what the simulation recorded and explain it plainly and
+      accurately. Use only what the log shows -- never invent events, motives or people; say when the log doesn''t
+      tell you.'
+    background_identity: '{name}, {age}, {occupation}. {bio} Right now, {name} is at {location}.'
+    cast_line: 'People {name} might name here: {names}. Do not invent or name any other person; refer to anyone
+      else only generically.'
+    cast_line_empty: '{name} should not name anyone -- refer to other people only generically.'
+    plan: |-
+      {cast_line}
+      {directive_block}
+      What {name} remembers from before -- context only, not a template to repeat:
+      {memories}
+
+      {name} typically starts the day around: {currently}.
+      Plan what {name} is trying to do over the next {horizon}, from {now} until {until}: their goals for that stretch and what they'll actually spend it on, moving their story forward.
+      Give exactly {n_items} items in order, each covering about {per_item}; each a short phrase, no times. Reply as JSON: {"items": ["...", ...]}
+    plan_no_memories: (no memories yet)
+    decompose: |-
+      {cast_line}
+      {directive_block}
+      It is currently {now}. {name}'s plan for this stretch: "{step}"
+      Break it into {n} sequential actions, {span} each, one short line per action.{where}
+      Reply as JSON: {"actions": ["...", ...]{where_json}}
+    decompose_where: 'Also pick where {name} should be for this whole step: one of the listed places, or "STAY"
+      to remain at {location}. Places: {places}.'
+    react: |-
+      {cast_line}
+      {directive_block}
+      Relevant memories:
+      {memories}
+
+      {name}'s current planned action: {action}
+      New observation: {other} is nearby, currently: {other_doing}.
+
+      What does {name} do? Reply with exactly one line, one of:
+      TALK: <what {name} wants to talk to {other} about>
+      REACT: <a different action, without talking>
+      CONTINUE
+    react_no_memories: (none yet)
+    dialogue: |-
+      {cast_line}
+      {directive_block}
+      {name} and {listener} are face to face at {place}.
+      What {name} remembers about {listener} and related things:
+      {memories}
+
+      {opener}Conversation so far:
+      {transcript}
+
+      Write {name}'s next line: one or two sentences of spoken words only, no stage directions, addressing only {listener}. {end_hint}{last_turn}
+    dialogue_no_memories: (nothing in particular)
+    dialogue_nobody_yet: (nobody has spoken yet)
+    dialogue_opener: '{name} wants to talk about: {topic}'
+    dialogue_end_hint: If the conversation has reached its natural end, reply with just {end_marker}.
+    dialogue_last_turn: This is the last line (turn {turn} of {max_turns}).
+    importance: |-
+      On a scale of 1 to 10, where 1 is purely mundane (e.g., brushing teeth, making a bed) and 10 is extremely poignant (e.g., a breakup, a college acceptance), rate the likely poignancy of each of the following events or thoughts.
+
+      {items}
+
+      Reply as JSON: {"ratings": [one integer 1-10 per item, {count} in all, in order]}
+    focal_points: |-
+      Here are recent statements about {name}:
+      {statements}
+
+      Given only this information, what are the {n} most salient high-level questions we can ask about the subjects in these statements? Reply as JSON: {"questions": ["...", ...]}
+    insights: |-
+      Statements about {name}:
+      {statements}
+
+      What {n} high-level insights can you infer from the above statements, in relation to: "{focal}"? For each, list the statement numbers it is based on. Reply as JSON: {"insights": [{"text": "...", "because": [1, 3]}, ...]}
+    schedule: |-
+      {directive_block}
+      Write {name}'s schedule for {day}, midnight to midnight: 3 to 8 blocks in order, each with a 24-hour start and end time ("HH:MM"), a short activity, and a place from this list only: {places}. "home" is their own home; "elsewhere" is anywhere else in the city. They work at {work} and like to spend free time at {haunt}.
+      Reply as JSON: {"schedule": [{"start": "07:00", "end": "08:00", "activity": "...", "place": "..."}, ...]}
+    bio_upgrade: |-
+      {name} is a {age}-year-old {occupation} in this city in {present_year}. What little is known: {bio}
+      Their usual haunts: {work}, {haunt}. They are about to appear in a scene at {place}.
+      Write a 4-5 sentence character dossier, third person, consistent with the facts above: who they are, what they want, one secret or pressure in their life, and a concrete PHYSICAL DESCRIPTION and WARDROBE a costume designer could use. Then, on its own last line, 'QUIRK: <one distinctive habit, a few words>'.
+    report: |-
+      {header}
+
+      The run's log (oldest first; it may start mid-run):
+      {log}
+      {previous}
+      Write a short briefing on what is going on in the city, under these headings:
+      STORYLINES: the 2-5 main threads, each one or two sentences naming who is involved and where.
+      PLACES: where the crowds and the tension are.
+      PEOPLE TO WATCH: residents becoming important, and why.
+      {changes}Be concrete and brief; plain text, no markdown.
+    report_previous: |-
+      Your previous briefing, for comparison -- focus on what has changed since:
+      {briefing}
+    report_changes: 'CHANGES: what is new since the previous briefing.'
+    question: |-
+      {header}
+
+      What the run's log says that may be relevant (oldest first):
+      {log}
+
+      Question: {question}
+
+      Answer in a few sentences from the log alone, naming who said or did what, and when and where. If the log doesn't answer it, say so and say what it does show. Plain text.

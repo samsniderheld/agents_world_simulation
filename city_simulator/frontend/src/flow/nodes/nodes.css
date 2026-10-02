@@ -476,3 +476,64 @@
   width: auto;
   flex: none;
 }
+
+/* City Simulation node: the last tick's metrics. */
+.city-metrics {
+  margin-top: 6px;
+  padding: 6px 0 2px;
+  border-top: 1px solid var(--node-border);
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--node-text-dim);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.city-metrics-head {
+  display: flex;
+  justify-content: space-between;
+  color: var(--node-text);
+}
+.city-waves {
+  display: flex;
+  height: 6px;
+  gap: 1px;
+  border-radius: 2px;
+  overflow: hidden;
+  background: var(--node-border);
+}
+.city-wave { min-width: 2px; background: var(--text-faint); }
+.city-wave-plan { background: var(--port-entity); }
+.city-wave-decompose { background: var(--accent); }
+.city-wave-react { background: var(--node-running); }
+.city-wave-dialogue { background: var(--port-narrative); }
+.city-wave-memory { background: var(--port-media); }
+.city-wave-reflect { background: var(--port-style); }
+.city-metrics-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px 8px;
+}
+.city-metrics-bad { color: var(--node-error); }
+
+/* City Simulation node: the city report / ask-the-city answers. */
+.city-insight {
+  margin: 4px 0 6px;
+  padding: 6px 8px;
+  max-height: 260px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  font-family: var(--sans);
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--node-text);
+  background: var(--node-border);
+  border-radius: var(--node-radius);
+}
+.city-insight-meta {
+  margin-top: 6px;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--node-text-dim);
+}

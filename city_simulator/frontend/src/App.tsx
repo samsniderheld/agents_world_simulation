@@ -4,6 +4,7 @@ import { CityCanvas } from './flow/CityCanvas';
 import { AgentScreen } from './routes/AgentScreen';
 import { CitiesScreen } from './routes/CitiesScreen';
 import { GalleryScreen } from './routes/GalleryScreen';
+import { ResidentScreen } from './routes/ResidentScreen';
 import { PlaceScreen } from './routes/PlaceScreen';
 import { ScratchScreen } from './routes/ScratchScreen';
 import { StoryboardScreen } from './routes/StoryboardScreen';
@@ -33,6 +34,10 @@ function breadcrumbFor(scope: Scope): { label: string; scope: Scope }[] {
     }
     case 'gallery':
       return [root, { label: scope.cityId, scope: { kind: 'city', cityId: scope.cityId } }, { label: 'GALLERY', scope }];
+    case 'resident': {
+      const originCrumbs = breadcrumbFor(scope.from ?? { kind: 'gallery', cityId: scope.cityId });
+      return [...originCrumbs, { label: scope.residentId, scope }];
+    }
     case 'scratch': {
       const originCrumbs = scope.from ? breadcrumbFor(scope.from) : [root];
       return [...originCrumbs, { label: `SCRATCH · ${scope.boardId}`, scope }];
@@ -54,6 +59,7 @@ function cityIdFor(scope: Scope): string | undefined {
     case 'agent':
     case 'place':
     case 'gallery':
+    case 'resident':
       return scope.cityId;
     default:
       return undefined;
@@ -147,6 +153,7 @@ function App() {
         {scope.kind === 'agent' && <AgentScreen cityId={scope.cityId} characterId={scope.agentId} />}
         {scope.kind === 'place' && <PlaceScreen cityId={scope.cityId} placeId={scope.placeId} />}
         {scope.kind === 'gallery' && <GalleryScreen cityId={scope.cityId} />}
+        {scope.kind === 'resident' && <ResidentScreen cityId={scope.cityId} residentId={scope.residentId} />}
         {scope.kind === 'scratch' && <ScratchScreen boardId={scope.boardId} from={scope.from} />}
         {scope.kind === 'storyboard' && <StoryboardScreen storyboardId={scope.storyboardId} from={scope.from} />}
       </main>

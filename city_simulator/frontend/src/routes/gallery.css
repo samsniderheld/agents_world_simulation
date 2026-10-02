@@ -116,3 +116,107 @@
   border-color: var(--node-running);
   color: var(--node-running);
 }
+
+/* Background residents: compact text cards, search and paging. */
+.gallery-search,
+.gallery-sort {
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--node-border);
+  border-radius: var(--node-radius);
+  padding: 5px 8px;
+  font: inherit;
+  font-size: 12px;
+}
+.gallery-search {
+  min-width: 220px;
+}
+.gallery-resident .node-run-btn {
+  flex: none;
+}
+.gallery-resident.is-promoted {
+  border-color: var(--port-entity);
+}
+.gallery-resident-bio {
+  margin-top: 4px;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--node-text-dim);
+}
+.gallery-resident-badge {
+  margin-top: 6px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--accent);
+}
+.gallery-more {
+  margin-top: 14px;
+  align-self: flex-start;
+  flex: none;
+}
+
+/* A background resident's own page (ResidentScreen.tsx). */
+.resident-screen {
+  max-width: 980px;
+}
+.resident-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.resident-head .node-run-btn {
+  flex: none;
+}
+.resident-name {
+  margin: 0 0 4px;
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--text);
+}
+.resident-bio {
+  margin: 0;
+  max-width: 68ch;
+  line-height: 1.5;
+  color: var(--text);
+}
+.resident-note {
+  max-width: 68ch;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.resident-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 28px;
+}
+.resident-facts {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 10px 0;
+  font-size: 12.5px;
+  color: var(--text);
+}
+.resident-sub {
+  margin: 14px 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+.resident-list {
+  margin: 0;
+  padding-left: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text);
+}
+.resident-time {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}

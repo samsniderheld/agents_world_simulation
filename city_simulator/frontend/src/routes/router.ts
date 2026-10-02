@@ -28,6 +28,9 @@ export type Scope =
   // breadcrumb, so unlike scratch/storyboard it never needs its own
   // `from`.
   | { kind: 'gallery'; cityId: string }
+  // One CITY-mode background resident (routes/ResidentScreen.tsx), opened
+  // from the Gallery; `from` like agent/place.
+  | { kind: 'resident'; cityId: string; residentId: string; from?: Scope }
   // `from` is wherever the header's "Scratch" button was clicked from --
   // a Scratch board is a single fixed global board reachable from any
   // screen, not owned by a city the way Agent/Place are, so without this
@@ -71,6 +74,17 @@ function parse(pathname: string, search: string): Scope {
       kind: 'place',
       cityId: decodeURIComponent(place[1]),
       placeId: decodeURIComponent(place[2]),
+      from: rawFrom ? parseFrom(decodeURIComponent(rawFrom)) : undefined,
+    };
+  }
+
+  const resident = pathname.match(/^\/c\/([^/]+)\/resident\/([^/]+)\/?$/);
+  if (resident) {
+    const rawFrom = new URLSearchParams(search).get('from');
+    return {
+      kind: 'resident',
+      cityId: decodeURIComponent(resident[1]),
+      residentId: decodeURIComponent(resident[2]),
       from: rawFrom ? parseFrom(decodeURIComponent(rawFrom)) : undefined,
     };
   }
@@ -123,6 +137,10 @@ export function pathFor(scope: Scope): string {
     }
     case 'gallery':
       return `/c/${encodeURIComponent(scope.cityId)}/gallery`;
+    case 'resident': {
+      const base = `/c/${encodeURIComponent(scope.cityId)}/resident/${encodeURIComponent(scope.residentId)}`;
+      return scope.from ? `${base}?from=${encodeURIComponent(pathFor(scope.from))}` : base;
+    }
     case 'scratch': {
       const base = `/scratch/${encodeURIComponent(scope.boardId)}`;
       return scope.from ? `${base}?from=${encodeURIComponent(pathFor(scope.from))}` : base;

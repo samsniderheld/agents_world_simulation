@@ -74,3 +74,11 @@
   gap: 8px;
   margin-top: 4px;
 }
+
+.city-card-theme {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.city-card-theme a {
+  color: var(--text-dim);
+}

@@ -36,6 +36,15 @@ export function eventLine(e: AgentEvent): string {
       return 'continued';
     case 'reflect_pause':
       return 'paused to reflect';
+    case 'status':
+    case 'encounter':
+    case 'promotion':
+    case 'schedule':
+    case 'schedules':
+    case 'moves':
+    case 'tick_summary':
+    case 'metrics':
+      return e.text ?? '';
     default:
       return '';
   }

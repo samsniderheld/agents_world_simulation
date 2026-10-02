@@ -19,6 +19,7 @@ import { MissingNode } from './nodes/MissingNode';
 import { ScratchMusicNode, type ScratchMusicNodeData } from './nodes/ScratchMusicNode';
 import { PopulationNode } from './nodes/PopulationNode';
 import { SimulationNode } from './nodes/SimulationNode';
+import { CitySimulationNode } from './nodes/CitySimulationNode';
 import { StoryboardNode } from './nodes/StoryboardNode';
 import { StyleNode } from './nodes/StyleNode';
 import { TextViewerNode } from './nodes/TextViewerNode';
@@ -44,6 +45,7 @@ const nodeTypes = {
   location: LocationNode,
   missing: MissingNode,
   sim: SimulationNode,
+  citysim: CitySimulationNode,
   population: PopulationNode,
   treatment: TreatmentNode,
   frame: FrameNode,
@@ -55,7 +57,7 @@ const nodeTypes = {
   'scratch-music': ScratchMusicNode,
 };
 
-const PIPELINE_TYPES = new Set(['photo', 'population', 'sim', 'treatment', 'frame', 'video', 'style', 'storyboard', 'text-viewer']);
+const PIPELINE_TYPES = new Set(['photo', 'population', 'sim', 'citysim', 'treatment', 'frame', 'video', 'style', 'storyboard', 'text-viewer']);
 const SCRATCH_TYPES = new Set(['scratch-music']);
 
 // This entity's own drill-in canvas, with the *same* full node palette
@@ -124,6 +126,7 @@ function CanvasInner({
   const { addToCanvas, addPipelineNode, addStyleNode, addNewAgent, placeAgentNode, addScratchNode } = useAddNodeActions({
     data: cityData,
     setNodes,
+    setEdges,
     onExpandAgent: noExpand,
     onExpandPlace: noExpand,
     onRemoveMissing,
@@ -266,7 +269,7 @@ function CanvasInner({
       const position = screenToFlowPosition({ x: e.clientX, y: e.clientY });
       const [kind, ...rest] = payload.split(':');
       if (kind === 'media') addExistingMedia(rest[0], position);
-      else if (kind === 'pipeline') addPipelineNode(rest[0] as 'sim' | 'treatment' | 'video' | 'text-viewer' | 'frame' | 'storyboard' | 'population' | 'photo', position);
+      else if (kind === 'pipeline') addPipelineNode(rest[0] as 'sim' | 'treatment' | 'video' | 'text-viewer' | 'frame' | 'storyboard' | 'population' | 'photo' | 'citysim', position);
       else if (kind === 'style' && rest[0] === 'new') addStyleNode(position);
       else if (kind === 'style') addStyleNode(position, styles.find((s) => s.id === rest[0]));
       else if (kind === 'scratch') addScratchNode('scratch-music', position);
@@ -290,6 +293,7 @@ function CanvasInner({
         { id: 'photo', label: 'Photo', sublabel: 'upload an image from your computer', dragPayload: 'pipeline:photo', onAdd: () => addPipelineNode('photo') },
         { id: 'population', label: 'Population', sublabel: 'a new resident + portraits for N locations', dragPayload: 'pipeline:population', onAdd: () => addPipelineNode('population') },
         { id: 'sim', label: 'Simulation', dragPayload: 'pipeline:sim', onAdd: () => addPipelineNode('sim') },
+        { id: 'citysim', label: 'City Simulation', sublabel: 'heroes + up to 1000 background residents', dragPayload: 'pipeline:citysim', onAdd: () => addPipelineNode('citysim') },
         { id: 'treatment', label: 'Treatment', dragPayload: 'pipeline:treatment', onAdd: () => addPipelineNode('treatment') },
         { id: 'storyboard', label: 'Storyboard', dragPayload: 'pipeline:storyboard', onAdd: () => addPipelineNode('storyboard') },
         { id: 'video', label: 'Video', dragPayload: 'pipeline:video', onAdd: () => addPipelineNode('video') },

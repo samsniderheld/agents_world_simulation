@@ -10,26 +10,34 @@ scripted into the starting roster. Each tick: agents advance their plan
 (and may relocate as part of that), perceive each other, may react
 (including breaking into conversation), and are checked for reflection.
 
-Planning and reflection are each independent per agent (no shared state is
-touched), so both phases run one agent per thread -- real concurrent
-"thinking" across agents, not just interleaved logging, which is the whole
-point once a frontend is watching events stream in live. The
-perceive/react phase stays sequential: a co-located trio produces pairs
-that share an agent (e.g. (a,b) and (a,c)), and both react() and a
-conversation mutate that shared agent's state.
+Concurrency: planning and reflection are independent per agent, so both
+phases run one agent per thread. The perceive/react phase runs one
+*location* per thread: agents only ever interact with others at the same
+place, so locations are independent; within one, pairs stay sequential
+(a co-located trio produces pairs that share an agent, e.g. (a,b) and
+(a,c), and both react() and a conversation mutate that agent). Memories
+added during a phase are scored in one batch per agent when it ends
+(MemoryStream.flush). How many model calls actually run at once is capped
+per backend in llm.py.
 """
 
 import datetime
+import re
 import threading
 import time
+from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 
+import theme
+
 from . import display
+from . import llm
 from . import planning
 from . import recorder
 from . import reflection
 from .agent import Agent
 from .config import TICK_MINUTES
+from .textutil import directive_block
 
 _DIALOGUE_HINTS = ("talk", "chat", "greet", "ask", "convers", "say hi", "wave")
 
@@ -104,29 +112,44 @@ class World:
         return pairs
 
     def _run_conversation(self, a: Agent, b: Agent, max_turns: int = 6):
-        """Alternate converse_turn() calls between two agents for up to
-        max_turns lines, logging each line and then storing the full
-        transcript as a single 'chat' memory in both agents."""
+        """The whole exchange in one model call (it used to be one call per
+        line, six in a row): both people's identities, what each remembers
+        about the other, and the scene. The reply's "Name: line" lines are
+        logged as dialogue events one by one, exactly as before, and the
+        full transcript is stored as a single 'chat' memory in both."""
         a.chatting_with, b.chatting_with = b, a
+        t = theme.current()
+        about = {}
+        for speaker, other in ((a, b), (b, a)):
+            memories = speaker.memory.retrieve(f"{other.name}: a conversation with {other.name}", self.tick, k=5)
+            about[speaker.name] = ("\n".join(f"- {m.description}" for m in memories)
+                                   or t.template("scene.conversation_no_memories"))
+        prompt = t.prompt(
+            "scene.conversation", place=a.location, a_name=a.name, a_identity=a.identity_summary(),
+            a_doing=a.current_action, a_memories=about[a.name], b_name=b.name, b_identity=b.identity_summary(),
+            b_doing=b.current_action, b_memories=about[b.name], directive_block=directive_block(self.directive),
+            max_turns=max_turns)
+        reply = llm.complete(prompt, temperature=0.8)
+        lines = _parse_conversation(reply, a, b)[:max_turns]
+
         history: list[str] = []
-        speaker, listener = a, b
-        for _ in range(max_turns):
-            line = speaker.converse_turn(listener, history, self.tick, directive=self.directive)
-            history.append(f"{speaker.name}: {line}")
-            self._say(f"{speaker.name}: {line}")
-            recorder.log("dialogue", self.tick, agent=speaker.name, text=line, listener=listener.name)
-            speaker, listener = listener, speaker
-            time.sleep(self.tick_sleep)
+        for speaker, text in lines:
+            listener = b if speaker is a else a
+            history.append(f"{speaker.name}: {text}")
+            self._say(f"{speaker.name}: {text}")
+            recorder.log("dialogue", self.tick, agent=speaker.name, text=text, listener=listener.name)
+        time.sleep(self.tick_sleep)
 
         transcript = "\n".join(history)
         for participant, other in ((a, b), (b, a)):
-            participant.memory.add(
-                f"{participant.name} talked with {other.name}. Conversation:\n{transcript}",
-                kind="chat",
-                tick=self.tick,
-                agent_name=participant.name, color=self.agent_colors[participant.name],
-                verbose=self.verbose,
-            )
+            if history:
+                participant.memory.add(
+                    f"{participant.name} talked with {other.name}. Conversation:\n{transcript}",
+                    kind="chat",
+                    tick=self.tick,
+                    agent_name=participant.name, color=self.agent_colors[participant.name],
+                    verbose=self.verbose,
+                )
             participant.chatting_with = None
             participant.current_action = f"talking with {other.name}"
 
@@ -148,6 +171,7 @@ class World:
             f"{agent.name} is {agent.current_action}", kind="observation", tick=self.tick,
             agent_name=agent.name, color=color, verbose=self.verbose,
         )
+        agent.memory.flush()
 
     def _maybe_reflect(self, agent: Agent):
         """One agent's reflection check for this tick -- also independent
@@ -156,22 +180,18 @@ class World:
                                color=self.agent_colors[agent.name]):
             self._say(f"{agent.name} pauses to reflect.")
             recorder.log("reflect_pause", self.tick, agent=agent.name)
+        agent.memory.flush()
 
-    def step(self):
-        acting_agents = [a for a in self.agents if a.chatting_with is None]
-
-        if acting_agents:
-            with ThreadPoolExecutor(max_workers=len(acting_agents)) as pool:
-                list(pool.map(self._act, acting_agents))
-
-        # _co_located_pairs() is computed once per tick, but _run_conversation
-        # resets chatting_with to None as soon as it finishes -- so without
-        # this guard, an agent free again after one conversation could
-        # immediately start a second (and a third...) with every other pair
-        # it appears in, all stamped with the same tick. One conversation
-        # per agent per tick.
+    def _meet(self, pairs: list):
+        """One location's perceive/react/conversation pass for this tick.
+        _co_located_pairs() is computed once per tick, but _run_conversation
+        resets chatting_with to None as soon as it finishes -- so without the
+        already_talked guard, an agent free again after one conversation
+        could immediately start a second (and a third...) with every other
+        pair it appears in, all stamped with the same tick. One conversation
+        per agent per tick."""
         already_talked = set()
-        for a, b in self._co_located_pairs():
+        for a, b in pairs:
             if a in already_talked or b in already_talked:
                 continue
             observation = f"{b.name} is nearby, currently: {b.current_action}."
@@ -182,6 +202,23 @@ class World:
                 self._run_conversation(a, b)
                 already_talked.add(a)
                 already_talked.add(b)
+        for agent in {x for pair in pairs for x in pair}:
+            agent.memory.flush()
+
+    def step(self):
+        acting_agents = [a for a in self.agents if a.chatting_with is None]
+
+        if acting_agents:
+            with ThreadPoolExecutor(max_workers=len(acting_agents)) as pool:
+                list(pool.map(self._act, acting_agents))
+
+        # Perceive/react, one location per thread (see the module docstring).
+        by_location = defaultdict(list)
+        for a, b in self._co_located_pairs():
+            by_location[a.location].append((a, b))
+        if by_location:
+            with ThreadPoolExecutor(max_workers=len(by_location)) as pool:
+                list(pool.map(self._meet, by_location.values()))
 
         if self.agents:
             with ThreadPoolExecutor(max_workers=len(self.agents)) as pool:
@@ -198,3 +235,30 @@ class World:
             if self.stop_flag.is_set():
                 break
             self.step()
+
+
+def _parse_conversation(reply: str, a: Agent, b: Agent) -> list:
+    """(speaker, text) pairs from "Name: line" lines. A label matches an
+    agent by full name, or by first name / any word of it (a model may
+    write "Augie:" for 'Auguste "Augie" Worthington'); an unmatched label
+    alternates from whoever spoke last. Quotes and bracketed stage
+    directions are stripped; lines without a label are skipped."""
+    def matches(label: str, agent: Agent) -> bool:
+        label = label.strip().strip('*"').lower()
+        name = agent.name.lower()
+        words = {w.strip('"') for w in name.split()}
+        return label == name or label in words or label.split()[0] in words
+
+    out, last = [], None
+    for raw in reply.splitlines():
+        if ":" not in raw:
+            continue
+        label, text = raw.split(":", 1)
+        label = re.sub(r"^[\s\-*\d.)]+", "", label)
+        text = re.sub(r"\([^)]*\)|\[[^\]]*\]|\*[^*]*\*", "", text).strip().strip('"').strip()
+        if not text or len(label) > 60:
+            continue
+        speaker = a if matches(label, a) else b if matches(label, b) else (b if last is a else a)
+        out.append((speaker, text))
+        last = speaker
+    return out

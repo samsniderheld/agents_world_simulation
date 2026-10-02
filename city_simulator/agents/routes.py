@@ -10,6 +10,7 @@ from citystate import store as citystate
 from jsonutil import json_response
 
 from . import jobs, providers, recorder, simulation, treatment
+from .city import recorder as city_recorder
 
 bp = Blueprint("agents", __name__, url_prefix="/api/agents")
 
@@ -24,6 +25,17 @@ def provider_list():
     return json_response({"providers": providers.AVAILABLE_PROVIDERS})
 
 
+@bp.get("/city/profiles")
+def city_profiles():
+    """CITY hardware profiles (hardware.py) for the City Simulation node's
+    picker, and which one "auto" resolves to on this machine."""
+    import hardware
+    return json_response({
+        "profiles": {name: hardware.city_profile(name) for name in hardware.CITY_PROFILES},
+        "detected": hardware.detect_city_profile(),
+    })
+
+
 @bp.get("/models")
 def models():
     provider = request.args.get("provider") or None
@@ -35,6 +47,8 @@ def models():
 
 @bp.get("/state")
 def state():
+    if jobs.current_mode() == "city":
+        return json_response({"status": {**jobs.get_status(), "mode": "city"}, **city_recorder.state()})
     _, total = recorder.snapshot(0)
     return json_response({
         "status": jobs.get_status(),
@@ -48,8 +62,25 @@ def state():
 @bp.get("/events")
 def events():
     since = int(request.args.get("since", "0"))
+    if jobs.current_mode() == "city":
+        # `since` is a cursor (the last event's seq), not a list index.
+        # Filters: tier=hero (default) | background | all, kinds=a,b,
+        # agent=, place=, limit= (default 500).
+        kinds = {k for k in (request.args.get("kinds") or "").split(",") if k} or None
+        page = city_recorder.query(
+            since, tier=request.args.get("tier") or "hero", kinds=kinds,
+            agent=request.args.get("agent") or None, place=request.args.get("place") or None,
+            limit=max(1, min(5000, int(request.args.get("limit") or 500))))
+        return json_response(page)
     events, total = recorder.snapshot(since)
     return json_response({"events": events, "next": total})
+
+
+def _opt_int(value):
+    try:
+        return int(value) if value not in (None, "") else None
+    except (TypeError, ValueError):
+        return None
 
 
 def _start_time(value):
@@ -60,9 +91,55 @@ def _start_time(value):
     return f"{int(match.group(1)):02d}:{match.group(2)}"
 
 
+def _convene_place_name(body):
+    """The place name a Location wired into the node resolves to, None
+    when there isn't one; raises ValueError for an unknown place id."""
+    place_id = body.get("place_id")
+    if not place_id or (body.get("location_mode") or "grounded") != "convene":
+        return None
+    city = citystate.get()
+    place = next((p for p in (city or {}).get("places") or [] if p["id"] == place_id), None)
+    if place is None:
+        raise ValueError(f"no such place: {place_id!r}")
+    return place["name"]
+
+
+def _city_params(body):
+    """The City Simulation node's run request -> agents.city.run.run()'s
+    keyword arguments."""
+    def opt_int(key, lo, hi):
+        return max(lo, min(hi, int(body[key]))) if body.get(key) not in (None, "") else None
+    return {
+        "hero_names": body.get("agent_names") or None,
+        "background_count": opt_int("background_count", 0, 5000) or 0,
+        "profile": body.get("profile") or "auto",
+        "hero_provider": body.get("hero_provider") or None,
+        "hero_model": body.get("hero_model") or None,
+        "background_provider": body.get("background_provider") or None,
+        "background_model": body.get("background_model") or None,
+        "ticks": opt_int("ticks", 1, 1000) or 8,
+        "tick_minutes": opt_int("tick_minutes", 1, 1440),
+        "start_time": _start_time(body.get("start_time")),
+        "directive": (body.get("directive") or "").strip() or None,
+        "convene_at": _convene_place_name(body),
+        "persist_hero_memories": bool(body.get("persist_hero_memories", True)),
+        "seed": opt_int("seed", 0, 2**31 - 1),
+    }
+
+
 @bp.post("/run")
 def run():
     body = request.get_json(silent=True) or {}
+
+    # "scene" (the default, and what every client sent before CITY mode
+    # existed) or "city". Both share jobs.py's single slot.
+    if (body.get("mode") or "scene") == "city":
+        try:
+            params = _city_params(body)
+        except (ValueError, TypeError) as e:
+            return json_response({"ok": False, "error": str(e)}, status=400)
+        ok, error = jobs.start(params, mode="city")
+        return json_response({"ok": ok, "error": error}, status=200 if ok else 409)
 
     # "convene" (the node-based UI's Location -> Simulation edge) makes
     # every selected agent start this run at `place_id` instead of their
@@ -107,7 +184,136 @@ def run():
 @bp.post("/stop")
 def stop():
     jobs.stop()
+    from .city import run as city_run
+    city_run.pause_flag.clear()      # a paused CITY run has to wake up to see the stop
     return json_response({"ok": True})
+
+
+# --- CITY-only controls -------------------------------------------------------
+
+@bp.post("/city/pause")
+def city_pause():
+    from .city import run as city_run
+    if jobs.current_mode() != "city" or jobs.get_status()["phase"] != "running":
+        return json_response({"ok": False, "error": "no CITY run is in progress"}, status=409)
+    city_run.pause_flag.set()
+    city_recorder.set_meta(paused=True)
+    return json_response({"ok": True})
+
+
+@bp.post("/city/resume")
+def city_resume():
+    from .city import run as city_run
+    city_run.pause_flag.clear()
+    city_recorder.set_meta(paused=False)
+    return json_response({"ok": True})
+
+
+@bp.post("/city/promote")
+def city_promote():
+    """Promote a background resident of the running CITY run to hero (at
+    the end of the current tick)."""
+    from .city import run as city_run
+    name = (request.get_json(silent=True) or {}).get("name")
+    error = city_run.request_promotion(name) if name else "name is required"
+    return json_response({"ok": error is None, "error": error}, status=200 if error is None else 400)
+
+
+@bp.get("/city/runs")
+def city_runs():
+    return json_response({"runs": citystate.list_city_runs()})
+
+
+@bp.post("/city/report")
+def city_report():
+    """A briefing on the current or latest CITY run (agents/city/insight.py).
+    Pass the previous briefing as `previous` to hear what changed."""
+    from .city import insight
+    body = request.get_json(silent=True) or {}
+    try:
+        return json_response(insight.report(previous=body.get("previous") or None))
+    except ValueError as e:
+        return json_response({"error": str(e)}, status=400)
+    except RuntimeError as e:
+        return json_response({"error": str(e)}, status=502)
+
+
+@bp.post("/city/ask")
+def city_ask():
+    """A question about the current or latest CITY run, answered from its log."""
+    from .city import insight
+    body = request.get_json(silent=True) or {}
+    try:
+        return json_response(insight.ask(body.get("question") or ""))
+    except ValueError as e:
+        return json_response({"error": str(e)}, status=400)
+    except RuntimeError as e:
+        return json_response({"error": str(e)}, status=502)
+
+
+@bp.get("/city/residents")
+def city_residents():
+    """The active city's background residents (agents/city/zoom.py), for
+    the Gallery."""
+    from .city import zoom
+    return json_response({"residents": zoom.residents()})
+
+
+@bp.get("/city/residents/<resident_id>")
+def city_resident(resident_id):
+    """One background resident's page (agents/city/zoom.py)."""
+    from .city import zoom
+    try:
+        return json_response(zoom.resident_detail(resident_id))
+    except ValueError as e:
+        return json_response({"error": str(e)}, status=404)
+
+
+@bp.post("/city/residents/<resident_id>/character")
+def city_resident_to_character(resident_id):
+    """Make one background resident a saved character (Gallery button)."""
+    from .city import zoom
+    try:
+        character = zoom.make_character(resident_id)
+    except ValueError as e:
+        return json_response({"error": str(e)}, status=404)
+    except RuntimeError as e:
+        return json_response({"error": str(e)}, status=502)
+    simulation.set_history_roster(citystate.get())   # SCENE's roster now includes them
+    return json_response({"character": character})
+
+
+@bp.get("/city/zoom")
+def city_zoom_options():
+    """Places and tick times a CITY run can be zoomed into (the live run
+    while it's paused or just finished, else a saved one)."""
+    from .city import zoom
+    if jobs.current_mode() == "city" and jobs.get_status()["phase"] == "running" \
+            and not city_recorder.state()["meta"].get("paused"):
+        return json_response({"error": "pause or stop the CITY run to zoom in"}, status=409)
+    found = zoom.options(request.args.get("started_at") or None)
+    if found is None:
+        return json_response({"error": "there's no CITY run to zoom into yet"}, status=404)
+    return json_response(found)
+
+
+@bp.post("/city/zoom")
+def city_zoom():
+    """Resolve a place + window of ticks in a CITY run into a SCENE run's
+    cast, place and start time -- promoting background residents who were
+    there to saved characters first (agents/city/zoom.py)."""
+    from .city import zoom
+    body = request.get_json(silent=True) or {}
+    if not body.get("place"):
+        return json_response({"error": "place is required"}, status=400)
+    try:
+        result = zoom.zoom(body["place"], int(body.get("tick_from", 0)), int(body.get("tick_to", 0)),
+                           started_at=body.get("started_at") or None)
+    except ValueError as e:
+        return json_response({"error": str(e)}, status=400)
+    if result["promoted"]:
+        simulation.set_history_roster(citystate.get())   # SCENE's roster now includes them
+    return json_response(result)
 
 
 @bp.post("/treatment")
@@ -131,7 +337,16 @@ def generate_treatment_for_agent():
 
     latest = runs[-1]
     agent_records = {c["name"]: citystate.get_agent(c["id"]) for c in city.get("characters", [])}
-    log, agent_names, locations = treatment.build_transcript(agent_records, latest.get("started_at"))
+    # A run without a mode predates CITY mode: it's a SCENE run.
+    is_city = (latest.get("meta") or {}).get("mode", "scene") == "city"
+    if is_city:
+        # Heroes only (plus background lines said to them), optionally
+        # narrowed to one place / window of ticks, so the prompt stays bounded.
+        log, agent_names, locations = treatment.build_city_transcript(
+            agent_records, latest.get("started_at"), place=body.get("place") or None,
+            tick_from=_opt_int(body.get("tick_from")), tick_to=_opt_int(body.get("tick_to")))
+    else:
+        log, agent_names, locations = treatment.build_transcript(agent_records, latest.get("started_at"))
 
     # Resolve each bare location name build_transcript() found in the
     # transcript against its real place record, for its `architecture`
@@ -166,6 +381,10 @@ def generate_treatment_for_agent():
         {"name": name, "bio": characters_by_name[name].get("bio", "")}
         for name in agent_names if name in characters_by_name
     ]
+    if is_city:   # background residents who spoke: their one-line bios
+        residents = {r["name"]: r for r in citystate.get_background()}
+        cast_details += [{"name": n, "bio": residents[n].get("bio", "")}
+                         for n in agent_names if n not in characters_by_name and n in residents]
     seen_cast_names = {c["name"] for c in cast_details}
     for extra_agent_id in body.get("agent_ids") or []:
         character = characters_by_id.get(extra_agent_id)

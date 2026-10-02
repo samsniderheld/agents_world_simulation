@@ -34,13 +34,8 @@ generation:
   figures_per_era: 10      # how many central figures each era spawns
   events_per_figure: 10   # roughly how many life events drive each figure's arc
   random_seed: null       # set an int for a reproducible run
-  # Hard ceiling: a figure born late in the final era, running a full
-  # life-event chain unclamped, would otherwise drift well past the
-  # requested "up until the 1950s" scope. generate.py stops advancing a
-  # figure's story once it hits this year, rather than clamping every event
-  # to the era's own end year (which just piles up repeated-year events
-  # instead of stopping).
-  max_year: 1959
+  # The last year a history reaches is the theme's world.present_year
+  # (themes/*.yaml): generate.py stops advancing a figure's story there.
 
 # The grammar is fully procedural on its own; these just decide when the
 # local LLM gets consulted to fill a blank instead of a static word list.

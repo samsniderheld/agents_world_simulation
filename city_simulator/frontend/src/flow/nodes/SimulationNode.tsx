@@ -228,6 +228,7 @@ export function SimulationNode({ id, data, selected, height }: NodeProps<Simulat
         <select className="node-select" value={data.provider} onChange={(e) => onProviderChange(e.target.value)}>
           <option value="ollama">Ollama (local)</option>
           <option value="claude">Claude (API)</option>
+          <option value="openai">OpenAI-compatible (MLX / vLLM / SGLang)</option>
         </select>
       </div>
       <div className="node-controls">
@@ -245,7 +246,7 @@ export function SimulationNode({ id, data, selected, height }: NodeProps<Simulat
           ))}
         </datalist>
       </div>
-      <div className="node-subtitle">Claude still uses local Ollama for memory embeddings.</div>
+      {data.provider !== 'ollama' && <div className="node-subtitle">Memory embeddings still come from local Ollama.</div>}
 
       <div className="node-controls">
         <span className="node-subtitle">ticks</span>

@@ -11,6 +11,9 @@ each thing is easy to find on disk instead of one growing JSON blob:
         agents/<id>/
           agent.json              -- the character record + "media", "plans", "runs"
           media/                  -- that agent's own image/video files
+        theme.yaml                -- the theme the city was generated with (theme.py)
+        background.json           -- CITY mode's background residents (compact)
+        city_runs/<stamp>.json    -- one compact summary per CITY run
 
 An "agent" and a "character" are the same identity here -- see
 agents/simulation.py's roster_from_history(), which builds the agent
@@ -300,6 +303,9 @@ def list_cities() -> list:
         summaries.append({
             "id": city_dir.name,
             "generated_at": history.get("generated_at"),
+            # The theme the city was generated with (theme.py); cities from
+            # before themes have none and use the default.
+            "theme": history.get("theme"),
             "summary": history.get("summary", ""),
             "figure_count": len(history.get("figures", [])),
             "place_count": place_count,
@@ -441,13 +447,17 @@ def add_character(character: dict) -> dict:
         return character
 
 
-def append_agent_run(run_record: dict) -> None:
+def append_agent_run(run_record: dict, slices: dict = None) -> None:
     """Splits `run_record`'s events per agent and patches each
     participating agent's own agent.json (their "runs" list gains this
     run's own event slice; their "plans" list gains any "plan"-kind events
     from it). Quietly does nothing if there's no active city -- an agent
     run against the hardcoded noir cast has nowhere to persist to, and
-    that's fine (matches the pre-split behavior)."""
+    that's fine (matches the pre-split behavior).
+
+    `slices` ({agent name: [event]}, CITY mode only) gives each agent's
+    slice directly instead of filtering `events` by agent -- a CITY hero's
+    slice also carries the lines background residents said to them."""
     with _lock:
         if not _loaded:
             _load_active()
@@ -466,7 +476,10 @@ def append_agent_run(run_record: dict) -> None:
             with open(path) as f:
                 data = json.load(f)
 
-            agent_events = [e for e in events if e.get("agent") == agent_meta["name"]]
+            if slices is not None:
+                agent_events = slices.get(agent_meta["name"], [])
+            else:
+                agent_events = [e for e in events if e.get("agent") == agent_meta["name"]]
             data.setdefault("runs", []).append({
                 "started_at": run_record.get("started_at"),
                 "meta": run_record.get("meta", {}),
@@ -507,3 +520,130 @@ def add_treatment(agent_id: str, text: str, run_started_at: str = None) -> dict:
         data.setdefault("treatments", []).append(entry)
         _atomic_write(path, data)
         return entry
+
+
+# --- CITY mode (agents/city/) ------------------------------------------------
+# Background residents and CITY run summaries live beside the rest of the
+# active city, in compact JSON (one line, no indentation): a thousand
+# residents or a thousand agents' positions over a run would otherwise be
+# megabytes of whitespace.
+#
+#     cities/<city_id>/background.json          -- [resident, ...]
+#     cities/<city_id>/city_runs/<stamp>.json   -- one CITY run's summary
+
+def _background_path(city_id: str) -> Path:
+    return _city_dir(city_id) / "background.json"
+
+
+def _city_runs_dir(city_id: str) -> Path:
+    return _city_dir(city_id) / "city_runs"
+
+
+def _compact_write(path: Path, payload) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    with open(tmp, "w") as f:
+        json.dump(payload, f, separators=(",", ":"), default=str)
+    tmp.replace(path)
+
+
+def _active_city_id() -> str:
+    with _lock:
+        if not _loaded:
+            _load_active()
+        return _active_id
+
+
+def get_background() -> list:
+    """The active city's background residents (agents/city/population.py
+    generates them), or [] if none have been generated yet."""
+    city_id = _active_city_id()
+    if city_id is None or not _background_path(city_id).exists():
+        return []
+    with open(_background_path(city_id)) as f:
+        return json.load(f)
+
+
+def save_background(residents: list) -> None:
+    city_id = _active_city_id()
+    if city_id is None:
+        return
+    with _lock:
+        _compact_write(_background_path(city_id), residents)
+
+
+def update_background_resident(resident_id: str, **fields) -> bool:
+    """Patch one saved resident (e.g. mark them promoted to a character)."""
+    residents = get_background()
+    for r in residents:
+        if r.get("id") == resident_id:
+            r.update(fields)
+            save_background(residents)
+            return True
+    return False
+
+
+def _run_file_name(started_at: str) -> str:
+    return "".join(c if c.isalnum() else "-" for c in (started_at or "run")) + ".json"
+
+
+def save_city_run(summary: dict) -> str:
+    """Store one CITY run's compact summary (agents/city/run.py builds it):
+    meta, the heroes, per-tick positions of every agent, per-agent
+    background tallies and the metrics -- never the background agents'
+    full event slices. Returns the file name, or None with no active city."""
+    city_id = _active_city_id()
+    if city_id is None:
+        return None
+    name = _run_file_name(summary.get("started_at"))
+    with _lock:
+        _compact_write(_city_runs_dir(city_id) / name, summary)
+    return name
+
+
+def get_city_run(started_at: str = None) -> dict:
+    """One CITY run's summary by its started_at, or the latest one."""
+    city_id = _active_city_id()
+    if city_id is None or not _city_runs_dir(city_id).exists():
+        return None
+    if started_at:
+        path = _city_runs_dir(city_id) / _run_file_name(started_at)
+        if not path.exists():
+            return None
+    else:
+        files = sorted(_city_runs_dir(city_id).glob("*.json"))
+        if not files:
+            return None
+        path = files[-1]
+    with open(path) as f:
+        return json.load(f)
+
+
+def list_city_runs() -> list:
+    """[{started_at, ticks, heroes, background}] for the active city, oldest first."""
+    city_id = _active_city_id()
+    if city_id is None or not _city_runs_dir(city_id).exists():
+        return []
+    out = []
+    for path in sorted(_city_runs_dir(city_id).glob("*.json")):
+        with open(path) as f:
+            s = json.load(f)
+        out.append({"started_at": s.get("started_at"), "ticks": len(s.get("positions", [])),
+                    "heroes": len(s.get("heroes", [])), "background": len(s.get("background", {}))})
+    return out
+
+
+# --- City themes (theme.py) -------------------------------------------------
+# Each city keeps its own copy of the theme it was generated with, so editing
+# or deleting a theme later never changes an existing city's world.
+
+def city_theme_path(city_id: str) -> Path:
+    return _city_dir(city_id) / "theme.yaml"
+
+
+def save_city_theme(city_id: str, text: str) -> None:
+    path = city_theme_path(city_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".yaml.tmp")
+    tmp.write_text(text)
+    tmp.replace(path)

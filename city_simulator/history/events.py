@@ -9,7 +9,8 @@ as the talk describes its cats/frogs example: state set by an earlier event
 becomes the "reason" a later, otherwise-unrelated event gives for itself.
 
 The templates themselves (grammar text, word-list content like disasters/
-scandal tags/political outcomes) live in events.yaml; this module holds the
+scandal tags/political outcomes) live in the current theme's `events`
+section (theme.py); this module holds the
 actual behavior -- the effects/place_filter/precondition functions each
 template's YAML entry references by name (see _EFFECTS/_PLACE_FILTERS/
 _PRECONDITIONS and _load_template below).
@@ -29,9 +30,8 @@ Runtime template shape (what _load_template produces from one YAML entry):
 """
 
 import random
-from pathlib import Path
 
-import yaml
+import theme
 
 from . import architecture
 from . import config
@@ -40,16 +40,9 @@ from . import grammar
 from . import llm
 from . import names
 
-_YAML_PATH = Path(__file__).parent / "data" / "events.yaml"
 
-with open(_YAML_PATH) as _f:
-    _RAW = yaml.safe_load(_f)
-
-_GENERIC_CAUSES = _RAW["generic_causes"]
-_DISASTERS = _RAW["disasters"]
-_SCANDAL_TAGS = _RAW["scandal_tags"]
-_POLITICAL_OUTCOMES = _RAW["political_outcomes"]
-_NOTABLE_TEMPLATE_IDS = set(_RAW["notable_template_ids"])
+def _data() -> dict:
+    return theme.current()["events"]
 
 
 def _pick_cause(figure: "entities.Figure", rng: random.Random) -> str:
@@ -59,11 +52,12 @@ def _pick_cause(figure: "entities.Figure", rng: random.Random) -> str:
     rivals = figure.properties.get("rivals", [])
     allies = figure.properties.get("allies", [])
     roll = rng.random()
+    causes = _data()["causes"]
     if rivals and roll < 0.45:
-        return f"the persecution of {rng.choice(rivals)}"
+        return theme.fill(causes["rival"], {"who": rng.choice(rivals)})
     if allies and roll < 0.75:
-        return f"a debt owed to {rng.choice(allies)}"
-    return rng.choice(_GENERIC_CAUSES).format(domain=figure.domain)
+        return theme.fill(causes["ally"], {"who": rng.choice(allies)})
+    return rng.choice(_data()["generic_causes"]).format(domain=figure.domain)
 
 
 def _create_place(figure: "entities.Figure", era, year: int, rng: random.Random) -> "entities.Place":
@@ -81,25 +75,18 @@ def _build_context(figure, place, era, year: int, extra: dict) -> dict:
     }
     if place is not None:
         ctx["place"] = place.name
-        ctx["place_noun"] = entities.PLACE_TYPE_NOUN.get(place.place_type, place.place_type.lower())
+        ctx["place_noun"] = entities.place_type_noun(place.place_type)
     ctx.update(extra)
     return ctx
 
 
 def _maybe_flourish(text: str, template_id: str, rng: random.Random) -> str:
-    if template_id not in _NOTABLE_TEMPLATE_IDS:
+    if template_id not in set(_data()["notable_template_ids"]):
         return text
     if rng.random() > config.LLM_FLOURISH_RATE or not llm.available():
         return text
     try:
-        prompt = (
-            "Rewrite the following sentence describing a historical event in "
-            "old New York City so it reads as slightly more vivid, period-"
-            "flavored prose. Keep every proper noun, name, date, and fact "
-            "EXACTLY as given -- do not invent or remove any of them, and "
-            "keep it to one sentence. Reply with ONLY the rewritten sentence."
-            f"\n\nSentence: {text}"
-        )
+        prompt = theme.current().prompt("history.event_flourish", text=text)
         flourished = llm.complete(prompt, temperature=0.8).strip().strip('"')
         if flourished and "\n" not in flourished and len(flourished) < len(text) * 3:
             return flourished
@@ -119,7 +106,7 @@ def _fx_expansion(figure, place, era, year, rng):
 
 
 def _fx_place_destroyed(figure, place, era, year, rng):
-    disaster = rng.choice(_DISASTERS)
+    disaster = rng.choice(_data()["disasters"])
     place.status = "destroyed"
     place.closed_year = year
     return {"disaster": disaster, "cause": _pick_cause(figure, rng)}
@@ -172,13 +159,13 @@ def _fx_rivalry_formed(figure, place, era, year, rng):
 
 
 def _fx_scandal(figure, place, era, year, rng):
-    tag = rng.choice(_SCANDAL_TAGS)
+    tag = rng.choice(_data()["scandal_tags"])
     figure.properties["reputation"].append(tag)
     return {"tag": tag, "cause": _pick_cause(figure, rng)}
 
 
 def _fx_political_trouble(figure, place, era, year, rng):
-    outcome = rng.choice(_POLITICAL_OUTCOMES)
+    outcome = rng.choice(_data()["political_outcomes"])
     figure.properties["reputation"].append("investigated")
     return {"outcome": outcome, "cause": _pick_cause(figure, rng)}
 
@@ -273,15 +260,14 @@ def _load_template(raw: dict) -> dict:
     return template
 
 
-EVENT_TEMPLATES = [_load_template(t) for t in _RAW["event_templates"]]
-EVENT_TEMPLATES_BY_ID = {t["id"]: t for t in EVENT_TEMPLATES}
-
-DEATH_TEMPLATE = _RAW["death_template"]
+def _templates() -> list:
+    t = theme.current()
+    return t.memo("event_templates", lambda: [_load_template(raw) for raw in t["events"]["event_templates"]])
 
 
 def pick_event_template(figure, places: list, rng: random.Random) -> dict:
     eligible = []
-    for template in EVENT_TEMPLATES:
+    for template in _templates():
         precondition = template.get("precondition")
         if precondition and not precondition(figure, places):
             continue
@@ -290,7 +276,7 @@ def pick_event_template(figure, places: list, rng: random.Random) -> dict:
             if not any((place_filter is None or place_filter(p, figure)) for p in places):
                 continue
         eligible.append(template)
-    return rng.choice(eligible) if eligible else EVENT_TEMPLATES_BY_ID["found_place"]
+    return rng.choice(eligible) if eligible else next(t for t in _templates() if t["id"] == "found_place")
 
 
 def resolve_event(template: dict, figure, places: list, era, year: int, rng: random.Random):
@@ -319,4 +305,4 @@ def resolve_death(figure, year: int, era, rng: random.Random) -> str:
     figure.alive = False
     figure.death_year = year
     context = _build_context(figure, None, era, year, {})
-    return grammar.expand(DEATH_TEMPLATE["grammar"], "TEXT", context, rng)
+    return grammar.expand(_data()["death_template"]["grammar"], "TEXT", context, rng)

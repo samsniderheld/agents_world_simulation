@@ -62,6 +62,13 @@ export interface TreatmentNodeData extends Record<string, unknown> {
   ) => void;
   onProviderChange: (nodeId: string, provider: string) => void;
   onModelChange: (nodeId: string, model: string) => void;
+  // Set when run:in is a City Simulation: the transcript can then be
+  // narrowed to one place and/or a window of ticks (blank = everything).
+  fromCity?: boolean;
+  cityPlace?: string;
+  cityTickFrom?: string;
+  cityTickTo?: string;
+  onCityChange?: (nodeId: string, patch: { cityPlace?: string; cityTickFrom?: string; cityTickTo?: string }) => void;
 }
 
 export type TreatmentNodeType = Node<TreatmentNodeData, 'treatment'>;
@@ -119,6 +126,13 @@ export function TreatmentNode({ id, data, selected }: NodeProps<TreatmentNodeTyp
         model: model.trim() || undefined,
         agentIds: data.agentIds,
         placeIds: data.placeIds,
+        ...(data.fromCity
+          ? {
+              place: data.cityPlace?.trim() || undefined,
+              tickFrom: data.cityTickFrom ? Number(data.cityTickFrom) - 1 : undefined,
+              tickTo: data.cityTickTo ? Number(data.cityTickTo) - 1 : undefined,
+            }
+          : {}),
       });
       const shotsRes = await agentsApi.treatmentShots(res.treatment.text);
       onGenerated(id, res.treatment.text, shotsRes.shots);
@@ -142,6 +156,31 @@ export function TreatmentNode({ id, data, selected }: NodeProps<TreatmentNodeTyp
         </div>
       ) : null}
 
+      {data.fromCity && (
+        <div className="node-controls" title="CITY runs: only use what happened at this place, in these ticks (blank = all)">
+          <input
+            className="node-select"
+            placeholder="place (all)"
+            defaultValue={data.cityPlace ?? ''}
+            onBlur={(e) => data.onCityChange?.(id, { cityPlace: e.target.value })}
+          />
+          <input
+            className="node-select"
+            placeholder="from tick"
+            inputMode="numeric"
+            defaultValue={data.cityTickFrom ?? ''}
+            onBlur={(e) => data.onCityChange?.(id, { cityTickFrom: e.target.value.replace(/\D/g, '') })}
+          />
+          <input
+            className="node-select"
+            placeholder="to tick"
+            inputMode="numeric"
+            defaultValue={data.cityTickTo ?? ''}
+            onBlur={(e) => data.onCityChange?.(id, { cityTickTo: e.target.value.replace(/\D/g, '') })}
+          />
+        </div>
+      )}
+
       {text && (
         <div className="node-treatment-preview">
           {text.split('\n').slice(0, 2).join(' ')}
@@ -154,6 +193,7 @@ export function TreatmentNode({ id, data, selected }: NodeProps<TreatmentNodeTyp
           <option value="">Server default</option>
           <option value="ollama">Ollama (local)</option>
           <option value="claude">Claude (API)</option>
+          <option value="openai">OpenAI-compatible (MLX / vLLM / SGLang)</option>
         </select>
       </div>
       <div className="node-controls">

@@ -11,7 +11,7 @@ visuals/providers/__init__.py's same reasoning).
 
 from .. import config
 
-AVAILABLE_PROVIDERS = ["ollama", "claude"]
+AVAILABLE_PROVIDERS = ["ollama", "claude", "openai"]
 
 _instances = {}
 
@@ -27,6 +27,9 @@ def get_provider(name: str = None):
     elif name == "claude":
         from .claude import ClaudeProvider
         instance = ClaudeProvider()
+    elif name == "openai":
+        from .openai_compat import OpenAICompatProvider
+        instance = OpenAICompatProvider()
     else:
         raise ValueError(f"unknown agent LLM provider: {name!r}")
 

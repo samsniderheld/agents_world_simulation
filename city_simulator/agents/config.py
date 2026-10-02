@@ -27,6 +27,23 @@ load_dotenv(_PROJECT_ROOT / ".env")
 # FAL_KEY.
 PROVIDER = "ollama"
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
+
+# "openai": any server speaking the OpenAI chat-completions API -- mlx_lm.server
+# (Apple Silicon; default port 8080), vLLM (8000), SGLang (30000), LM Studio
+# (1234), or OpenAI itself. The base URL includes the /v1 prefix. The key is
+# only needed if the server asks for one (local servers usually don't).
+# OPENAI_COMPAT_MODEL left unset picks the server's first listed model.
+OPENAI_COMPAT_BASE_URL = os.environ.get("OPENAI_COMPAT_BASE_URL", "http://localhost:8080/v1").rstrip("/")
+OPENAI_COMPAT_API_KEY = os.environ.get("OPENAI_COMPAT_API_KEY", "")
+OPENAI_COMPAT_MODEL = os.environ.get("OPENAI_COMPAT_MODEL") or None
+OPENAI_COMPAT_MAX_TOKENS = 1024  # caps *output* length, like CLAUDE_MAX_TOKENS
+
+# How many calls each backend gets at once (agents/llm.py enforces these).
+# The tick loop now fires many calls in parallel; a batching server (vLLM,
+# SGLang, mlx_lm.server) turns that into throughput, while a single local
+# Ollama GPU mostly queues them, and a hosted API rate-limits past a point.
+MAX_CONCURRENCY = {"ollama": 4, "claude": 8, "openai": 16}
+EMBED_MAX_CONCURRENCY = 8
 CLAUDE_MODEL = "claude-sonnet-5"
 CLAUDE_MAX_TOKENS = 1024  # caps *output* length -- see providers/claude.py's docstring
 
@@ -59,7 +76,9 @@ def _pick_tier(tiers: list, available_gb: float):
     return tiers[-1][1]
 
 
-CHAT_MODEL = _pick_tier(_CHAT_MODEL_TIERS, _AVAILABLE_GB)
+# OLLAMA_CHAT_MODEL (env or .env) skips the auto-pick -- e.g. on a cloud GPU
+# where vLLM holds most of the memory and Ollama should stay small.
+CHAT_MODEL = os.environ.get("OLLAMA_CHAT_MODEL") or _pick_tier(_CHAT_MODEL_TIERS, _AVAILABLE_GB)
 
 # Ollama's embedding model used for the memory stream's relevance scoring.
 EMBED_MODEL = "nomic-embed-text"

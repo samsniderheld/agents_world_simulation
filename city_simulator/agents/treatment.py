@@ -8,6 +8,8 @@ the end of every run.
 import datetime
 import re
 
+import theme
+
 from . import config
 from . import llm
 from .config import TICK_MINUTES
@@ -87,12 +89,52 @@ def build_transcript(agent_records: dict, started_at: str) -> tuple:
     return log, sorted(agent_names), locations
 
 
-NOIR_LOOK = (
-    "moody film noir aesthetic: high-contrast black-and-white lighting, hard "
-    "venetian-blind shadows, wet city streets, dramatic low-key lighting, "
-    "deep chiaroscuro shadow, 1940s wardrobe and production design."
-    "the background should look like a painting, in the style of edward hopper."
-)
+def build_city_transcript(agent_records: dict, started_at: str, place: str = None,
+                          tick_from: int = None, tick_to: int = None, max_lines: int = 300) -> tuple:
+    """build_transcript() for a CITY run (meta.mode "city"): the same
+    (log, agent_names, locations) result, built from the heroes' saved
+    slices -- their actions and dialogue, plus the lines background
+    residents spoke to them -- optionally narrowed to one place and/or a
+    window of ticks, and capped at `max_lines`, so a run of hundreds of
+    agents still makes a bounded prompt. Only people who actually appear in
+    the narrowed transcript are named in `agent_names`."""
+    events, seen = [], set()
+    for record in agent_records.values():
+        for run in (record or {}).get("runs", []):
+            if run.get("started_at") != started_at:
+                continue
+            for e in run.get("events", []):
+                key = e.get("seq") or (e.get("kind"), e.get("agent"), e.get("tick"), e.get("text"))
+                if key not in seen:
+                    seen.add(key)
+                    events.append(e)
+
+    def keep(e):
+        if e.get("kind") not in ("action", "dialogue"):
+            return False
+        if tick_from is not None and e.get("tick", 0) < tick_from:
+            return False
+        if tick_to is not None and e.get("tick", 0) > tick_to:
+            return False
+        where = e.get("location") if e["kind"] == "action" else e.get("place")
+        return place is None or where == place
+
+    narrative = sorted((e for e in events if keep(e)),
+                       key=lambda e: (e.get("tick", 0), 0 if e["kind"] == "action" else 1, e.get("seq") or 0))
+    narrative = narrative[:max_lines]
+    log, names, locations = [], [], []
+    for e in narrative:
+        where = e.get("location") if e["kind"] == "action" else e.get("place")
+        if e["kind"] == "action":
+            log.append(f"[{e.get('time', '')}] {e.get('agent')} ({where}): {e.get('text')}")
+        else:
+            log.append(f"[{e.get('time', '')}] {e.get('agent')}: {e.get('text')}")
+        for n in (e.get("agent"), e.get("listener")):
+            if n and n not in names:
+                names.append(n)
+        if where and where not in locations:
+            locations.append(where)
+    return log, sorted(names), locations
 
 
 def _setting_block(location_details: list) -> str:
@@ -109,6 +151,7 @@ def _setting_block(location_details: list) -> str:
     silently dropping it from the setting block entirely."""
     if not location_details:
         return ""
+    t = theme.current()
     names = ", ".join(loc["name"] for loc in location_details if loc.get("name"))
     lines = []
     for loc in location_details:
@@ -116,14 +159,10 @@ def _setting_block(location_details: list) -> str:
         if not name:
             continue
         architecture = (loc.get("architecture") or "").strip()
-        lines.append(f"- {name}: {architecture}" if architecture else f"- {name} (no recorded architecture)")
+        lines.append(t.prompt("treatment.setting_place", name=name, architecture=architecture) if architecture
+                     else t.prompt("treatment.setting_place_unknown", name=name))
     body = "\n".join(lines)
-    return (
-        f"Setting: this entire scene takes place at {names}. Below is each place's "
-        "REAL recorded appearance -- base every shot's art direction on this, not on "
-        "what the name alone suggests, and do not invent or drift to any other "
-        f"location:\n{body}\n\n"
-    )
+    return t.prompt("treatment.setting", place_names=names, places=body) + "\n\n"
 
 
 def _cast_block(cast_details: list) -> str:
@@ -138,19 +177,17 @@ def _cast_block(cast_details: list) -> str:
     name when a character has no bio on file."""
     if not cast_details:
         return ""
+    t = theme.current()
     lines = []
     for c in cast_details:
         name = c.get("name")
         if not name:
             continue
         bio = (c.get("bio") or "").strip()
-        lines.append(f"- {name}: {bio}" if bio else f"- {name} (no recorded description)")
+        lines.append(t.prompt("treatment.cast_person", name=name, bio=bio) if bio
+                     else t.prompt("treatment.cast_person_unknown", name=name))
     body = "\n".join(lines)
-    return (
-        "Cast appearance reference -- use these real descriptions for how each character "
-        "looks and what they wear, do not invent conflicting physical details:\n"
-        f"{body}\n\n"
-    )
+    return t.prompt("treatment.cast", people=body) + "\n\n"
 
 
 def generate_treatment(log: list[str], agent_names: list[str], model: str = None,
@@ -178,51 +215,13 @@ def generate_treatment(log: list[str], agent_names: list[str], model: str = None
     direction the run itself was steered by (the Simulation node's text
     input, persisted in the run's meta), so the treatment is written
     toward the same intent."""
-    transcript = "\n".join(log) or "(nothing happened)"
-    setting_line = _setting_block(location_details)
-    cast_line = _cast_block(cast_details)
-    direction_line = (
-        f"SCENE DIRECTION (what this scene was set up to be about -- let it "
-        f"shape the synopsis and shots, consistent with the transcript): "
-        f"{directive.strip()}\n\n"
-        if directive and directive.strip() else ""
-    )
-
-    prompt = (
-        "You are a film treatment writer adapting a scene transcript into a "
-        "short video vignette pitch, in a film noir style.\n\n"
-        f"Cast available in this scene: {', '.join(agent_names)}. Only write "
-        "about characters who actually appear in the transcript below; do "
-        "not invent any other named characters.\n\n"
-        f"{cast_line}"
-        f"{setting_line}"
-        f"{direction_line}"
-        f"Transcript:\n{transcript}\n\n"
-        "Write the treatment in exactly this format, with no extra "
-        "commentary before or after it:\n\n"
-        "CHARACTERS:\n"
-        "- <name> -- <one-line description of their role in this vignette>\n"
-        "(one line per character who actually appears)\n\n"
-        "SYNOPSIS:\n"
-        "<a tight paragraph, 4-8 sentences, describing what happens in this "
-        "vignette, written as noir prose>\n\n"
-        "STORYBOARD:\n"
-        "1. <shot description> | Character: <physical description of "
-        "whoever appears in this shot -- their build, face, and wardrobe, "
-        "drawn from the cast appearance reference above, not invented -- "
-        "or \"none\" for a shot with no one in frame> | Art direction: "
-        "<set/production design notes> | Lighting: <lighting setup> | "
-        "DOP: <camera angle, lens, and movement>\n"
-        "(exactly 6 numbered shots in this format, each a different beat of "
-        f"the story, all consistent with a {NOIR_LOOK}. Each shot line is used "
-        "on its own, standalone, to generate that shot's actual image later -- "
-        "the Character field must repeat enough of their real appearance that "
-        "the shot still reads correctly by itself, without needing the rest "
-        "of this treatment for context.)\n\n"
-        "The direction should take into account the Japanese concept of MA, focusing on "
-        "individual moments, the characters within them, and how those characters experience "
-        "their environment."
-    )
+    t = theme.current()
+    transcript = "\n".join(log) or t.template("treatment.empty_transcript")
+    direction_line = (t.prompt("treatment.direction", directive=directive.strip()) + "\n\n"
+                      if directive and directive.strip() else "")
+    prompt = t.prompt("treatment.main", cast_names=", ".join(agent_names), cast_block=_cast_block(cast_details),
+                      setting_block=_setting_block(location_details), direction_block=direction_line,
+                      transcript=transcript, visual_look=t["world"]["visual_look"])
     return llm.complete(
         prompt, model=model, temperature=0.8,
         context_tokens=config.TREATMENT_CONTEXT_TOKENS, provider=provider,

@@ -21,7 +21,9 @@ from . import events
 from . import llm
 from . import log as history_log
 from . import summary
-from .eras import ERAS, era_for_year
+import theme
+
+from .eras import all_eras, era_for_year
 
 
 def generate(seed=None, figures_per_era=None, events_per_figure=None):
@@ -48,16 +50,17 @@ def generate(seed=None, figures_per_era=None, events_per_figure=None):
     schedule = []              # list of (year, figure, era), sorted below
     last_scheduled_year = {}   # figure.id -> that figure's last scheduled year
 
-    for era in ERAS:
+    max_year = theme.current().present_year
+    for era in all_eras():
         for _ in range(figures_per_era):
             figure = entities.new_figure(era.id, rng)
             all_figures.append(figure)
 
             year = figure.birth_year
             for _ in range(events_per_figure):
-                if year >= config.MAX_YEAR:
+                if year >= max_year:
                     break
-                year = min(year + rng.randint(1, 6), config.MAX_YEAR)
+                year = min(year + rng.randint(1, 6), max_year)
                 schedule.append((year, figure, era))
             last_scheduled_year[figure.id] = year
 
@@ -108,9 +111,9 @@ def generate(seed=None, figures_per_era=None, events_per_figure=None):
         if not figure.alive:
             continue
         last_year = last_scheduled_year.get(figure.id, figure.birth_year)
-        if last_year >= config.MAX_YEAR:
+        if last_year >= max_year:
             continue
-        death_year = min(last_year + rng.randint(1, 10), config.MAX_YEAR)
+        death_year = min(last_year + rng.randint(1, 10), max_year)
         era = era_for_year(death_year)  # the era they die in, not the one they were born in
         gospel_text = events.resolve_death(figure, death_year, era, rng)
         all_events.append({
@@ -130,11 +133,13 @@ def generate(seed=None, figures_per_era=None, events_per_figure=None):
 def to_json(figures, places, events_list, characters_list=None, summary_text=""):
     return {
         "generated_at": datetime.datetime.now().isoformat(),
+        # Which theme (theme.py) wrote this city; the city keeps a copy of it.
+        "theme": {"id": theme.current().id, "name": theme.current().name},
         "summary": summary_text,
         "eras": [
             {"id": e.id, "name": e.name, "start_year": e.start_year,
              "end_year": e.end_year, "description": e.description}
-            for e in ERAS
+            for e in all_eras()
         ],
         "figures": [
             {"id": f.id, "name": f.name, "role": f.role, "domain": f.domain,
@@ -157,11 +162,17 @@ def to_json(figures, places, events_list, characters_list=None, summary_text="")
 
 
 def run_history(seed=None, figures_per_era=None, events_per_figure=None,
-                 characters_count=10, use_llm=True) -> dict:
+                 characters_count=10, use_llm=True, theme_obj=None) -> dict:
     """Everything a full run produces, as one JSON-shaped dict -- no file
     I/O, no argparse. Called by history/jobs.py's background thread (see
     routes.py's POST /api/history/generate); main() below is the
-    standalone-file-writing CLI wrapper around the same steps."""
+    standalone-file-writing CLI wrapper around the same steps. `theme_obj`
+    (theme.py) is the world to generate; default: the current theme."""
+    with theme.use(theme_obj or theme.current()):
+        return _run_history(seed, figures_per_era, events_per_figure, characters_count, use_llm)
+
+
+def _run_history(seed, figures_per_era, events_per_figure, characters_count, use_llm) -> dict:
     history_log.reset()
     config.LLM_FILL_NAMES = bool(use_llm)
     if not use_llm:
@@ -181,7 +192,7 @@ def run_history(seed=None, figures_per_era=None, events_per_figure=None,
         history_log.log(f"  {c['name']}, {c['age']} -- {c['occupation']} (connected to {c['place_name']})")
 
     history_log.log("Writing a summary of the city's history...")
-    summary_text = summary.generate_summary(figures, places, events_list, ERAS)
+    summary_text = summary.generate_summary(figures, places, events_list, all_eras())
     history_log.log("Summary complete.")
     history_log.log("Done.")
 
@@ -192,7 +203,7 @@ def run_history(seed=None, figures_per_era=None, events_per_figure=None,
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Procedural NYC-inspired city history generator")
+    parser = argparse.ArgumentParser(description="Procedural city history generator")
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--figures-per-era", type=int, default=None)
     parser.add_argument("--events-per-figure", type=int, default=None)
@@ -200,6 +211,7 @@ def main():
     parser.add_argument("--characters", type=int, default=10, help="number of present-day residents to generate")
     parser.add_argument("--characters-out", default="characters.json", help="path for the generated characters (blank to skip)")
     parser.add_argument("--no-llm", action="store_true", help="skip Ollama entirely (pure grammar output)")
+    parser.add_argument("--theme", default=None, help="theme id (themes/ or uploaded); default: the default theme")
     args = parser.parse_args()
 
     if not args.no_llm:
@@ -213,6 +225,7 @@ def main():
         seed=args.seed, figures_per_era=args.figures_per_era,
         events_per_figure=args.events_per_figure,
         characters_count=args.characters, use_llm=not args.no_llm,
+        theme_obj=theme.get(args.theme) if args.theme else theme.default(),
     )
     with open(args.out, "w") as f:
         json.dump(payload, f, indent=2, default=str)
@@ -224,7 +237,7 @@ def main():
     print(f"\n{payload['summary']}")
 
     characters_list = payload["characters"]
-    print(f"\n--- {len(characters_list)} residents of the city, c. 1959 ---")
+    print(f"\n--- {len(characters_list)} residents of the city ---")
     for c in characters_list:
         print(f"  {c['name']}, {c['age']} -- {c['occupation']} (connected to {c['place_name']})")
     if args.characters_out:

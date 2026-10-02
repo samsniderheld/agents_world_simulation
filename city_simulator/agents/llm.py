@@ -5,14 +5,32 @@ providers/base.py for the interface every provider implements.
 
 Every other file in this package (agent.py, planning.py, memory.py,
 reflection.py, treatment.py) imports this module and calls these same
-five functions regardless of provider -- none of them need to know a
-provider swap is even possible. embed() is the one function that's never
-provider-switched: it always goes to the ollama provider specifically,
-since there's no Claude-API embeddings endpoint to swap it to.
+functions regardless of provider -- none of them need to know a
+provider swap is even possible. embed()/embed_many() are never
+provider-switched: they always go to the ollama provider specifically,
+since there's no Claude-API embeddings endpoint to swap them to.
+
+Every call passes through a per-backend concurrency cap
+(config.MAX_CONCURRENCY): the tick loop fires calls from many threads at
+once, and this is what keeps that from swamping a local server or tripping
+a hosted API's rate limit.
 """
+
+import threading
 
 from . import config
 from . import providers
+
+_caps: dict = {}
+_caps_lock = threading.Lock()
+
+
+def _cap(name: str) -> threading.Semaphore:
+    with _caps_lock:
+        if name not in _caps:
+            limit = config.EMBED_MAX_CONCURRENCY if name == "embed" else config.MAX_CONCURRENCY.get(name, 4)
+            _caps[name] = threading.BoundedSemaphore(limit)
+        return _caps[name]
 
 
 def chat(messages, model=None, temperature=0.7, context_tokens=None, provider=None) -> str:
@@ -21,9 +39,11 @@ def chat(messages, model=None, temperature=0.7, context_tokens=None, provider=No
     than whatever the simulation itself is using) -- deliberately not a
     global config.PROVIDER mutation, since agent tick loops can be
     running concurrently in other threads against the same dispatcher."""
-    return providers.get_provider(provider).chat(
-        messages, model=model, temperature=temperature, context_tokens=context_tokens,
-    )
+    name = provider or config.PROVIDER
+    with _cap(name):
+        return providers.get_provider(name).chat(
+            messages, model=model, temperature=temperature, context_tokens=context_tokens,
+        )
 
 
 def complete(prompt: str, model=None, temperature=0.7, context_tokens=None, provider=None) -> str:
@@ -35,7 +55,16 @@ def complete(prompt: str, model=None, temperature=0.7, context_tokens=None, prov
 def embed(text: str, model=None) -> list:
     """Return an embedding vector for `text` -- always via Ollama, never
     the active chat provider (see module docstring)."""
-    return providers.get_provider("ollama").embed(text, model=model)
+    with _cap("embed"):
+        return providers.get_provider("ollama").embed(text, model=model)
+
+
+def embed_many(texts: list, model=None) -> list:
+    """Embedding vectors for several texts in one request (always Ollama)."""
+    if not texts:
+        return []
+    with _cap("embed"):
+        return providers.get_provider("ollama").embed_many(texts, model=model)
 
 
 def list_models() -> list:
