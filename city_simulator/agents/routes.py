@@ -176,6 +176,9 @@ def run():
         # Simulated time of day the run starts at, "HH:MM" (24-hour);
         # blank = 06:00.
         "start_time": _start_time(body.get("start_time")),
+        # Dice & DM (agents/dm/): tasks that can fail, checks, sheets.
+        "dm": bool(body.get("dm", False)),
+        "seed": _opt_int(body.get("seed")),
     }
     ok, error = jobs.start(params)
     return json_response({"ok": ok, "error": error}, status=200 if ok else 409)

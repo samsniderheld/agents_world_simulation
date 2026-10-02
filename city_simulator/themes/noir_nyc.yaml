@@ -1936,3 +1936,52 @@ prompts:
       Question: {question}
 
       Answer in a few sentences from the log alone, naming who said or did what, and when and where. If the log doesn't answer it, say so and say what it does show. Plain text.
+  dm:
+    sheet: '{name}''s character sheet: {stats}. {summary}'
+    decompose: |-
+      {identity}
+
+      {cast_constraint}
+      {directive_block}
+      {sheet}
+
+      {now_line}{name}'s current goal: "{step}"
+
+      Break this into {n} tasks, one for each stretch of {span}, that {name} attempts in order. A task can be routine (it simply happens) or something that could go wrong. For each task give: the action (one short line), the ability it tests (STR, DEX, CON, INT, WIS or CHA), how hard it is (trivial, easy, medium, hard or very hard), and who it involves, if it involves someone named above. Play to {name}'s strengths and goals, but let them take real risks -- not everything should be easy.{where}
+      Reply as JSON: {"tasks": [{"action": "...", "stat": "DEX", "difficulty": "medium", "target": ""}, ...]{where_json}}
+    decompose_where: 'Also pick where {name} should be for this whole goal: one of these places, or "STAY" to remain
+      at {location}: {places}.'
+    narrate: |-
+      {identity}
+      {sheet}
+
+      At {place}, {name} attempts: {action} ({stat_name}, {difficulty}).
+      The dice decide: {outcome}. ({check})
+
+      You are the game master. Narrate what happens in one or two vivid sentences, true to the outcome -- a success succeeds, a failure fails, and a critical result is dramatic. Then say in a few words how {name} feels about it. Only if it clearly follows from what happened, add one effect: money gained or lost (a number of {currency}, negative for a loss -- paying for something is a loss; leave 0 unless money really changed hands) and/or one condition from: {conditions}.
+      Reply as JSON: {"narration": "...", "feeling": "...", "money": 0, "condition": ""}
+    narrate_fallback: '{name} attempted to {action} -- {outcome}.'
+    outcome_memory: '{name} tried to {action} ({check}): {narration} {name} feels {feeling}.'
+    react: |-
+      {identity}
+
+      {cast_constraint}
+      {directive_block}
+      {sheet}
+
+      Relevant memories:
+      {memories}
+
+      {name}'s current task: {action}
+      New observation: {observation}
+
+      What does {name} do? Reply with exactly one line, one of:
+      TALK <intent>: <what {name} wants from {other}> -- where <intent> is one of persuade, deceive, intimidate, charm, ask for help, threaten
+      REACT: <a different action, without talking>
+      CONTINUE
+    social_won: '{actor} tried to {intent} {target} ({check}) and it worked: {target} gives way, at least for now.
+      The conversation must show this.'
+    social_lost: '{actor} tried to {intent} {target} ({check}) and it failed{badly}: {target} doesn''t give an inch.
+      The conversation must show this.'
+    social_memory: '{actor} tried to {intent} {target} and {result}.'
+    perception: '{observer} notices that {target} seems {detail}.'

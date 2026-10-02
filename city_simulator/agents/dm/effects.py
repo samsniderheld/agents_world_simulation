@@ -11,6 +11,11 @@ MOOD = {"crit_success": (2, "triumphant"), "success": (1, "satisfied"),
 CRIT_FAIL_CONDITION = {"STR": "injured", "DEX": "injured", "CON": "exhausted",
                        "INT": "shaken", "WIS": "shaken", "CHA": "humiliated"}
 MONEY_LIMIT = 200          # the most a single narrated effect can move
+# A narrated money change only counts when the moment is actually about
+# money (a small model otherwise pays people for walking down a hallway).
+MONEY_WORDS = ("money", "pay", "paid", "cash", "dollar", "cent", "buck", "coin", "silver", "gold", "bet", "wager",
+               "bribe", "buy", "bought", "sell", "sold", "steal", "stole", "collect", "debt", "loan", "payroll",
+               "tip", "wallet", "purse", "price", "fee", "rent", "win", "won", "lose", "lost", "cards", "dice")
 SOCIAL_INTENTS = ("persuade", "deceive", "intimidate", "charm", "ask for help", "threaten")
 # intent -> (target's attitude shift toward the actor on a win, on a loss)
 SOCIAL_ATTITUDE = {"persuade": (12, -4), "charm": (15, -6), "ask for help": (10, -3),
@@ -46,13 +51,18 @@ def apply_check(sheet: CharacterSheet, result, goal_index: int = None) -> list:
     return notes
 
 
-def apply_narrated(sheet: CharacterSheet, effect: dict) -> list:
+def apply_narrated(sheet: CharacterSheet, effect: dict, critical: bool = True, about: str = None) -> list:
     """The narrator's optional effect, validated and clamped: money in
-    [-MONEY_LIMIT, MONEY_LIMIT] (never below zero), one known condition."""
+    [-MONEY_LIMIT, MONEY_LIMIT] (never below zero), and one known condition
+    -- only after a critical result (a small model hands out conditions
+    far too freely otherwise). With `about` (the action and narration),
+    money only moves if that text is about money."""
     notes = []
     if not isinstance(effect, dict):
         return notes
     money = effect.get("money")
+    if about is not None and not any(w in about.lower() for w in MONEY_WORDS):
+        money = 0
     if isinstance(money, (int, float)) and money:
         change = int(max(-MONEY_LIMIT, min(MONEY_LIMIT, money)))
         change = max(change, -sheet.money)
@@ -60,7 +70,7 @@ def apply_narrated(sheet: CharacterSheet, effect: dict) -> list:
             sheet.money += change
             notes.append(f"{change:+d} money")
     condition = str(effect.get("condition") or "").strip().lower()
-    if condition in CONDITIONS:
+    if critical and condition in CONDITIONS:
         sheet.add_condition(condition)
         notes.append(condition)
     return notes

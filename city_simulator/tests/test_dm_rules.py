@@ -114,6 +114,7 @@ class Effects(unittest.TestCase):
         self.assertEqual(s.money, 0)                       # never below zero
         self.assertIn("drunk", s.conditions)
         effects.apply_narrated(s, {"money": 10_000, "condition": "immortal"})
+        self.assertEqual(effects.apply_narrated(sheet(), {"condition": "drunk"}, critical=False), [])
         self.assertEqual(s.money, effects.MONEY_LIMIT)
         self.assertNotIn("immortal", s.conditions)
         self.assertEqual(effects.apply_narrated(s, "nonsense"), [])

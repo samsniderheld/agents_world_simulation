@@ -55,7 +55,7 @@ class World:
     def __init__(self, agents: list[Agent], start_time: datetime.datetime = None,
                  tick_sleep: int = 0, verbose: bool = False,
                  stop_flag: threading.Event = None, known_places: list = None,
-                 anchored_agents: set = None, directive: str = None, tick_minutes: int = None):
+                 anchored_agents: set = None, directive: str = None, tick_minutes: int = None, dm=None):
         self.agents = agents
         self.start_time = start_time or datetime.datetime(2026, 8, 24, 6, 0)
         self.tick = 0
@@ -67,6 +67,9 @@ class World:
         # input -- passed straight through to every plan/decompose/react/
         # dialogue call this run makes (see textutil.directive_block).
         self.directive = directive
+        # Dice & DM (agents/dm/scene.py's SceneDM) when the run has it on;
+        # None keeps every step exactly as it was.
+        self.dm = dm
         # Simulated minutes per tick -- the Simulation node's setting, falling
         # back to config.TICK_MINUTES. Drives the clock and the length each
         # planned substep is asked to fill (see planning.decompose).
@@ -111,7 +114,7 @@ class World:
                     pairs.append((a, b))
         return pairs
 
-    def _run_conversation(self, a: Agent, b: Agent, max_turns: int = 6):
+    def _run_conversation(self, a: Agent, b: Agent, max_turns: int = 6, ruling: str = ""):
         """The whole exchange in one model call (it used to be one call per
         line, six in a row): both people's identities, what each remembers
         about the other, and the scene. The reply's "Name: line" lines are
@@ -127,7 +130,10 @@ class World:
         prompt = t.prompt(
             "scene.conversation", place=a.location, a_name=a.name, a_identity=a.identity_summary(),
             a_doing=a.current_action, a_memories=about[a.name], b_name=b.name, b_identity=b.identity_summary(),
-            b_doing=b.current_action, b_memories=about[b.name], directive_block=directive_block(self.directive),
+            b_doing=b.current_action, b_memories=about[b.name],
+            # A Dice & DM ruling on the social move behind this talk rides
+            # along with the scene direction.
+            directive_block=directive_block(self.directive) + (f"\n{ruling}\n" if ruling else ""),
             max_turns=max_turns)
         reply = llm.complete(prompt, temperature=0.8)
         lines = _parse_conversation(reply, a, b)[:max_turns]
@@ -162,7 +168,7 @@ class World:
         planning.next_action(agent, self.tick, known_names=other_names, known_places=known_places,
                               verbose=self.verbose, color=color, directive=self.directive,
                               tick_minutes=self.tick_minutes,
-                              now=self.clock(), total_ticks=self.total_ticks, until=self.until)
+                              now=self.clock(), total_ticks=self.total_ticks, until=self.until, dm=self.dm)
         self._say(f"{agent.name} ({agent.location}): {agent.current_action}")
         recorder.log("action", self.tick, agent=agent.name,
                      text=agent.current_action, location=agent.location,
@@ -171,6 +177,9 @@ class World:
             f"{agent.name} is {agent.current_action}", kind="observation", tick=self.tick,
             agent_name=agent.name, color=color, verbose=self.verbose,
         )
+        if self.dm is not None:
+            self.dm.resolve(agent, self.tick, self.clock(), goal_index=agent.current_item,
+                            verbose=self.verbose, color=color)
         agent.memory.flush()
 
     def _maybe_reflect(self, agent: Agent):
@@ -196,6 +205,18 @@ class World:
                 continue
             observation = f"{b.name} is nearby, currently: {b.current_action}."
             other_names = [x.name for x in self.agents if x is not a]
+            if self.dm is not None:
+                # Dice & DM: a passive read on the other person, and a
+                # reaction that may be a social move decided by a contest.
+                observation += self.dm.perceive(a, b)
+                reacted, intent, _topic = self.dm.react(a, b, observation, self.tick, other_names, self.directive,
+                                                        verbose=self.verbose, color=self.agent_colors[a.name])
+                if reacted and intent:
+                    ruling = self.dm.social(a, b, intent, self.tick, self.clock())
+                    self._run_conversation(a, b, ruling=ruling)
+                    already_talked.add(a)
+                    already_talked.add(b)
+                continue
             reacted = a.react(observation, self.tick, known_names=other_names,
                                verbose=self.verbose, color=self.agent_colors[a.name], directive=self.directive)
             if reacted and any(hint in a.current_action.lower() for hint in _DIALOGUE_HINTS):
@@ -224,6 +245,8 @@ class World:
             with ThreadPoolExecutor(max_workers=len(self.agents)) as pool:
                 list(pool.map(self._maybe_reflect, self.agents))
 
+        if self.dm is not None:
+            self.dm.end_tick()
         self.tick += 1
 
     def run(self, ticks: int):

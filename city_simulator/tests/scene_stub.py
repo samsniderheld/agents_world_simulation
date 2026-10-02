@@ -14,6 +14,7 @@ own code: the LLM provider, citystate, and the thread pool.
 """
 
 import hashlib
+import json
 import re
 
 
@@ -33,6 +34,22 @@ class StubProvider:
         prompt = messages[-1]["content"]
         self.prompts.append(prompt)
         h = _h(prompt)
+        # --- Dice & DM prompts (agents/dm/scene.py) ---
+        if 'Reply as JSON: {"tasks"' in prompt:
+            n = int(re.search(r"Break this into (\d+) tasks", prompt).group(1))
+            stats = ["STR", "DEX", "CON", "INT", "WIS", "CHA"]
+            levels = ["trivial", "easy", "medium", "hard", "very hard"]
+            tasks = [{"action": f"task {k} ({h % 1000003})", "stat": stats[(h >> k) % 6],
+                      "difficulty": levels[(h >> (k + 3)) % 5], "target": ""} for k in range(n)]
+            data = {"tasks": tasks}
+            if '"where": "..."' in prompt:
+                data["where"] = PLACES[h % len(PLACES)] if h % 2 else "STAY"
+            return json.dumps(data)
+        if "You are the game master" in prompt:
+            return json.dumps({"narration": f"It went the way the dice said ({h % 100}).", "feeling": "tense",
+                               "money": (h % 21) - 10, "condition": ["", "drunk", "shaken"][h % 3]})
+        if "TALK <intent>:" in prompt:
+            return ["TALK (persuade): the job", "TALK threaten: the money", "REACT: leaves quietly", "CONTINUE"][h % 4]
         if "rate the likely poignancy" in prompt:
             n = len(re.findall(r"^\d+\. ", prompt, re.MULTILINE))
             return "\n".join(f"{i}. {(h >> i) % 9 + 1}" for i in range(1, n + 1))
@@ -107,3 +124,6 @@ class StubCitystate:
 
     def append_agent_run(self, run_record):
         self.appended.append(run_record)
+
+    def update_character_fields(self, agent_id, **fields):
+        self.updated = getattr(self, "updated", []) + [(agent_id, fields)]

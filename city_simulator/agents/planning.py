@@ -194,7 +194,7 @@ def decompose(agent: Agent, broad_step: str, tick: int, n_substeps: int = 3,
 def next_action(agent: Agent, tick: int, known_names: list = None, known_places: list = None,
                  verbose: bool = False, color: str = "", directive: str = None,
                  tick_minutes: int = None, now: str = None, total_ticks: int = None,
-                 until: str = None) -> str:
+                 until: str = None, dm=None) -> str:
     """This tick's action. On the agent's first turn, plans the whole rest
     of the run (see generate_plan) and spreads the plan's items evenly over
     the remaining ticks; each item is broken into exactly as many actions as
@@ -212,6 +212,8 @@ def next_action(agent: Agent, tick: int, known_names: list = None, known_places:
         n_items = min(remaining, MAX_PLAN_ITEMS)
         generate_plan(agent, tick, remaining * span, n_items, known_names=known_names,
                       verbose=verbose, color=color, directive=directive, now=now, until=until)
+        if dm is not None:                     # Dice & DM: plan items become goals
+            dm.on_plan(agent, agent.plan)
         if not agent.plan:
             agent.current_action = "idle"
             return agent.current_action
@@ -223,9 +225,20 @@ def next_action(agent: Agent, tick: int, known_names: list = None, known_places:
     start, end = agent.plan_bounds[item]
     if item != agent.current_item:
         agent.current_item = item
-        agent.substeps = decompose(agent, agent.plan[item], tick, n_substeps=max(1, end - start),
-                                   known_names=known_names, known_places=known_places,
-                                   verbose=verbose, color=color, directive=directive,
-                                   tick_minutes=tick_minutes, now=now)
+        if dm is not None:
+            # Dice & DM: the item becomes tasks that can succeed or fail.
+            agent.substeps, agent.tasks, where_raw = dm.decompose(
+                agent, agent.plan[item], tick, max(1, end - start), known_names, known_places, directive,
+                _substep_length(tick_minutes), _now_line(now), verbose=verbose, color=color)
+            destination = _resolve_destination(where_raw, known_places, agent.location)
+            if destination:
+                _move_agent(agent, destination, tick, verbose=verbose, color=color)
+        else:
+            agent.substeps = decompose(agent, agent.plan[item], tick, n_substeps=max(1, end - start),
+                                       known_names=known_names, known_places=known_places,
+                                       verbose=verbose, color=color, directive=directive,
+                                       tick_minutes=tick_minutes, now=now)
     agent.current_action = agent.substeps[min(max(0, tick - start), len(agent.substeps) - 1)]
+    if dm is not None:
+        agent.current_task = agent.tasks[min(max(0, tick - start), len(agent.tasks) - 1)]
     return agent.current_action

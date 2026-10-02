@@ -112,7 +112,8 @@ def _hydrate_agents(agents: list) -> None:
 def run(ticks: int = 8, provider: str = None, chat_model: str = None, embed_model: str = None,
         context_tokens: int = None, tick_sleep: float = 0,
         agent_names: list = None, verbose: bool = False, stop_flag=None, convene_at: str = None,
-        directive: str = None, tick_minutes: int = None, start_time: str = None):
+        directive: str = None, tick_minutes: int = None, start_time: str = None,
+        dm: bool = False, seed: int = None):
     """Blocking -- meant to be called on a background thread (see
     agents/jobs.py). Configures config.py's overridable settings, builds
     the chosen agents, and runs the tick loop.
@@ -144,7 +145,11 @@ def run(ticks: int = 8, provider: str = None, chat_model: str = None, embed_mode
     `directive` is the Simulation node's own free-text field ("guide how
     the characters are interacting") -- passed straight through to World,
     which hands it to every plan/decompose/react/dialogue call this run
-    makes (see textutil.directive_block for the actual prompt fragment)."""
+    makes (see textutil.directive_block for the actual prompt fragment).
+
+    `dm` turns on Dice & DM (agents/dm/): tasks that can fail, d20 checks,
+    narrated outcomes, character sheets saved back to the characters at the
+    end. `seed` makes its dice reproducible. Off, the run is unchanged."""
     if provider:
         config.PROVIDER = provider
     if chat_model:
@@ -192,6 +197,7 @@ def run(ticks: int = 8, provider: str = None, chat_model: str = None, embed_mode
             "tick_minutes": tick_minutes or config.TICK_MINUTES,
             # "HH:MM" -- likewise needed to rebuild dialogue timestamps.
             "start_time": start_time or "06:00",
+            **({"dm": True, "seed": seed} if dm else {}),
         },
     )
 
@@ -206,9 +212,22 @@ def run(ticks: int = 8, provider: str = None, chat_model: str = None, embed_mode
 
     anchored_agents = {a.name for a in agents} if convene_at else None
     hour, minute = (int(x) for x in (start_time or "06:00").split(":"))
+    scene_dm = _build_dm(agents, city_data, seed) if dm else None
     world = World(agents, start_time=datetime.datetime(2026, 8, 24, hour, minute), tick_sleep=tick_sleep, verbose=verbose, stop_flag=stop_flag,
                   known_places=known_places, anchored_agents=anchored_agents, directive=directive,
-                  tick_minutes=tick_minutes)
+                  tick_minutes=tick_minutes, dm=scene_dm)
     world.run(ticks)
 
     citystate.append_agent_run(recorder.to_dict())
+    if scene_dm is not None:
+        scene_dm.save(citystate.update_character_fields)
+
+
+def _build_dm(agents: list, city_data: dict, seed: int):
+    """A SceneDM with each agent's saved sheet (rolled for any who have
+    none); agents that aren't saved characters get a sheet for this run."""
+    from .dm.scene import SceneDM
+    characters = {c["name"]: c for c in (city_data or {}).get("characters", [])} if _active_roster is not None else {}
+    records = {a.name: characters[a.name] for a in agents if a.name in characters}
+    return SceneDM(agents, {name: c.get("id") for name, c in records.items()},
+                   seed=seed if seed is not None else 1959, records=records)
