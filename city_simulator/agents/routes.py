@@ -272,16 +272,15 @@ def character_sheet(agent_id):
 
 def _sheet_json(sheet) -> dict:
     """A sheet plus the derived bits the UI shows (modifiers, labels)."""
-    import theme
     from .dm.rules import STAT_NAMES, STATS
-    from .dm.sheet import attitude_label
+    from .dm.sheet import attitude_label, currency
     return {
         **sheet.to_dict(),
         "modifiers": {s: sheet.mod(s) for s in STATS},
         "stat_names": STAT_NAMES,
         "mood_text": sheet.mood_text(),
         "attitudes": {n: attitude_label(v) for n, v in sheet.relationships.items()},
-        "currency": (theme.current().get("world") or {}).get("currency", "coins"),
+        "currency": currency(),
     }
 
 
@@ -295,12 +294,17 @@ def city_residents():
 
 @bp.get("/city/residents/<resident_id>")
 def city_resident(resident_id):
-    """One background resident's page (agents/city/zoom.py)."""
+    """One background resident's page (agents/city/zoom.py), with their
+    Dice & DM sheet -- the one a CITY run saved, or the roll a run would
+    give them (deterministic from their id; not saved here)."""
     from .city import zoom
+    from .dm import stats as dm_stats
     try:
-        return json_response(zoom.resident_detail(resident_id))
+        detail = zoom.resident_detail(resident_id)
     except ValueError as e:
         return json_response({"error": str(e)}, status=404)
+    sheet = dm_stats.sheet_from_record({**detail, "sheet": detail.get("sheet")}, seed_key=resident_id)
+    return json_response({**detail, "sheet": _sheet_json(sheet)})
 
 
 @bp.post("/city/residents/<resident_id>/character")

@@ -1,4 +1,5 @@
 import type { CharacterSheet } from '../api/types';
+import './inspector.css';
 
 const STAT_ORDER = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'];
 

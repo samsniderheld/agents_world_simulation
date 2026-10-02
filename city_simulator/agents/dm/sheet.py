@@ -3,7 +3,7 @@
     stats          {"STR": 8..18, ...}
     mood           -3..+3 (devastated .. elated) plus the word for how the last
                    big moment left them ("rattled", "triumphant"); drifts one
-                   step back toward steady each tick
+                   step back toward steady after a quiet tick
     relationships  {name: attitude -100..100} -> hostile .. loyal
     goals          [{text, progress 0..3, status active|achieved|failed}]
     conditions     {name: ticks left} -- see CONDITIONS
@@ -14,6 +14,8 @@ agent.json ("sheet"), a background resident's in background.json.
 """
 
 import dataclasses
+
+import theme
 
 from .rules import STATS, modifier
 
@@ -31,6 +33,17 @@ CONDITIONS = {
 }
 
 ATTITUDES = [(-60, "hostile"), (-25, "unfriendly"), (-5, "wary"), (5, "neutral"), (40, "friendly"), (101, "loyal")]
+
+
+def currency() -> str:
+    """The theme's money word ("dollars", "silver"). A city's own copy of
+    the default theme made before it had one gets the default's; any
+    other theme without one, "coins"."""
+    t = theme.current()
+    word = (t.get("world") or {}).get("currency")
+    if not word and t.id == theme.DEFAULT_ID:
+        word = (theme.default().get("world") or {}).get("currency")
+    return word or "coins"
 
 
 def attitude_label(value: int) -> str:

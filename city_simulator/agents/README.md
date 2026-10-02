@@ -226,6 +226,7 @@ These arrive from the Simulation node through `routes.py` and
 | `directive` | free text ("they're planning a heist, keep it tense") spliced into every plan, decompose, react, and dialogue prompt via `textutil.directive_block()`. It's a scene nudge for this run only, not a permanent trait. |
 | `provider`, `chat_model` | `ollama` (default), `claude`, or `openai` (any OpenAI-compatible server), and which model |
 | `verbose` | colored per-agent tracing in the server terminal (`display.py`) |
+| `dm`, `seed` | dice & DM on (see *Dice & DM*), and the seed its dice roll from |
 
 `POST /api/agents/stop` sets a flag the loop checks between ticks.
 
@@ -476,6 +477,7 @@ or the latest saved run after a restart, cut to fit the model's context.
 ```bash
 python3 -m agents.city.bench                  # 50/200/500/1000 agents on the stub server
 python3 -m agents.city.bench --real --profile mac --agents 50 --ticks 2
+python3 -m agents.city.bench --dm              # with dice & DM on
 python3 -m unittest discover -s tests -t .    # includes the SCENE regression snapshot
 ```
 
@@ -485,6 +487,98 @@ tick's time tracks the ideal number of round trips: 0.6 s at 50 agents, 0.9 s
 at 1000. `tests/test_scene_regression.py` snapshots a five-agent SCENE run
 (event sequence and every prompt) against a deterministic stub; it has
 passed unchanged through every CITY change.
+
+## Dice & DM
+
+A small model on its own makes flat agents: every action simply happens, so
+moods, grudges and memories barely move. With **dice & DM** on (a checkbox
+on both simulation nodes, on by default for new nodes; `dm: true` in the
+run request) the simulation runs like a tabletop game. The model proposes
+what a character tries, code rolls whether it works, the model narrates
+the result, and the consequences feed every later prompt. Code lives in
+`dm/`; with it off, both modes behave exactly as before (the SCENE and
+theme golden snapshots are unchanged).
+
+**Character sheets** (`dm/sheet.py`). Everyone has the D&D six (STR, DEX,
+CON, INT, WIS, CHA; modifier `(score - 10) // 2`), plus what the dice have
+done to them:
+
+| Part | What it is |
+|---|---|
+| Mood | from -3 to 3, with a word ("rattled", "triumphant") |
+| Relationships | an attitude toward each person, from -100 (hostile) to 100 (loyal) |
+| Goals | one per plan item, each with progress out of 3 |
+| Conditions | injured, exhausted, drunk, shaken, humiliated, inspired, wanted; each lasts a few ticks and gives advantage or disadvantage on some stats |
+| Money | in the theme's `world.currency` |
+
+Stats are rolled once (4d6 drop lowest) from the occupation's archetype
+(`dm/stats.py`), seeded by the character's id. The sheet is saved:
+characters in their record, and background residents in `background.json`.
+A run picks up where the last one left off. The inspector's **Sheet** tab
+and a resident's page show it.
+
+**The loop:**
+
+1. **Plan.** Each plan item becomes a goal.
+2. **Decompose.** A goal becomes *tasks* as JSON:
+   `{action, stat, difficulty, target}`. The model sees the sheet, so it can
+   play to the character's strengths.
+3. **Resolve.** Each tick, the current task is rolled: d20 plus the
+   modifier against a DC (easy 10, medium 15, hard 20, very hard 25).
+   - Trivial tasks just happen, with no roll and no call.
+   - A natural 20 is a critical success and a natural 1 a critical failure.
+   - Conditions give advantage or disadvantage.
+   - The narrator call gets the outcome and must honour it. It returns
+     `{narration, feeling, money, condition}`, and the narrated effects are
+     clamped:
+     - money moves only when the moment is about money;
+     - a condition is added only on a critical result.
+   - Fixed tables (`dm/effects.py`) move mood and goal progress. A
+     critical failure leaves a condition (a STR/DEX fumble injures; a
+     botched CHA check humiliates).
+   - The result becomes a memory, with high importance on a crit.
+4. **Meeting someone.** The observer makes a passive Wisdom read (10 + WIS
+   against DC 12-14). A pass notices visible conditions and strong moods.
+5. **Social move.** The reaction may be `TALK <intent>:`, where the intent is
+   persuade, deceive, intimidate, charm, ask for help or threaten.
+   - This starts an opposed check: CHA (STR to threaten) against the
+     target's WIS. The target's attitude toward the actor helps or hurts.
+   - The ruling ("it WORKED: Sal is won over..." / "it FAILED") goes into
+     the conversation prompt, which must honour it.
+   - It shifts both sides' attitude and mood.
+6. **End of tick.** Conditions count down. A mood drifts back toward steady
+   only after a tick in which nothing moved it.
+
+Dice are seeded per (run seed, agent, tick, purpose), so a seeded run
+(`seed` option, default 1959) is reproducible.
+
+**CITY mode** (`dm/city.py`):
+- A **RESOLVE** wave sits between DECOMPOSE and ENCOUNTERS, with every
+  hero's narration in one batch.
+- Hero encounters get the perception read and social check. The ruling is
+  in every lockstep dialogue line, the background resident's included.
+- **Background residents** roll with no LLM (`dm/background.py`):
+  - Each schedule block's activity is matched to a kind (work, drink,
+    errands, social, rest, leisure) from the theme's `city_life.dice`.
+  - The kind says which stat it tests (work tests the occupation's best
+    stat), how hard it may be, and how money moves (wages on a good shift,
+    spending at the bar).
+  - A theme template says what happened.
+  - The log gets one `checks` summary per tick plus each crit as an
+    `outcome`.
+  - Their mood and money go into their schedule and dialogue prompts.
+- `python3 -m agents.city.bench --dm` reports checks per tick. On the stub
+  server, heroes make about one more call per tick (the narration) and
+  background residents none.
+
+**Events:** `check` (stat, roll, modifier, total, DC, outcome; opposed
+checks add `opposed_by`/`opposed_total`), `outcome` (the narration,
+feeling and effects), and CITY's `checks` summary. Treatments get each
+result as a transcript line ("Lou tried to pick the lock -- IT FAILED: the
+pick snapped...").
+
+**Prompts:** the theme's optional `prompts.dm` section and `city_life.dice`
+table. A theme without them uses the default theme's.
 
 ## Files
 
@@ -515,6 +609,11 @@ passed unchanged through every CITY change.
 | `city/recorder.py` | CITY's ring-buffered, level-of-detail event log |
 | `city/stub_server.py`, `city/bench.py` | A fake LLM server; the headless benchmark |
 | `city/config.py` | CITY-only tunables |
+| `dm/rules.py` | Dice: checks, DCs, crits, advantage, opposed checks |
+| `dm/sheet.py`, `dm/stats.py` | Character sheets; stats rolled from an occupation |
+| `dm/effects.py` | What a check does to mood, goals, conditions, money, relationships |
+| `dm/scene.py`, `dm/city.py` | The DM for a SCENE run and for a CITY run (tasks, resolving, social and perception checks) |
+| `dm/background.py` | Background residents' LLM-free dice |
 
 ## Deliberate simplifications
 

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { agentsApi, city } from '../api/client';
 import type { AgentRecord, CharacterSheet } from '../api/types';
-import { eventLine, fmtDate } from './format';
+import { eventLine, eventOutcome, fmtDate } from './format';
 import { MediaGrid } from './MediaGrid';
 import { SheetView } from './SheetView';
 
@@ -109,11 +109,11 @@ function EventLog({ record }: { record: AgentRecord }) {
       {newestFirst(record.runs).map((run, i) => (
         <div key={i}>
           <div className="inspector-run-header">
-            {run.meta?.mode === 'city' ? 'city run' : 'run'} · {fmtDate(run.started_at)}
+            {run.meta?.mode === 'city' ? 'city run' : 'run'}{run.meta?.dm ? ' · dice & DM' : ''} · {fmtDate(run.started_at)}
           </div>
           {newestFirst(run.events).map((e, j) => (
             <div className="inspector-event-row" key={j}>
-              <span className="inspector-event-badge">{e.kind}</span>
+              <span className="inspector-event-badge" data-outcome={eventOutcome(e)}>{e.kind}</span>
               <span>{eventLine(e)}</span>
             </div>
           ))}

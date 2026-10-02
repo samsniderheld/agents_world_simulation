@@ -163,11 +163,14 @@ export const agentsApi = {
     // Simulation node -- threaded through to every plan/decompose/react/
     // dialogue call this run makes (see agents/textutil.directive_block).
     directive?: string;
+    // Dice & DM (agents/dm/): tasks that can fail, d20 checks, narration.
+    dm?: boolean;
   }) =>
     request<{ ok: boolean; error: string | null }>('/api/agents/run', {
       method: 'POST',
       body: json({
         agent_names: params.agentNames,
+        dm: params.dm ?? false,
         ticks: params.ticks ?? 8,
         tick_minutes: params.tickMinutes,
         start_time: params.startTime,
@@ -200,6 +203,7 @@ export const agentsApi = {
     placeId?: string;
     persistHeroMemories?: boolean;
     seed?: number;
+    dm?: boolean;
   }) =>
     request<{ ok: boolean; error: string | null }>('/api/agents/run', {
       method: 'POST',
@@ -220,6 +224,7 @@ export const agentsApi = {
         location_mode: params.placeId ? 'convene' : 'grounded',
         persist_hero_memories: params.persistHeroMemories ?? true,
         seed: params.seed,
+        dm: params.dm ?? false,
       }),
     }),
 

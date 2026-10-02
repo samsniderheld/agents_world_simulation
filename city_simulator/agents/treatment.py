@@ -26,6 +26,31 @@ _SHOT_LINE_RE = re.compile(r"^\s*\d+\.\s*(.+)$")
 _DEFAULT_START_TIME = datetime.datetime(2026, 8, 24, 6, 0)
 
 
+# Dice & DM (agents/dm/): a run with dice on also records "check" and
+# "outcome" events; a treatment gets each one as a line between the actions
+# and the dialogue, so the drama of who succeeded and who failed carries over.
+_DICE_WORDS = {"crit_success": "A TRIUMPH", "success": "IT WORKED", "failure": "IT FAILED",
+               "crit_failure": "A DISASTER"}
+_ORDER = {"action": 0, "check": 1, "outcome": 1, "dialogue": 2}
+
+
+def _is_narrative(e: dict) -> bool:
+    """Action and dialogue lines, plus dice results: a task's narrated
+    outcome, and a social check (whose task-check twin the outcome covers)."""
+    kind = e.get("kind")
+    return kind in ("action", "dialogue", "outcome") or (kind == "check" and bool(e.get("opposed_by")))
+
+
+def _dice_line(e: dict, time: str) -> str:
+    word = _DICE_WORDS.get(e.get("outcome"), "")
+    action = e.get("action") or ""
+    action = action[:1].lower() + action[1:]
+    if e["kind"] == "check":     # a social contest
+        return f"[{time}] {e.get('agent')} tried to {action} -- {word}"
+    return f"[{time}] {e.get('agent')} tried to {action} -- {word}: {e.get('text')}" if action else \
+        f"[{time}] {e.get('agent')} -- {word}: {e.get('text')}"
+
+
 def build_transcript(agent_records: dict, started_at: str) -> tuple:
     """Reconstructs one run's full narrative transcript from persisted
     per-agent records -- needed because citystate.store.append_agent_run()
@@ -69,8 +94,8 @@ def build_transcript(agent_records: dict, started_at: str) -> tuple:
                 start = _DEFAULT_START_TIME.replace(hour=hour, minute=minute)
             agent_names.add(name)
 
-    narrative = [e for e in merged_events if e.get("kind") in ("action", "dialogue")]
-    narrative.sort(key=lambda e: (e.get("tick", 0), 0 if e["kind"] == "action" else 1))
+    narrative = [e for e in merged_events if _is_narrative(e)]
+    narrative.sort(key=lambda e: (e.get("tick", 0), _ORDER[e["kind"]]))
 
     log = []
     locations = []
@@ -81,6 +106,8 @@ def build_transcript(agent_records: dict, started_at: str) -> tuple:
             log.append(f"[{time}] {e.get('agent')} ({location}): {e.get('text')}")
             if location and location not in locations:
                 locations.append(location)
+        elif e["kind"] in ("check", "outcome"):
+            log.append(_dice_line(e, e.get("time", "")))
         else:
             when = start + datetime.timedelta(minutes=tick_minutes * e.get("tick", 0))
             time = clock_label(start, when, tick_minutes)
@@ -110,23 +137,25 @@ def build_city_transcript(agent_records: dict, started_at: str, place: str = Non
                     events.append(e)
 
     def keep(e):
-        if e.get("kind") not in ("action", "dialogue"):
+        if not _is_narrative(e):
             return False
         if tick_from is not None and e.get("tick", 0) < tick_from:
             return False
         if tick_to is not None and e.get("tick", 0) > tick_to:
             return False
-        where = e.get("location") if e["kind"] == "action" else e.get("place")
+        where = e.get("place") if e["kind"] == "dialogue" else e.get("location")
         return place is None or where == place
 
     narrative = sorted((e for e in events if keep(e)),
-                       key=lambda e: (e.get("tick", 0), 0 if e["kind"] == "action" else 1, e.get("seq") or 0))
+                       key=lambda e: (e.get("tick", 0), _ORDER[e["kind"]], e.get("seq") or 0))
     narrative = narrative[:max_lines]
     log, names, locations = [], [], []
     for e in narrative:
-        where = e.get("location") if e["kind"] == "action" else e.get("place")
+        where = e.get("place") if e["kind"] == "dialogue" else e.get("location")
         if e["kind"] == "action":
             log.append(f"[{e.get('time', '')}] {e.get('agent')} ({where}): {e.get('text')}")
+        elif e["kind"] in ("check", "outcome"):
+            log.append(_dice_line(e, e.get("time", "")))
         else:
             log.append(f"[{e.get('time', '')}] {e.get('agent')}: {e.get('text')}")
         for n in (e.get("agent"), e.get("listener")):

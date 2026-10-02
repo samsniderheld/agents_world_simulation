@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { agentsApi, history } from '../api/client';
 import type { ResidentDetail } from '../api/types';
+import { SheetView } from '../inspector/SheetView';
 import { navigate } from './router';
 import './gallery.css';
 
@@ -78,6 +79,13 @@ export function ResidentScreen({ cityId, residentId }: { cityId: string; residen
           character: a hero in CITY runs, an Agent you can put on any canvas
           {run?.memories.length ? ', remembering what the last run saw them do' : ''}.
         </div>
+      )}
+
+      {r.sheet && (
+        <section className="resident-sheet">
+          <h2 className="gallery-section-title">Character sheet</h2>
+          <SheetView sheet={r.sheet} />
+        </section>
       )}
 
       {!run ? (

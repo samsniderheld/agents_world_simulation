@@ -234,6 +234,15 @@
   width: 76px;
 }
 
+/* Dice & DM: how a check or outcome went */
+.inspector-event-badge[data-outcome='success'] {
+  color: var(--ok);
+}
+
+.inspector-event-badge[data-outcome='failure'] {
+  color: var(--node-error);
+}
+
 .inspector-run-header {
   font-family: var(--mono);
   font-size: 10px;

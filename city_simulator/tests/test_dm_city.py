@@ -88,6 +88,24 @@ class CityDMRun(unittest.TestCase):
         world, _ = run_city(**{**PARAMS, "ticks": 1, "storage": storage, "city": storage.city})
         self.assertGreater(next(h for h in world.heroes if h.name == "Lou Marino").sheet.money, 4000)
 
+    def test_treatment_transcript_has_the_dice(self):
+        from agents.treatment import build_city_transcript
+        storage = self.world.storage
+        started = storage.city_runs[0]["started_at"]
+        log, names, _ = build_city_transcript(storage.records, started)
+        dice = [ln for ln in log if " -- IT " in ln or " -- A TRIUMPH" in ln or " -- A DISASTER" in ln]
+        self.assertTrue(dice)
+        self.assertTrue(any(": It went as the dice said" in ln for ln in dice))     # a narrated task
+        self.assertTrue(any(ln.split("] ", 1)[1].count(" -- ") == 1 and ":" not in ln.split(" -- ")[1]
+                            for ln in dice))                                         # a social contest
+        # narrowed to one place: only that place's dice results
+        place = next(e["location"] for e in self.events if e["kind"] == "outcome" and e["tier"] == "hero")
+        here = {e["text"] for e in self.events if e["kind"] == "outcome" and e.get("location") == place}
+        narrowed, _, _ = build_city_transcript(storage.records, started, place=place)
+        outcomes = [ln.rsplit(": ", 1)[1] for ln in narrowed if ": It went as the dice said" in ln]
+        self.assertTrue(outcomes)
+        self.assertTrue(set(outcomes) <= here)
+
 
 class CityDMOff(unittest.TestCase):
     def test_no_dm_events_or_prompts(self):

@@ -326,7 +326,7 @@ def resident_detail(resident_id: str) -> dict:
     characters = {c["id"]: c["name"] for c in city.get("characters", [])}
     out = {**{k: record.get(k) for k in ("id", "name", "age", "occupation", "work", "haunt", "home", "shift", "bio")},
            "promoted_to": record.get("promoted_to"), "character_name": characters.get(record.get("promoted_to")),
-           "run": None}
+           "sheet": record.get("sheet"), "run": None}
     summary = city_run.storage.get_city_run()
     if not summary:
         return out

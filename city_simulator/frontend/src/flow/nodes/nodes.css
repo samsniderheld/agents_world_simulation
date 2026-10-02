@@ -452,6 +452,15 @@
   margin-right: 4px;
 }
 
+/* Dice & DM: a check or outcome row's badge says how the roll went */
+.node-log-badge[data-outcome='success'] {
+  color: var(--ok);
+}
+
+.node-log-badge[data-outcome='failure'] {
+  color: var(--node-error);
+}
+
 .node-port {
   width: 9px !important;
   height: 9px !important;

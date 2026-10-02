@@ -29,7 +29,7 @@ from .. import recorder
 from ..gateway import parse_json
 from ..textutil import cast_constraint, directive_block
 from . import effects, rules
-from .sheet import CONDITIONS
+from .sheet import CONDITIONS, currency
 from .stats import sheet_from_record
 
 TASK_SCHEMA = {"type": "object", "required": ["tasks"], "properties": {"tasks": {
@@ -83,7 +83,7 @@ class SceneDM:
 
     @staticmethod
     def currency() -> str:
-        return (theme.current().get("world") or {}).get("currency", "coins")
+        return currency()
 
     def sheet_block(self, agent, others: list = ()) -> str:
         s = agent.sheet
@@ -159,8 +159,8 @@ class SceneDM:
         recorder.log("check", tick, agent=agent.name, action=task["action"], stat=result.stat, roll=result.roll,
                      rolls=result.rolls, mod=result.mod, total=result.total, dc=result.dc, outcome=result.outcome,
                      difficulty=task["difficulty"], text=result.label(), location=agent.location, time=clock)
-        recorder.log("outcome", tick, agent=agent.name, text=narration, feeling=feeling, outcome=result.outcome,
-                     effects=notes, location=agent.location, time=clock)
+        recorder.log("outcome", tick, agent=agent.name, action=task["action"], text=narration, feeling=feeling,
+                     outcome=result.outcome, effects=notes, location=agent.location, time=clock)
         memory = t.prompt("dm.outcome_memory", name=agent.name, action=_lower_first(task["action"]),
                           check=result.label(), narration=narration, feeling=feeling)
         agent.memory.add(memory, kind="observation", tick=tick, importance=8.0 if result.critical else None,
@@ -233,7 +233,7 @@ class SceneDM:
         recorder.log("check", tick, agent=actor.name, action=f"{intent} {target.name}", stat=stat, roll=a.roll,
                      rolls=a.rolls, mod=a.mod, total=a.total, dc=b.total + 1, outcome=a.outcome, opposed_by=target.name,
                      opposed_total=b.total, text=_contest_label(intent, target.name, a, b),
-                     effects=notes, time=clock)
+                     effects=notes, location=actor.location, time=clock)
         result = "it worked" if won else "it failed"
         for who in (actor, target):
             who.memory.add(t.prompt("dm.social_memory", actor=actor.name, intent=intent, target=target.name, result=result),

@@ -220,3 +220,8 @@
   color: var(--text-dim);
   font-variant-numeric: tabular-nums;
 }
+.resident-sheet {
+  max-width: 68ch;
+  display: grid;
+  gap: 8px;
+}

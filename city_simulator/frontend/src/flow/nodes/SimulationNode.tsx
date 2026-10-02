@@ -3,7 +3,7 @@ import type { UIEvent } from 'react';
 import type { Node, NodeProps } from '@xyflow/react';
 import { agentsApi } from '../../api/client';
 import type { AgentEvent } from '../../api/types';
-import { eventLine } from '../../inspector/format';
+import { eventLine, eventOutcome } from '../../inspector/format';
 import { useJobStore } from '../../state/jobStore';
 import { NodeShell } from './NodeShell';
 import { NumberField } from './NumberField';
@@ -37,6 +37,9 @@ export interface SimulationNodeData extends Record<string, unknown> {
   // `verbose` flag, which only controls server-terminal printing and
   // this node never sends.
   verbose: boolean;
+  // Dice & DM: plans become tasks that can fail, rolled d20 + stat (agents/dm/).
+  // On for new nodes; nodes saved before it existed load with it off.
+  dm: boolean;
   // Resolved by the parent canvas from connected Agent/Location nodes'
   // edges -- this node has no idea what's wired to it, only who it is.
   agentNames: string[];
@@ -49,6 +52,7 @@ export interface SimulationNodeData extends Record<string, unknown> {
   onProviderChange: (nodeId: string, provider: string) => void;
   onChatModelChange: (nodeId: string, chatModel: string) => void;
   onVerboseChange: (nodeId: string, verbose: boolean) => void;
+  onDmChange: (nodeId: string, dm: boolean) => void;
 }
 
 export type SimulationNodeType = Node<SimulationNodeData, 'sim'>;
@@ -136,7 +140,7 @@ export function SimulationNode({ id, data, selected, height }: NodeProps<Simulat
     };
   }, [live]);
 
-  const visibleEvents = data.verbose ? recent : recent.filter((e) => e.kind === 'action' || e.kind === 'dialogue');
+  const visibleEvents = data.verbose ? recent : recent.filter((e) => ['action', 'dialogue', 'check', 'outcome'].includes(e.kind));
 
   useEffect(() => {
     if (!stickToBottomRef.current) return;
@@ -195,6 +199,7 @@ export function SimulationNode({ id, data, selected, height }: NodeProps<Simulat
         directive,
         provider: data.provider || undefined,
         chatModel: chatModel.trim() || undefined,
+        dm: data.dm,
       });
       if (!res.ok) setError(res.error ?? 'failed to start');
       else setWatching(true);
@@ -279,7 +284,11 @@ export function SimulationNode({ id, data, selected, height }: NodeProps<Simulat
       </div>
       <label className="node-checkbox-row">
         <input type="checkbox" checked={data.verbose} onChange={(e) => data.onVerboseChange(id, e.target.checked)} />
-        <span className="node-subtitle">verbose (unchecked: actions &amp; dialogue only)</span>
+        <span className="node-subtitle">verbose (unchecked: actions, dialogue &amp; dice only)</span>
+      </label>
+      <label className="node-checkbox-row" title="Plans become tasks that can succeed or fail: d20 + stat modifier vs a difficulty; the model narrates the result">
+        <input type="checkbox" checked={data.dm} onChange={(e) => data.onDmChange(id, e.target.checked)} />
+        <span className="node-subtitle">dice &amp; DM (stats, checks, consequences)</span>
       </label>
 
       {error && <div className="node-error-text">{error}</div>}
@@ -294,7 +303,7 @@ export function SimulationNode({ id, data, selected, height }: NodeProps<Simulat
         <div className="node-log" ref={logRef} onScroll={onLogScroll} style={{ maxHeight: height ? undefined : 240 }}>
           {visibleEvents.map((e, i) => (
             <div className="node-log-row" key={i}>
-              <span className="node-log-badge">{e.kind}</span>
+              <span className="node-log-badge" data-outcome={eventOutcome(e)}>{e.kind}</span>
               {e.agent && <span>{e.agent}: </span>}
               {eventLine(e)}
             </div>

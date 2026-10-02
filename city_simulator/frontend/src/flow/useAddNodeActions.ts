@@ -95,6 +95,7 @@ export function useAddNodeActions({
                 provider: 'ollama',
                 chatModel: '',
                 verbose: true,
+                dm: true,
                 agentNames: [],
                 onTicksChange: pipeline.onTicksChange,
                 onTickMinutesChange: pipeline.onTickMinutesChange,
@@ -103,11 +104,12 @@ export function useAddNodeActions({
                 onProviderChange: pipeline.onProviderChange,
                 onChatModelChange: pipeline.onChatModelChange,
                 onVerboseChange: pipeline.onVerboseChange,
+                onDmChange: pipeline.onDmChange,
               },
             },
           ];
         if (type === 'citysim')
-          return [...list, { ...base, type, data: { ...citySimSettings(), agentNames: [], onChange: pipeline.onCitySimChange, onZoomIn: pipeline.onZoomIn } }];
+          return [...list, { ...base, type, data: { ...citySimSettings({ dm: true }), agentNames: [], onChange: pipeline.onCitySimChange, onZoomIn: pipeline.onZoomIn } }];
         if (type === 'treatment')
           return [
             ...list,
@@ -314,6 +316,7 @@ export function useAddNodeActions({
             provider: 'ollama',
             chatModel: '',
             verbose: true,
+            dm: true,
             agentNames: [],
             onTicksChange: pipeline.onTicksChange,
             onTickMinutesChange: pipeline.onTickMinutesChange,
@@ -322,6 +325,7 @@ export function useAddNodeActions({
             onProviderChange: pipeline.onProviderChange,
             onChatModelChange: pipeline.onChatModelChange,
             onVerboseChange: pipeline.onVerboseChange,
+            onDmChange: pipeline.onDmChange,
           },
         });
         return [...list, ...added];

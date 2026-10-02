@@ -44,6 +44,8 @@ export interface BackgroundResident {
 
 // GET /api/agents/city/residents/<id> -- one resident's page.
 export interface ResidentDetail extends Omit<BackgroundResident, 'hero_interactions'> {
+  // Dice & DM: the sheet a CITY run saved, or the one it would roll them.
+  sheet?: CharacterSheet;
   run: null | {
     started_at: string;
     in_run: boolean;
@@ -183,6 +185,9 @@ export type AgentEventKind =
   | 'move'
   | 'reflect_pause'
   | 'treatment'
+  // Dice & DM (agents/dm/): a roll, and what came of it
+  | 'check'
+  | 'outcome'
   // CITY mode (agents/city/recorder.py) only:
   | 'status'
   | 'encounter'
@@ -191,7 +196,8 @@ export type AgentEventKind =
   | 'schedule'
   | 'schedules'
   | 'moves'
-  | 'tick_summary';
+  | 'tick_summary'
+  | 'checks';
 
 export interface AgentEvent {
   kind: AgentEventKind;

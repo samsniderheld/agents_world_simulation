@@ -18,7 +18,7 @@ from ..textutil import directive_block
 from . import background as bg_dice
 from . import effects, rules
 from .scene import DETAIL_FOR_CONDITION, _contest_label, _lower_first
-from .sheet import CONDITIONS
+from .sheet import CONDITIONS, currency
 from .stats import sheet_from_record
 
 NARRATION_SCHEMA = {"type": "object", "required": ["narration", "feeling", "money", "condition"],
@@ -55,7 +55,7 @@ class CityDM:
 
     @staticmethod
     def currency() -> str:
-        return (theme.current().get("world") or {}).get("currency", "coins")
+        return currency()
 
     def sheet(self, agent):
         """The agent's sheet, loaded or rolled the first time it's needed."""
@@ -151,8 +151,8 @@ class CityDM:
         log("check", hero, action=task["action"], stat=result.stat, roll=result.roll, rolls=result.rolls,
             mod=result.mod, total=result.total, dc=result.dc, outcome=result.outcome, difficulty=task["difficulty"],
             text=result.label(), location=hero.location, time=clock)
-        log("outcome", hero, text=narration, feeling=feeling, outcome=result.outcome, effects=notes,
-            location=hero.location, time=clock)
+        log("outcome", hero, action=task["action"], text=narration, feeling=feeling, outcome=result.outcome,
+            effects=notes, location=hero.location, time=clock)
         self.remember(hero, t.prompt("dm.outcome_memory", name=hero.name, action=_lower_first(task["action"]),
                                      check=result.label(), narration=narration, feeling=feeling),
                       tick, importance=8.0 if result.critical else None)
@@ -197,7 +197,7 @@ class CityDM:
         check = _contest_label(intent, target.name, a, b)
         log("check", actor, action=f"{intent} {target.name}", stat=stat, roll=a.roll, rolls=a.rolls, mod=a.mod,
             total=a.total, dc=b.total + 1, outcome=a.outcome, opposed_by=target.name, opposed_total=b.total,
-            text=check, effects=notes, time=clock)
+            text=check, effects=notes, location=actor.location, time=clock)
         memory = t.prompt("dm.social_memory", actor=actor.name, intent=intent, target=target.name,
                           result="it worked" if won else "it failed")
         for who in (actor, target):
