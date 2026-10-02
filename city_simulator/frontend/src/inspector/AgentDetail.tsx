@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { city } from '../api/client';
-import type { AgentRecord } from '../api/types';
+import { agentsApi, city } from '../api/client';
+import type { AgentRecord, CharacterSheet } from '../api/types';
 import { eventLine, fmtDate } from './format';
 import { MediaGrid } from './MediaGrid';
+import { SheetView } from './SheetView';
 
-type Tab = 'bio' | 'plans' | 'events' | 'treatments' | 'media';
+type Tab = 'bio' | 'sheet' | 'plans' | 'events' | 'treatments' | 'media';
 
 // `onMediaChanged` is optional and separate from this component's own
 // `record` refetch below -- a caller rendering its own copy of this
@@ -38,7 +39,7 @@ export function AgentDetail({ characterId, onMediaChanged }: { characterId: stri
         <div className="inspector-subtitle">{record.occupation ?? 'resident'}</div>
       </div>
       <div className="inspector-tabs">
-        {(['bio', 'plans', 'events', 'treatments', 'media'] as Tab[]).map((t) => (
+        {(['bio', 'sheet', 'plans', 'events', 'treatments', 'media'] as Tab[]).map((t) => (
           <button key={t} className={`inspector-tab ${tab === t ? 'is-active' : ''}`} onClick={() => setTab(t)}>
             {t === 'events' ? 'event log' : t}
           </button>
@@ -46,6 +47,7 @@ export function AgentDetail({ characterId, onMediaChanged }: { characterId: stri
       </div>
       <div className="inspector-body">
         {tab === 'bio' && <Bio record={record} />}
+        {tab === 'sheet' && <Sheet characterId={characterId} />}
         {tab === 'plans' && <Plans record={record} />}
         {tab === 'events' && <EventLog record={record} />}
         {tab === 'treatments' && <Treatments record={record} />}
@@ -133,4 +135,18 @@ function Treatments({ record }: { record: AgentRecord }) {
       ))}
     </div>
   );
+}
+
+function Sheet({ characterId }: { characterId: string }) {
+  const [sheet, setSheet] = useState<CharacterSheet | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    agentsApi
+      .sheet(characterId)
+      .then(setSheet)
+      .catch((e) => setError(String(e)));
+  }, [characterId]);
+  if (error) return <div className="inspector-empty">{error}</div>;
+  if (!sheet) return <div className="inspector-empty">Rolling…</div>;
+  return <SheetView sheet={sheet} />;
 }

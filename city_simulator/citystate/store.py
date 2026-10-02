@@ -647,3 +647,19 @@ def save_city_theme(city_id: str, text: str) -> None:
     tmp = path.with_suffix(".yaml.tmp")
     tmp.write_text(text)
     tmp.replace(path)
+
+
+def update_character_fields(agent_id: str, **fields) -> dict:
+    """Set fields on one character in the active city (e.g. the Dice & DM
+    "sheet") -- in memory and in their agent.json, keeping media/plans/runs."""
+    with _lock:
+        if not _loaded:
+            _load_active()
+        if _cache is None:
+            raise RuntimeError("no active city")
+        character = next((c for c in _cache["characters"] if c["id"] == agent_id), None)
+        if character is None:
+            raise RuntimeError(f"unknown agent entity: {agent_id!r}")
+        character.update(fields)
+        _write_agent(_active_id, agent_id, character=character)
+        return dict(character)

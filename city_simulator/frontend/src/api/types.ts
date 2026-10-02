@@ -500,3 +500,19 @@ export interface CityInsight {
   source: string;
   started_at: string;
 }
+
+// GET /api/agents/sheet/<id> -- a Dice & DM character sheet (agents/dm/).
+export interface CharacterSheet {
+  stats: Record<string, number>;
+  modifiers: Record<string, number>;
+  stat_names: Record<string, string>;
+  mood: number; // -3..+3
+  mood_word: string | null;
+  mood_text: string;
+  relationships: Record<string, number>; // -100..100
+  attitudes: Record<string, string>; // hostile .. loyal
+  goals: { text: string; progress: number; status: string }[];
+  conditions: Record<string, number>; // name -> ticks left
+  money: number;
+  currency: string;
+}

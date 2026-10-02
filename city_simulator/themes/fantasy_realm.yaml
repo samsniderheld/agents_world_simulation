@@ -12,6 +12,7 @@ theme:
 
 world:
   present_year: 1312
+  currency: silver
   visual_look: 'painterly high-fantasy illustration: warm candlelit interiors, misty cobbled lanes, rich jewel-tone
     color, dramatic chiaroscuro, medieval wardrobe and production design, rendered like a classic oil painting.'
 

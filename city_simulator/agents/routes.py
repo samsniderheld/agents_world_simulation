@@ -251,6 +251,36 @@ def city_ask():
         return json_response({"error": str(e)}, status=502)
 
 
+@bp.get("/sheet/<agent_id>")
+def character_sheet(agent_id):
+    """A character's Dice & DM sheet (agents/dm/) -- rolled and saved the
+    first time anyone asks, from their occupation and bio."""
+    from .dm import stats as dm_stats
+    city = citystate.get()
+    record = next((c for c in (city or {}).get("characters", []) if c["id"] == agent_id), None)
+    if record is None:
+        return json_response({"error": "no such agent"}, status=404)
+    sheet = dm_stats.sheet_from_record(record)
+    if not record.get("sheet"):
+        citystate.update_character_fields(agent_id, sheet=sheet.to_dict())
+    return json_response(_sheet_json(sheet))
+
+
+def _sheet_json(sheet) -> dict:
+    """A sheet plus the derived bits the UI shows (modifiers, labels)."""
+    import theme
+    from .dm.rules import STAT_NAMES, STATS
+    from .dm.sheet import attitude_label
+    return {
+        **sheet.to_dict(),
+        "modifiers": {s: sheet.mod(s) for s in STATS},
+        "stat_names": STAT_NAMES,
+        "mood_text": sheet.mood_text(),
+        "attitudes": {n: attitude_label(v) for n, v in sheet.relationships.items()},
+        "currency": (theme.current().get("world") or {}).get("currency", "coins"),
+    }
+
+
 @bp.get("/city/residents")
 def city_residents():
     """The active city's background residents (agents/city/zoom.py), for

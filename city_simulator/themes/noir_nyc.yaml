@@ -24,6 +24,7 @@ theme:
 # ============================================================================
 world:
   present_year: 1959
+  currency: dollars
   visual_look: 'moody film noir aesthetic: high-contrast black-and-white lighting, hard venetian-blind shadows,
     wet city streets, dramatic low-key lighting, deep chiaroscuro shadow, 1940s wardrobe and production design.the
     background should look like a painting, in the style of edward hopper.'
