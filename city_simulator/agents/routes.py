@@ -124,6 +124,7 @@ def _city_params(body):
         "convene_at": _convene_place_name(body),
         "persist_hero_memories": bool(body.get("persist_hero_memories", True)),
         "seed": opt_int("seed", 0, 2**31 - 1),
+        "dm": bool(body.get("dm", False)),
     }
 
 

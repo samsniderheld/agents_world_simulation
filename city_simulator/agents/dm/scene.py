@@ -278,7 +278,10 @@ def parse_react(reply: str):
         if m:
             intent = m.group(1).strip().lower()
             intent = next((i for i in effects.SOCIAL_INTENTS if i == intent or intent.startswith(i)), "persuade")
-            return "talk", intent, m.group(2).strip()
+            text = m.group(2).strip().strip("*\"").strip()
+            if text.lower().startswith(intent):    # "TALK persuade: persuade, I've heard..."
+                text = text[len(intent):].lstrip(" ,:-")
+            return "talk", intent, text
         if re.match(r"^TALK\b", line, re.IGNORECASE):
             return "talk", "persuade", line.split(":", 1)[1].strip() if ":" in line else ""
         if line.upper().startswith("REACT"):

@@ -15,7 +15,7 @@ MONEY_LIMIT = 200          # the most a single narrated effect can move
 # money (a small model otherwise pays people for walking down a hallway).
 MONEY_WORDS = ("money", "pay", "paid", "cash", "dollar", "cent", "buck", "coin", "silver", "gold", "bet", "wager",
                "bribe", "buy", "bought", "sell", "sold", "steal", "stole", "collect", "debt", "loan", "payroll",
-               "tip", "wallet", "purse", "price", "fee", "rent", "win", "won", "lose", "lost", "cards", "dice")
+               "tip", "wallet", "purse", "price", "fee", "rent", "cards", "gambl", "winnings", "salary", "wage")
 SOCIAL_INTENTS = ("persuade", "deceive", "intimidate", "charm", "ask for help", "threaten")
 # intent -> (target's attitude shift toward the actor on a win, on a loss)
 SOCIAL_ATTITUDE = {"persuade": (12, -4), "charm": (15, -6), "ask for help": (10, -3),

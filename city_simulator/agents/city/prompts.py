@@ -264,6 +264,19 @@ def stub_reply(prompt: str, schema):
     h = int(hashlib.md5(prompt.encode()).hexdigest()[:8], 16)
     if schema is not None:
         props = schema.get("properties", {})
+        if "tasks" in props:        # dice & DM (agents/dm/city.py)
+            n = props["tasks"]["maxItems"]
+            item = props["tasks"]["items"]["properties"]
+            stats, levels = item["stat"]["enum"], item["difficulty"]["enum"]
+            data = {"tasks": [{"action": f"task {k} {h % 97}", "stat": stats[(h >> k) % len(stats)],
+                               "difficulty": levels[(h >> (k + 3)) % len(levels)], "target": ""} for k in range(n)]}
+            if "where" in props:
+                enum = props["where"]["enum"]
+                data["where"] = enum[h % len(enum)] if h % 3 == 0 else "STAY"
+            return json.dumps(data)
+        if "narration" in props:
+            return json.dumps({"narration": f"It went as the dice said ({h % 100}).", "feeling": "tense",
+                               "money": (h % 21) - 10, "condition": ["", "drunk", "shaken"][h % 3]})
         if "schedule" in props:
             places = props["schedule"]["items"]["properties"]["place"]["enum"]
             blocks, start = [], 0
@@ -283,6 +296,9 @@ def stub_reply(prompt: str, schema):
             return json.dumps({"actions": [f"step {k} {h % 97}" for k in range(n)],
                                "where": enum[h % len(enum)] if h % 3 == 0 else "STAY"})
         return json.dumps(instance_of(schema, h))
+    if "TALK <intent>:" in prompt:
+        return ["TALK persuade: the job at the docks", "TALK threaten: the money", "REACT: steps outside for air",
+                "CONTINUE"][h % 4]
     if "TALK: <" in prompt:
         return ["TALK: the job at the docks", "REACT: steps outside for air", "CONTINUE"][h % 3]
     if "next line" in prompt:

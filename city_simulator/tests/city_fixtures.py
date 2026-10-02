@@ -77,6 +77,12 @@ class FakeStorage:
                     {"started_at": run_record["started_at"], "meta": run_record["meta"],
                      "events": (slices or {}).get(agent["name"], [])})
 
+    def update_character_fields(self, agent_id, **fields):
+        for c in self.city["characters"]:
+            if c["id"] == agent_id:
+                c.update(fields)
+        self.records.setdefault(agent_id, {"runs": []}).update(fields)
+
     def add_character(self, character):
         self.city["characters"].append(character)
         self.added.append(character)

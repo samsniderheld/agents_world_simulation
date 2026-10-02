@@ -74,9 +74,12 @@ class Sheets(unittest.TestCase):
         s = sheet()
         s.shift_mood(3, "triumphant")
         self.assertEqual(s.mood_text(), "elated (triumphant)")
+        s.end_tick()                     # the tick it happened: no drift yet
+        self.assertEqual(s.mood, 3)
         for _ in range(3):
             s.end_tick()
         self.assertEqual(s.mood_text(), "steady")
+        self.assertNotIn("stirred", s.to_dict())
 
     def test_summary_and_round_trip(self):
         s = sheet()
@@ -168,6 +171,17 @@ class SheetPersistence(unittest.TestCase):
         self.assertEqual(self.store.get_agent("char_t")["sheet"]["mood"], 2)
         self.store._loaded = False                                   # reload from disk
         self.assertEqual(self.store.get()["characters"][0]["sheet"]["mood_word"], "triumphant")
+
+
+class ParseReact(unittest.TestCase):
+    def test_tags(self):
+        from agents.dm.scene import parse_react
+        self.assertEqual(parse_react("TALK persuade: persuade, I hear you know things"),
+                         ("talk", "persuade", "I hear you know things"))
+        self.assertEqual(parse_react("**TALK (ask for help):** the money"), ("talk", "ask for help", "the money"))
+        self.assertEqual(parse_react("TALK: the job"), ("talk", "persuade", "the job"))
+        self.assertEqual(parse_react("REACT: leaves"), ("react", None, "leaves"))
+        self.assertEqual(parse_react("whatever"), ("continue", None, ""))
 
 
 if __name__ == "__main__":

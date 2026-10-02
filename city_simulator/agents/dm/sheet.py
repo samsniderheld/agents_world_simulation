@@ -49,6 +49,10 @@ class CharacterSheet:
     goals: list = dataclasses.field(default_factory=list)
     conditions: dict = dataclasses.field(default_factory=dict)
     money: int = 0
+    # Whether anything moved the mood this tick (not saved): a mood only
+    # drifts back on a quiet tick, so a triumph or a humiliation lasts
+    # until something else happens.
+    stirred: bool = dataclasses.field(default=False, repr=False, compare=False)
 
     # --- dice-facing ---------------------------------------------------------------
     def score(self, stat: str) -> int:
@@ -71,6 +75,7 @@ class CharacterSheet:
     # --- changes ---------------------------------------------------------------------
     def shift_mood(self, delta: int, word: str = None):
         self.mood = max(-3, min(3, self.mood + delta))
+        self.stirred = True
         if word:
             self.mood_word = word
 
@@ -85,9 +90,11 @@ class CharacterSheet:
         self.goals = [{"text": t, "progress": 0, "status": "active"} for t in texts]
 
     def end_tick(self):
-        """Conditions wear off; mood drifts one step back toward steady."""
+        """Conditions wear off; after a tick where nothing moved it, mood
+        drifts one step back toward steady."""
         self.conditions = {c: n - 1 for c, n in self.conditions.items() if n > 1}
-        if self.mood:
+        stirred, self.stirred = self.stirred, False
+        if self.mood and not stirred:
             self.mood += -1 if self.mood > 0 else 1
             if self.mood == 0:
                 self.mood_word = None
@@ -118,9 +125,11 @@ class CharacterSheet:
 
     # --- persistence -------------------------------------------------------------------
     def to_dict(self) -> dict:
-        return dataclasses.asdict(self)
+        data = dataclasses.asdict(self)
+        data.pop("stirred")
+        return data
 
     @classmethod
     def from_dict(cls, data: dict) -> "CharacterSheet":
-        fields = {f.name for f in dataclasses.fields(cls)}
+        fields = {f.name for f in dataclasses.fields(cls)} - {"stirred"}
         return cls(**{k: v for k, v in (data or {}).items() if k in fields})

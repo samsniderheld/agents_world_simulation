@@ -9,6 +9,9 @@ event-loop task between waves, so nothing needs a lock.
     │              schedule (or an occupation template)
     ├─ DECOMPOSE   heroes entering a new plan item: one action per tick, and
     │              where to be; background agents follow their schedule
+    ├─ RESOLVE     (dice & DM on) each hero's task is rolled and narrated, in
+    │              one batch; background residents rolled as their blocks
+    │              began, in DECOMPOSE, with no LLM (agents/dm/)
     ├─ ENCOUNTERS  group everyone by place; per place, up to N encounters,
     │              no agent in two (heroes first). Background-background
     │              encounters resolve in Python, no LLM
@@ -38,6 +41,8 @@ from ..config import REFLECTION_IMPORTANCE_THRESHOLD, REFLECTION_INSIGHTS_PER_FO
 from ..gateway import LLMRequest
 from ..planning import MAX_PLAN_ITEMS, _duration, _substep_length
 from ..world import clock_label
+from ..dm import city as dm_city
+from ..dm import scene as dm_scene
 from . import config as ccfg
 from . import population as pop
 from . import prompts
@@ -51,8 +56,10 @@ class CityWorld:
                  tick_minutes: int, directive: str = None, seed: int = ccfg.DEFAULT_SEED,
                  stop_flag=None, pause_flag=None, llm_schedules: bool = ccfg.BACKGROUND_LLM_SCHEDULES,
                  hero_cap: int = 200, promote_after: int = ccfg.PROMOTE_AFTER_HERO_INTERACTIONS,
-                 max_encounters_per_place: int = ccfg.MAX_ENCOUNTERS_PER_PLACE, llm_schedule_cap: int = None):
+                 max_encounters_per_place: int = ccfg.MAX_ENCOUNTERS_PER_PLACE, llm_schedule_cap: int = None,
+                 dm=None):
         self.gw = gateway
+        self.dm = dm                   # an agents.dm.city.CityDM when the run has dice & DM on
         self.heroes = list(heroes)
         self.background = list(background)
         self.city = city
@@ -165,6 +172,9 @@ class CityWorld:
             await self._plan_wave()
         async with self._wave("decompose"):
             await self._decompose_wave()
+        if self.dm is not None:
+            async with self._wave("resolve"):
+                await self._resolve_wave()
         async with self._wave("encounters"):
             hero_encounters = self._encounters()
         async with self._wave("react"):
@@ -179,6 +189,8 @@ class CityWorld:
             await self._promote_wave()
         self._record_summary(len(hero_encounters), len(conversations))
         self._record_metrics(time.monotonic() - tick_started, len(hero_encounters), len(conversations))
+        if self.dm is not None:
+            self.dm.end_tick()
         self.tick += 1
 
     # --- PLAN ----------------------------------------------------------------------------------
@@ -208,8 +220,10 @@ class CityWorld:
         schema = prompts.schedule_schema(self.schedule_places)
         for b in llm_background:
             directive = prompts.directive_for_background(self.directive, b)
-            requests.append(self._request(b, prompts.background_schedule(b, self.schedule_places, day_label, directive),
-                                          "schedule", schema, ccfg.TOKENS_SCHEDULE, 0.8))
+            specifics = prompts.background_schedule(b, self.schedule_places, day_label, directive)
+            if self.dm is not None:     # how they're doing shapes their day
+                specifics = f"{self.dm.sheet_block(b)}\n{specifics}"
+            requests.append(self._request(b, specifics, "schedule", schema, ccfg.TOKENS_SCHEDULE, 0.8))
         results = await self.gw.generate_many(requests)
 
         for h, r in zip(heroes, results[:len(heroes)]):
@@ -221,6 +235,8 @@ class CityWorld:
             n = len(items)
             h.plan_bounds = [(self.tick + k * remaining // n, self.tick + (k + 1) * remaining // n) for k in range(n)]
             h.current_item = -1
+            if self.dm is not None:
+                self.dm.on_plan(h, items)
             self._log("plan", h, items=items)
             h.memory.queue_add(f"{h.name}'s plan for the next {_duration(horizon)}: {'; '.join(items)}", "plan", self.tick)
 
@@ -262,17 +278,30 @@ class CityWorld:
             if item != h.current_item:
                 start, end = h.plan_bounds[item]
                 todo.append((h, item, max(1, end - start), self._hero_places(h)))
-        requests = [self._request(h, prompts.hero_decompose(h, h.plan[item], n, _substep_length(self.tick_minutes),
-                                                            self._cast(h), self.directive, self.clock(), places),
-                                  "decompose", prompts.decompose_schema(n, places), ccfg.TOKENS_DECOMPOSE)
-                    for h, item, n, places in todo]
+        span = _substep_length(self.tick_minutes)
+        if self.dm is None:
+            requests = [self._request(h, prompts.hero_decompose(h, h.plan[item], n, span, self._cast(h), self.directive,
+                                                                self.clock(), places),
+                                      "decompose", prompts.decompose_schema(n, places), ccfg.TOKENS_DECOMPOSE)
+                        for h, item, n, places in todo]
+        else:   # tasks: what each tick's action tests, and how hard it is
+            requests = [self._request(h, self.dm.decompose_prompt(h, h.plan[item], n, span, self._cast(h),
+                                                                  self.directive, self.clock(), places),
+                                      "decompose", dm_city.task_schema(n, places), ccfg.TOKENS_DECOMPOSE)
+                        for h, item, n, places in todo]
         results = await self.gw.generate_many(requests)
         for (h, item, n, places), r in zip(todo, results):
             data = r.data if r.ok else {}
-            actions = [str(a).strip() for a in (data or {}).get("actions", []) if str(a).strip()][:n] or [h.plan[item]]
+            if self.dm is None:
+                actions = [str(a).strip() for a in (data or {}).get("actions", []) if str(a).strip()][:n] or [h.plan[item]]
+                extra = {}
+            else:
+                h.tasks = self.dm.parse_tasks(data, h.plan[item], n)
+                actions = [x["action"] for x in h.tasks]
+                extra = {"tasks": h.tasks}
             h.current_item = item
             h.substeps = actions
-            self._log("decompose", h, broad_step=h.plan[item], items=actions)
+            self._log("decompose", h, broad_step=h.plan[item], items=actions, **extra)
             h.memory.queue_add(f"{h.name} broke '{h.plan[item]}' into: {'; '.join(actions)}", "plan", self.tick)
             where = (data or {}).get("where")
             if where and where != "STAY" and where in self.places and where != h.location:
@@ -280,12 +309,17 @@ class CityWorld:
 
         for h in self.heroes:
             start = h.plan_bounds[h.current_item][0]
-            h.current_action = h.substeps[min(max(0, self.tick - start), len(h.substeps) - 1)]
+            index = min(max(0, self.tick - start), len(h.substeps) - 1)
+            h.current_action = h.substeps[index]
+            if self.dm is not None:
+                tasks = getattr(h, "tasks", None) or []
+                h.current_task = tasks[index] if index < len(tasks) else None
             self._log("action", h, text=h.current_action, location=h.location, time=self.clock())
             h.memory.queue_add(f"{h.name} is {h.current_action}", "observation", self.tick)
 
         minute = clock_minutes(self.now)
         moved = 0
+        rolled = []
         for b in self.background:
             block = b.block_at(minute) or (b.schedule[-1] if b.schedule else None)
             if block is None:
@@ -297,14 +331,56 @@ class CityWorld:
                 # Their own day, not just who they ran into -- so a resident
                 # who met nobody still has a trail of memories.
                 b.memory.add(self.tick, "schedule", f"{self.clock()}: {block.activity} ({_label(block.place, b)}).")
+                if self.dm is not None:
+                    label = _label(block.place, b)
+                    where = label if label == "somewhere across town" else f"at {label}"
+                    out = self.dm.background_block(b, block.activity, where, self.tick)
+                    if out is not None:
+                        rolled.append((b, out))
             b.location = block.place
             b.current_action = block.activity
         if moved:
             recorder.log("moves", self.tick, tier="background", text=f"{moved} background residents moved", count=moved)
+        if rolled:
+            self._log_background_checks(rolled)
 
         self._index_places()
         recorder.set_positions(self.tick, {**{h.name: h.location for h in self.heroes},
                                            **{b.name: b.location_label() for b in self.background}})
+
+    def _log_background_checks(self, rolled: list):
+        """One summary event for the tier's rolls, plus each critical one on
+        its own (the log would drown in thousands of ordinary rolls)."""
+        tally = collections.Counter(out["result"].outcome for _, out in rolled)
+        recorder.log("checks", self.tick, tier="background", time=self.clock(),
+                     text=f"{len(rolled)} background checks: {tally['success'] + tally['crit_success']} succeeded, "
+                          f"{tally['failure'] + tally['crit_failure']} failed "
+                          f"({tally['crit_success']} brilliantly, {tally['crit_failure']} disastrously)",
+                     count=len(rolled), outcomes=dict(tally))
+        for b, out in rolled:
+            if out["result"].critical:
+                r = out["result"]
+                self._log("outcome", b, text=out["text"], outcome=r.outcome, check=r.label(), effects=out["notes"],
+                          location=b.location_label(), time=self.clock())
+
+    # --- RESOLVE (dice & DM) ---------------------------------------------------------------------
+
+    async def _resolve_wave(self):
+        """Every hero with a task worth rolling: code rolls, then one batch
+        of narration calls; the sheet, the log and memory take the result."""
+        rolls = [(h, h.current_task, self.dm.roll(h, self.tick)) for h in self.heroes]
+        rolls = [(h, task, result) for h, task, result in rolls if result is not None]
+        if not rolls:
+            return
+        requests = [self._request(h, self.dm.narrate_prompt(h, task, result), "narrate", dm_city.NARRATION_SCHEMA,
+                                  ccfg.TOKENS_NARRATE, 0.8) for h, task, result in rolls]
+        results = await self.gw.generate_many(requests)
+        heroes = {a.name: a for a in self.heroes}
+        for (h, task, result), r in zip(rolls, results):
+            # whoever the task involves: a hero anywhere, or someone right here
+            by_name = {**{a.name: a for a in self._by_place.get(h.location, [])}, **heroes}
+            self.dm.apply_resolution(h, task, result, r.data if r.ok else None, self.tick, self.clock(), self._log,
+                                     by_name)
 
     def _move_hero(self, h, destination: str):
         self._log("move", h, from_location=h.location, to_location=destination)
@@ -366,18 +442,34 @@ class CityWorld:
             return []
         observations = [f"{other.name} is nearby, currently: {other.current_action}." for _, other, _ in encounters]
         vectors = await self.gw.embed_many(observations)
+        if self.dm is not None:     # a passive Wisdom read on the other person
+            observations = [o + self.dm.perceive(h, other) for (h, other, _), o in zip(encounters, observations)]
         requests = []
-        for (h, other, place), q in zip(encounters, vectors):
+        for (h, other, place), q, observation in zip(encounters, vectors, observations):
             memories = [m.description for m in h.memory.retrieve_embedded(q, self.tick, k=6)]
-            requests.append(self._request(h, prompts.hero_react(h, other.name, other.current_action, memories,
-                                                                self._cast(h, [other.name]), self.directive),
-                                          "react", None, ccfg.TOKENS_REACT, 0.6))
+            cast = self._cast(h, [other.name])
+            specifics = (prompts.hero_react(h, other.name, other.current_action, memories, cast, self.directive)
+                         if self.dm is None else
+                         self.dm.react_prompt(h, other, observation, memories, cast, self.directive))
+            requests.append(self._request(h, specifics, "react", None, ccfg.TOKENS_REACT, 0.6))
         results = await self.gw.generate_many(requests)
         conversations = []
         for (h, other, place), observation, r in zip(encounters, observations, results):
             self._log("observe", h, text=observation)
             h.memory.queue_add(f"Observed: {observation}", "observation", self.tick)
-            tag, text = prompts.parse_react(r.text) if r.ok else ("continue", "")
+            if self.dm is not None:
+                kind, intent, text = dm_scene.parse_react(r.text) if r.ok else ("continue", None, "")
+                if kind == "talk":
+                    h.current_action = f"trying to {intent} {other.name}" + (f": {text}" if text else "")
+                    h.memory.queue_add(f"{h.name} decided to: {h.current_action}", "observation", self.tick)
+                    self._log("react", h, text=h.current_action, intent=intent)
+                    c = _Conversation(h, other, place, text or intent)
+                    c.ruling = self.dm.social(h, other, intent, self.tick, self.clock(), self._log)
+                    conversations.append(c)
+                    continue
+                tag = kind
+            else:
+                tag, text = prompts.parse_react(r.text) if r.ok else ("continue", "")
             if tag == "talk":
                 h.current_action = f"talking with {other.name} about {text}"
                 h.memory.queue_add(f"{h.name} decided to: {h.current_action}", "observation", self.tick)
@@ -415,11 +507,14 @@ class CityWorld:
                 is_hero = speaker.tier == "hero"
                 directive = self.directive if is_hero else prompts.directive_for_background(self.directive, speaker)
                 cast = self._cast(speaker, [listener.name]) if is_hero else [listener.name]
-                requests.append(self._request(
-                    speaker, prompts.dialogue_line(is_hero, speaker, listener.name, c.place, c.topic,
-                                                   c.memories.get(speaker.name, []), c.lines, cast, directive,
-                                                   turn, ccfg.MAX_DIALOGUE_TURNS),
-                    "dialogue" if is_hero else "dialogue_bg", None, ccfg.TOKENS_LINE, 0.8))
+                specifics = prompts.dialogue_line(is_hero, speaker, listener.name, c.place, c.topic,
+                                                  c.memories.get(speaker.name, []), c.lines, cast, directive,
+                                                  turn, ccfg.MAX_DIALOGUE_TURNS)
+                if self.dm is not None:   # how they're doing, and what the dice decided
+                    specifics = "\n".join(x for x in (self.dm.sheet_block(speaker, [listener.name]), c.ruling) if x) \
+                        + "\n\n" + specifics
+                requests.append(self._request(speaker, specifics, "dialogue" if is_hero else "dialogue_bg", None,
+                                              ccfg.TOKENS_LINE, 0.8))
             results = await self.gw.generate_many(requests)
             for c, r in zip(active, results):
                 speaker, listener = (c.a, c.b) if turn % 2 == 0 else (c.b, c.a)
@@ -605,6 +700,10 @@ class CityWorld:
             "calls_per_background": round(by_tier.get("background", 0) / n_bg, 4) if n_bg else 0.0,
             "heroes": n_heroes, "background": n_bg, "encounters": encounters, "conversations": conversations,
         }
+        if self.dm is not None:
+            counts = self.dm.take_counts()
+            metrics["checks"] = {k: counts.get(k, 0) for k in ("checks", "hero_checks", "social_checks",
+                                                               "background_checks")}
         self.metrics_history.append(metrics)
         recorder.log("metrics", self.tick, tier=None, time=self.clock(),
                      text=f"tick {self.tick + 1}: {metrics['seconds']}s, {metrics['requests']} requests, "
@@ -632,10 +731,11 @@ def promote(b: BackgroundAgent, vectors: list, places: list) -> CityHero:
 
 
 class _Conversation:
-    __slots__ = ("a", "b", "place", "topic", "lines", "ended", "memories")
+    __slots__ = ("a", "b", "place", "topic", "lines", "ended", "memories", "ruling")
 
     def __init__(self, a, b, place: str, topic: str):
         self.a, self.b, self.place, self.topic = a, b, place, topic
+        self.ruling = ""          # dice & DM: the social check's result the lines must honour
         self.lines = []
         self.ended = False
         self.memories = {}

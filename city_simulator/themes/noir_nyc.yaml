@@ -1590,6 +1590,71 @@ city_life:
   - all the residents
   - citywide
   - city-wide
+  # Dice & DM for background residents (agents/dm/background.py): no LLM.
+  # When a resident starts a schedule block, its activity is matched to the
+  # first kind whose keywords appear in it (no match: "leisure"); the kind
+  # says which ability it tests ("job" = the occupation's best stat), how
+  # hard it may be (one picked at random; trivial = no roll), what it does to
+  # their money (a range, on success for work, always for spending), and the
+  # line their memory gets for each outcome ({name}, {activity}, {place}).
+  # Optional in other themes: a theme without it uses this one's.
+  dice:
+    activities:
+      rest:
+        keywords: [asleep, sleep, bed, at home for the night, the radio, getting ready]
+        stat: CON
+        difficulty: [trivial]
+      work:
+        keywords: [working, shift, work, on duty, behind the bar, at the counter]
+        stat: job
+        difficulty: [easy, easy, medium, medium, hard]
+      drink:
+        keywords: [drink, drinks, bar, tavern, saloon, whiskey, beer, gin, wine, ale, tap, cocktail]
+        stat: CON
+        difficulty: [easy, medium]
+      errands:
+        keywords: [errand, errands, shopping, market, groceries, bank, paper, breakfast, lunch, supper, dinner, coffee]
+        stat: WIS
+        difficulty: [trivial, easy, easy]
+      social:
+        keywords: [conversation, friends, visit, visiting, dance, dancing, club, cards, dice, gossip, church, meeting]
+        stat: CHA
+        difficulty: [easy, medium]
+      leisure:
+        keywords: []
+        stat: WIS
+        difficulty: [trivial, trivial, easy]
+    money:
+      work: [3, 15]
+      drink: [-8, -1]
+      errands: [-6, -1]
+      social: [-5, 0]
+    outcomes:
+      work:
+        crit_success: ['{name} had the best shift in memory {where} -- the boss noticed, and the tips were good.']
+        success: ['{name} put in a solid stretch {activity} {where}.', '{name} got through the work {where} without a hitch.']
+        failure: ['{name} fumbled through {activity} {where}; nothing went right.', '{name} got chewed out {where} for a mistake.']
+        crit_failure: ['{name} made a real mess of things {where} and might not have a job tomorrow.']
+      drink:
+        crit_success: ['{name} had a grand night {where}; somebody else paid for the last round.']
+        success: ['{name} had a couple {where} and felt better for it.']
+        failure: ['{name} had one too many {where} and said something they regret.']
+        crit_failure: ['{name} drank themselves sick {where} and had to be helped out.']
+      errands:
+        crit_success: ['{name} got everything done {where} and found a bargain besides.']
+        success: ['{name} took care of {activity} {where}.']
+        failure: ['{name} wasted the time on {activity}: wrong line, wrong change, wrong day.']
+        crit_failure: ['{name} lost their wallet while {activity} {where}.']
+      social:
+        crit_success: ['{name} was the life of the party {where}; everybody wanted a word.']
+        success: ['{name} had a pleasant time {activity} {where}.']
+        failure: ['{name} felt left out {where}; the talk went on without them.']
+        crit_failure: ['{name} got into a shouting match {where} and stormed out.']
+      leisure:
+        crit_success: ['{name} had a rare, perfect hour {activity} {where}.']
+        success: ['{name} spent a quiet while {activity} {where}.']
+        failure: ['{name} could not settle, {activity} {where}, mind elsewhere.']
+        crit_failure: ['{name} had a miserable time {activity} {where}; everything went wrong.']
 
 # ============================================================================
 # SCENE FALLBACK CAST
@@ -1979,9 +2044,9 @@ prompts:
       TALK <intent>: <what {name} wants from {other}> -- where <intent> is one of persuade, deceive, intimidate, charm, ask for help, threaten
       REACT: <a different action, without talking>
       CONTINUE
-    social_won: '{actor} tried to {intent} {target} ({check}) and it worked: {target} gives way, at least for now.
-      The conversation must show this.'
-    social_lost: '{actor} tried to {intent} {target} ({check}) and it failed{badly}: {target} doesn''t give an inch.
+    social_won: '{actor} tried to {intent} {target} ({check}) and it WORKED: {target} is won over and gives {actor}
+      what they want -- agrees, gives in, or tells what they know. The conversation must show this.'
+    social_lost: '{actor} tried to {intent} {target} ({check}) and it FAILED{badly}: {target} doesn''t give an inch.
       The conversation must show this.'
     social_memory: '{actor} tried to {intent} {target} and {result}.'
     perception: '{observer} notices that {target} seems {detail}.'

@@ -64,6 +64,23 @@ class BuiltInThemes(unittest.TestCase):
             simulation._active_roster = saved
 
 
+class OptionalPrompts(unittest.TestCase):
+    def test_older_copy_of_the_default_theme_falls_back(self):
+        """A city's theme.yaml copied before the Dice & DM prompts existed
+        has the default theme's id but no prompts.dm -- it still works."""
+        raw = yaml.safe_load((theme.BUILTIN_DIR / f"{theme.DEFAULT_ID}.yaml").read_text())
+        raw["prompts"].pop("dm")
+        raw["city_life"].pop("dice")
+        old = theme.parse(yaml.safe_dump(raw), source="city", check=False)
+        self.assertEqual(old.id, theme.DEFAULT_ID)
+        self.assertEqual(old.template("dm.sheet"), theme.default().template("dm.sheet"))
+        with self.assertRaises(KeyError):
+            theme.default().template("dm.no_such_prompt")
+        from agents.dm import background
+        with theme.use(old):
+            self.assertIn("work", background.table()["activities"])
+
+
 class Rendering(unittest.TestCase):
     def test_only_lowercase_slots_are_filled(self):
         self.assertEqual(theme.fill('Say {name}. Reply as JSON: {"items": [1]} and {Keep}', {"name": "hi"}),

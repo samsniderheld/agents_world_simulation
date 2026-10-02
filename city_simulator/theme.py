@@ -79,12 +79,14 @@ class Theme:
     def template(self, key: str) -> str:
         """`prompts.<key>`; a key this theme doesn't have (an older or
         uploaded theme, predating an optional prompt like the Dice & DM
-        ones) comes from the default theme."""
+        ones -- including a city's own older copy of the default theme)
+        comes from the default theme."""
         node = self.raw.get("prompts") or {}
         for part in key.split("."):
             if not isinstance(node, dict) or part not in node:
-                if self.id != DEFAULT_ID:
-                    return default().template(key)
+                fallback = default()
+                if fallback is not self:
+                    return fallback.template(key)
                 raise KeyError(f"no prompt {key!r}")
             node = node[part]
         return node
