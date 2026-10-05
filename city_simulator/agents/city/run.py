@@ -157,10 +157,12 @@ def _has_model(models: list, name: str) -> bool:
 def run(stop_flag=None, hero_names=None, background_count=0, profile="auto", hero_provider=None, hero_model=None,
         background_provider=None, background_model=None, ticks=ccfg.DEFAULT_TICKS, tick_minutes=None,
         start_time=None, directive=None, convene_at=None, persist_hero_memories=True, seed=None,
-        pause_flag=None, transport=None, city=None, llm_schedules=None, on_world=None):
+        pause_flag=None, transport=None, city=None, llm_schedules=None, on_world=None, dm=False):
     """Blocking. `transport` (an httpx transport) and `city` are for tests
     and the benchmark; `on_world` receives the CityWorld once built (the
-    routes use it to queue UI promotions)."""
+    routes use it to queue UI promotions). `dm` turns on dice & DM
+    (agents/dm/): tasks and checks for heroes, dice for background
+    residents, sheets saved at the end."""
     city = city if city is not None else storage.get()
     if not city:
         raise RuntimeError("no active city -- generate one first")
@@ -184,7 +186,7 @@ def run(stop_flag=None, hero_names=None, background_count=0, profile="auto", her
         city, prof, backends, heroes, background, start, tick_minutes, ticks, directive, convene_at, seed,
         stop_flag, pause_flag if pause_flag is not None else _fresh_pause_flag(), transport, persist_hero_memories,
         ccfg.BACKGROUND_LLM_SCHEDULES if llm_schedules is None else llm_schedules,
-        clipped=(background_count or 0) - count, on_world=on_world))
+        clipped=(background_count or 0) - count, on_world=on_world, dm=dm))
 
 
 def _fresh_pause_flag():
@@ -193,7 +195,8 @@ def _fresh_pause_flag():
 
 
 async def _main(city, prof, backends, heroes, background, start, tick_minutes, ticks, directive, convene_at, seed,
-                stop_flag, pause_flag, transport, persist, llm_schedules, clipped=0, on_world=None):
+                stop_flag, pause_flag, transport, persist, llm_schedules, clipped=0, on_world=None, dm=False):
+    from ..dm.city import CityDM
     from .world import CityWorld
 
     async with Gateway(backends, transport=transport) as gw:
@@ -214,6 +217,7 @@ async def _main(city, prof, backends, heroes, background, start, tick_minutes, t
                 "ticks": ticks, "tick_minutes": tick_minutes, "start_time": start.strftime("%H:%M"),
                 "directive": directive, "convene_at": convene_at, "seed": seed,
                 "persist_hero_memories": persist, "llm_schedules": llm_schedules,
+                **({"dm": True} if dm else {}),
             },
             population={"heroes": len(heroes), "background": len(background)},
         )
@@ -228,7 +232,8 @@ async def _main(city, prof, backends, heroes, background, start, tick_minutes, t
                           f"residents ({backends['background'].label()}), {ticks} ticks of {tick_minutes} min")
         world = CityWorld(gw, heroes, background, city, start=start, tick_minutes=tick_minutes, directive=directive,
                           seed=seed, stop_flag=stop_flag, pause_flag=pause_flag, llm_schedules=llm_schedules,
-                          hero_cap=prof["hero_cap"], llm_schedule_cap=prof.get("llm_schedule_cap"))
+                          hero_cap=prof["hero_cap"], llm_schedule_cap=prof.get("llm_schedule_cap"),
+                          dm=CityDM(seed, records={c["name"]: c for c in city.get("characters", [])}) if dm else None)
         global _current_world
         _current_world = world
         if on_world:
@@ -240,6 +245,10 @@ async def _main(city, prof, backends, heroes, background, start, tick_minutes, t
         recorder.log("status", world.tick, tier=None, text=f"finished after {world.tick} ticks")
         if persist:
             persist_heroes(world)
+            if world.dm is not None:
+                saved = world.dm.save(storage, world.heroes, world.background)
+                recorder.log("status", world.tick, tier=None,
+                             text=f"saved character sheets ({saved} background residents)")
         storage.save_city_run(run_summary(world))
         return world
 

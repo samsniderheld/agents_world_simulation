@@ -26,7 +26,7 @@ import type {
   CityInsight,
   ThemeSummary,
   BackgroundResident,
-  ResidentDetail,
+  Person,
 } from './types';
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -162,11 +162,14 @@ export const agentsApi = {
     // Simulation node -- threaded through to every plan/decompose/react/
     // dialogue call this run makes (see agents/textutil.directive_block).
     directive?: string;
+    // Dice & DM (agents/dm/): tasks that can fail, d20 checks, narration.
+    dm?: boolean;
   }) =>
     request<{ ok: boolean; error: string | null }>('/api/agents/run', {
       method: 'POST',
       body: json({
         agent_names: params.agentNames,
+        dm: params.dm ?? false,
         ticks: params.ticks ?? 8,
         tick_minutes: params.tickMinutes,
         start_time: params.startTime,
@@ -199,6 +202,7 @@ export const agentsApi = {
     placeId?: string;
     persistHeroMemories?: boolean;
     seed?: number;
+    dm?: boolean;
   }) =>
     request<{ ok: boolean; error: string | null }>('/api/agents/run', {
       method: 'POST',
@@ -219,6 +223,7 @@ export const agentsApi = {
         location_mode: params.placeId ? 'convene' : 'grounded',
         persist_hero_memories: params.persistHeroMemories ?? true,
         seed: params.seed,
+        dm: params.dm ?? false,
       }),
     }),
 
@@ -235,8 +240,9 @@ export const agentsApi = {
     request<CityInsight>('/api/agents/city/report', { method: 'POST', body: json({ previous }) }),
   cityAsk: (question: string) =>
     request<CityInsight>('/api/agents/city/ask', { method: 'POST', body: json({ question }) }),
+  // A character's Dice & DM sheet (rolled and saved the first time it's asked for).
+  person: (id: string) => request<Person>(`/api/agents/people/${encodeURIComponent(id)}`),
   cityResidents: () => request<{ residents: BackgroundResident[] }>('/api/agents/city/residents'),
-  cityResident: (id: string) => request<ResidentDetail>(`/api/agents/city/residents/${encodeURIComponent(id)}`),
   cityResidentToCharacter: (id: string) =>
     request<{ character: Character }>(`/api/agents/city/residents/${encodeURIComponent(id)}/character`, { method: 'POST' }),
   cityZoomOptions: () => request<CityZoomOptions>('/api/agents/city/zoom'),

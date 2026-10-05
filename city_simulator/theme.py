@@ -33,6 +33,8 @@ UPLOAD_DIR = ROOT / "citystate" / "data" / "themes"
 DEFAULT_ID = "noir_nyc"
 
 _SLOT = re.compile(r"\{([a-z][a-z0-9_]*)\}")
+# Prompt groups a theme may leave out (they fall back to the default theme's).
+OPTIONAL_PROMPT_PREFIXES = ("dm.",)
 _ID_OK = re.compile(r"^[a-z0-9][a-z0-9_\-]{1,40}$")
 
 
@@ -75,8 +77,17 @@ class Theme:
         return self.raw.get(section, default)
 
     def template(self, key: str) -> str:
-        node = self.raw["prompts"]
+        """`prompts.<key>`; a key this theme doesn't have (an older or
+        uploaded theme, predating an optional prompt like the Dice & DM
+        ones -- including a city's own older copy of the default theme)
+        comes from the default theme."""
+        node = self.raw.get("prompts") or {}
         for part in key.split("."):
+            if not isinstance(node, dict) or part not in node:
+                fallback = default()
+                if fallback is not self:
+                    return fallback.template(key)
+                raise KeyError(f"no prompt {key!r}")
             node = node[part]
         return node
 
@@ -407,7 +418,8 @@ def validate(theme: Theme) -> list:
         allowed = prompt_slots()
         got = dict(_prompt_keys(prompts))
         for key in sorted(set(allowed) - set(got)):
-            problems.append(f"prompts.{key} is missing")
+            if not key.startswith(OPTIONAL_PROMPT_PREFIXES):   # optional ones fall back to the default theme
+                problems.append(f"prompts.{key} is missing")
         for key, text in got.items():
             if key not in allowed:
                 continue                      # extra prompts are ignored

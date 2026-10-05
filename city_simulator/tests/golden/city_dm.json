@@ -1,0 +1,142 @@
+{
+ "events": "944d7b708240879e",
+ "prompts": "f46dedb2787988de",
+ "checks": [
+  [
+   0,
+   "Lou Marino",
+   "STR 5+0=5 vs 15 -- failure"
+  ],
+  [
+   0,
+   "Vera Katz",
+   "CHA 18+2=20 vs 20 -- success"
+  ],
+  [
+   0,
+   "Sal Greco",
+   "INT 3+1=4 vs 25 -- failure"
+  ],
+  [
+   0,
+   "Tom Walsh",
+   "DEX 16+1=17 vs 20 -- failure"
+  ],
+  [
+   0,
+   "Tom Walsh",
+   "persuade Patrick Kessler: CHA 10-1=9 vs WIS 6 -- success"
+  ],
+  [
+   0,
+   "Vera Katz",
+   "threaten Margarethe Lombardi: STR 3-1=2 vs WIS 7 -- failure"
+  ],
+  [
+   1,
+   "Lou Marino",
+   "INT 13+1=14 vs 10 -- success"
+  ],
+  [
+   1,
+   "Vera Katz",
+   "WIS 5+2=7 vs 20 -- failure"
+  ],
+  [
+   1,
+   "Tom Walsh",
+   "WIS 13+2=15 vs 25 -- failure"
+  ],
+  [
+   1,
+   "Tom Walsh",
+   "threaten Fiona O'Malley: STR 3-1=2 vs WIS 15 -- failure"
+  ],
+  [
+   1,
+   "Lou Marino",
+   "threaten Vera Katz: STR 5+0=5 vs WIS 16 -- failure"
+  ],
+  [
+   2,
+   "Lou Marino",
+   "CHA 9+0=9 vs 10 -- failure"
+  ],
+  [
+   2,
+   "Vera Katz",
+   "CHA 19+2=21 vs 25 -- failure"
+  ],
+  [
+   2,
+   "Sal Greco",
+   "CON 15+0=15 vs 15 -- success"
+  ],
+  [
+   2,
+   "Tom Walsh",
+   "CHA 10-1=9 vs 10 -- failure"
+  ],
+  [
+   2,
+   "Sal Greco",
+   "threaten Cornelius Krueger: STR 19-1=18 vs WIS 7 -- success"
+  ],
+  [
+   2,
+   "Tom Walsh",
+   "persuade Michael Goldstein: CHA 11-1=10 vs WIS 13 -- failure"
+  ],
+  [
+   2,
+   "Vera Katz",
+   "persuade Lou Marino: CHA 10+1=11 vs WIS 16 -- failure"
+  ],
+  [
+   3,
+   "Vera Katz",
+   "INT 4-1=3 vs 15 -- failure"
+  ],
+  [
+   3,
+   "Sal Greco",
+   "CON 5+0=5 vs 10 -- failure"
+  ],
+  [
+   3,
+   "Tom Walsh",
+   "WIS 9+2=11 vs 10 -- success"
+  ],
+  [
+   3,
+   "Lou Marino",
+   "persuade Aoife Marino: CHA 11+0=11 vs WIS 16 -- failure"
+  ]
+ ],
+ "counts": [
+  {
+   "checks": 39,
+   "hero_checks": 4,
+   "social_checks": 2,
+   "background_checks": 33
+  },
+  {
+   "checks": 32,
+   "hero_checks": 3,
+   "social_checks": 2,
+   "background_checks": 27
+  },
+  {
+   "checks": 8,
+   "hero_checks": 4,
+   "social_checks": 3,
+   "background_checks": 1
+  },
+  {
+   "checks": 5,
+   "hero_checks": 3,
+   "social_checks": 1,
+   "background_checks": 1
+  }
+ ]
+}

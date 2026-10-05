@@ -3,7 +3,7 @@ import type { UIEvent } from 'react';
 import type { Node, NodeProps } from '@xyflow/react';
 import { agentsApi, history } from '../../api/client';
 import type { AgentEvent, CityInsight, CityMetrics, CityZoomOptions, CityZoomResult } from '../../api/types';
-import { eventLine } from '../../inspector/format';
+import { eventLine, eventOutcome } from '../../inspector/format';
 import { useJobStore } from '../../state/jobStore';
 import { readHiddenIds } from '../useHiddenEntities';
 import { NodeShell } from './NodeShell';
@@ -29,6 +29,8 @@ export interface CitySimulationNodeData extends Record<string, unknown> {
   directive: string;
   // Append each hero's events to their saved record, as a SCENE run does.
   persistHeroMemories: boolean;
+  // Dice & DM (agents/dm/): on for new nodes, off for ones saved before it existed.
+  dm: boolean;
   // Heroes = every resident not hidden in the Gallery (plus any wired in),
   // resolved fresh each time the run starts.
   heroesFromGallery: boolean;
@@ -50,8 +52,10 @@ interface NotableResident {
   hero_interactions: number;
 }
 
-const LOG_KINDS = new Set(['action', 'dialogue', 'react', 'status', 'promotion', 'tick_summary']);
-const LOG_KINDS_WITH_BACKGROUND = new Set([...LOG_KINDS, 'move', 'encounter', 'schedules', 'moves']);
+// check/outcome: Dice & DM rolls and what came of them (agents/dm/); a
+// background resident's outcome (a crit) shows only with the background on.
+const LOG_KINDS = new Set(['action', 'dialogue', 'react', 'check', 'outcome', 'status', 'promotion', 'tick_summary']);
+const LOG_KINDS_WITH_BACKGROUND = new Set([...LOG_KINDS, 'move', 'encounter', 'schedules', 'moves', 'checks']);
 
 const PROVIDERS = [
   { value: '', label: 'profile default' },
@@ -167,7 +171,7 @@ export function CitySimulationNode({ id, data, selected, height }: NodeProps<Cit
   }, [isCityRun]);
 
   const shownKinds = showBackground ? LOG_KINDS_WITH_BACKGROUND : LOG_KINDS;
-  const visibleEvents = recent.filter((e) => shownKinds.has(e.kind));
+  const visibleEvents = recent.filter((e) => shownKinds.has(e.kind) && (showBackground || e.tier !== 'background'));
 
   useEffect(() => {
     if (!stickToBottomRef.current) return;
@@ -209,6 +213,7 @@ export function CitySimulationNode({ id, data, selected, height }: NodeProps<Cit
         directive,
         placeId: data.placeId,
         persistHeroMemories: data.persistHeroMemories,
+        dm: data.dm,
       });
       if (!res.ok) setError(res.error ?? 'failed to start');
       else setWatching(true);
@@ -319,6 +324,10 @@ export function CitySimulationNode({ id, data, selected, height }: NodeProps<Cit
         <input type="checkbox" checked={data.persistHeroMemories} onChange={(e) => change({ persistHeroMemories: e.target.checked })} />
         <span className="node-subtitle">persist hero memories (SCENE runs remember this run)</span>
       </label>
+      <label className="node-checkbox-row" title="Heroes' plans become tasks rolled d20 + stat and narrated; background residents roll for their day with no extra LLM calls">
+        <input type="checkbox" checked={data.dm} onChange={(e) => change({ dm: e.target.checked })} />
+        <span className="node-subtitle">dice &amp; DM (stats, checks, consequences)</span>
+      </label>
 
       <div className="node-controls">
         <button className="node-run-btn" disabled={globallyRunning || pending} onClick={run}>
@@ -390,7 +399,7 @@ export function CitySimulationNode({ id, data, selected, height }: NodeProps<Cit
         <div className="node-log nowheel" ref={logRef} onScroll={onLogScroll} style={{ maxHeight: height ? undefined : 240 }}>
           {visibleEvents.map((e, i) => (
             <div className="node-log-row" key={i}>
-              <span className="node-log-badge">{e.kind}</span>
+              <span className="node-log-badge" data-outcome={eventOutcome(e)}>{e.kind}</span>
               {e.agent && <span>{e.agent}: </span>}
               {eventLine(e)}
             </div>

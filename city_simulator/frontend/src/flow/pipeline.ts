@@ -27,6 +27,7 @@ export interface PipelineCallbacks {
   onProviderChange: (nodeId: string, provider: string) => void;
   onChatModelChange: (nodeId: string, chatModel: string) => void;
   onVerboseChange: (nodeId: string, verbose: boolean) => void;
+  onDmChange: (nodeId: string, dm: boolean) => void;
   onSubjectChange: (nodeId: string, subjectId: string) => void;
   onTreatmentGenerated: (nodeId: string, text: string, shots: string[]) => void;
   onTreatmentProviderChange: (nodeId: string, provider: string) => void;
@@ -91,6 +92,8 @@ export function citySimSettings(d: Record<string, unknown> = {}) {
     startTime: (d.startTime as string) ?? '06:00',
     directive: (d.directive as string) ?? '',
     persistHeroMemories: (d.persistHeroMemories as boolean) ?? true,
+    // Off for a node saved before Dice & DM existed; "+ add" passes true.
+    dm: (d.dm as boolean) ?? false,
     heroesFromGallery: (d.heroesFromGallery as boolean) ?? false,
   };
 }
@@ -125,6 +128,7 @@ export function toPipelineRenderNode(gn: GraphNode, cb: PipelineCallbacks, owner
         // simulation.run()'s own `verbose` param, which only controls
         // server-terminal printing and is never sent by this node.
         verbose: (gn.data.verbose as boolean) ?? true,
+        dm: (gn.data.dm as boolean) ?? false,
         agentNames: [],
         onTicksChange: cb.onTicksChange,
         onTickMinutesChange: cb.onTickMinutesChange,
@@ -133,6 +137,7 @@ export function toPipelineRenderNode(gn: GraphNode, cb: PipelineCallbacks, owner
         onProviderChange: cb.onProviderChange,
         onChatModelChange: cb.onChatModelChange,
         onVerboseChange: cb.onVerboseChange,
+        onDmChange: cb.onDmChange,
       },
     };
   }
@@ -306,7 +311,7 @@ export function pipelineToGraphNode(n: Node): GraphNode | null {
       position: n.position,
       width: n.width,
       height: n.height,
-      data: { ticks: d.ticks, tickMinutes: d.tickMinutes, startTime: d.startTime, directive: d.directive, provider: d.provider, chatModel: d.chatModel, verbose: d.verbose },
+      data: { ticks: d.ticks, tickMinutes: d.tickMinutes, startTime: d.startTime, directive: d.directive, provider: d.provider, chatModel: d.chatModel, verbose: d.verbose, dm: d.dm },
     };
   }
   if (n.type === 'treatment') {

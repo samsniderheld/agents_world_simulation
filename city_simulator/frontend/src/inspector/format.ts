@@ -32,6 +32,14 @@ export function eventLine(e: AgentEvent): string {
     case 'insight':
     case 'treatment':
       return e.text ?? '';
+    case 'check':
+      // "pick the lock · DEX 7+2=9 vs 15 -- failure"; an opposed check's
+      // text already names the move ("persuade Sal: CHA ... vs WIS 12 ...")
+      return e.opposed_by ? String(e.text ?? '') : `${e.action ?? ''} · ${e.text ?? ''}`;
+    case 'outcome': {
+      const effects = Array.isArray(e.effects) && e.effects.length ? ` [${(e.effects as string[]).join(', ')}]` : '';
+      return `${e.text ?? ''}${e.feeling ? ` — feels ${e.feeling}` : ''}${effects}`;
+    }
     case 'continue':
       return 'continued';
     case 'reflect_pause':
@@ -43,9 +51,20 @@ export function eventLine(e: AgentEvent): string {
     case 'schedules':
     case 'moves':
     case 'tick_summary':
+    case 'checks':
     case 'metrics':
       return e.text ?? '';
     default:
       return '';
   }
+}
+
+// "success" | "failure" for a check/outcome event (crits included), for
+// colouring its log badge; undefined for everything else.
+export function eventOutcome(e: AgentEvent): 'success' | 'failure' | undefined {
+  if (e.kind !== 'check' && e.kind !== 'outcome') return undefined;
+  const o = String(e.outcome ?? '');
+  if (o.endsWith('success')) return 'success';
+  if (o.endsWith('failure')) return 'failure';
+  return undefined;
 }

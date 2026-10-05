@@ -323,7 +323,7 @@ function CanvasInner({ cityId, data, onDataRefresh }: { cityId: string; data: Hi
           <MiniMap nodeColor={miniMapNodeColor} pannable zoomable />
         </ReactFlow>
       </div>
-      <Inspector selection={selection} data={data} onDataRefresh={onDataRefresh} />
+      <Inspector cityId={cityId} selection={selection} data={data} onDataRefresh={onDataRefresh} />
       {savedGraphs.modal}
       {newAgentModal && (
         <NewAgentModal

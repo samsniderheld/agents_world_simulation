@@ -30,6 +30,7 @@ TOKENS_IMPORTANCE = 120
 TOKENS_FOCAL = 150
 TOKENS_INSIGHT = 250
 TOKENS_BIO = 350
+TOKENS_NARRATE = 200            # dice & DM: one check's narration (agents/dm/city.py)
 
 # --- Encounters -------------------------------------------------------------------
 MAX_ENCOUNTERS_PER_PLACE = 3       # per tick

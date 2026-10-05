@@ -4,6 +4,7 @@ takes, at several population sizes.
     python3 -m agents.city.bench                         # stub server, 50/200/500/1000 agents
     python3 -m agents.city.bench --agents 200 1000 --ticks 8 --latency 0.2 --concurrency 64
     python3 -m agents.city.bench --real --profile rtx5090 --agents 200   # a real vLLM/Ollama
+    python3 -m agents.city.bench --dm                    # with dice & DM on (agents/dm/)
 
 By default every request goes to agents/city/stub_server.py (no network,
 nothing written): each request takes --latency seconds and --concurrency
@@ -21,6 +22,8 @@ Per population size it reports, averaged over the ticks:
   hero, bg      calls per agent per tick, per tier ("bg" includes the
                 start-of-day schedule; "bg steady" leaves those ticks out)
   waves         the slowest waves' share of the tick
+  checks        (--dm) dice checks per tick: heroes' tasks + social
+                checks, and background residents' (which make no calls)
 Heroes default to 10% of the population (10-200); the city is synthetic
 (40 places) unless --real, which uses the active city and its residents.
 """
@@ -83,8 +86,9 @@ class _NullStorage:
 def bench_one(agents: int, args) -> dict:
     heroes = args.heroes if args.heroes is not None else max(10, min(200, agents // 10))
     heroes = min(heroes, agents)
+    dm = getattr(args, "dm", False)
     kwargs = dict(background_count=agents - heroes, ticks=args.ticks, tick_minutes=args.tick_minutes,
-                  start_time="06:00", profile=args.profile, persist_hero_memories=False, seed=args.seed)
+                  start_time="06:00", profile=args.profile, persist_hero_memories=False, seed=args.seed, dm=dm)
     server = None
     saved_storage = city_run.storage
     saved_profile = dict(hardware.CITY_PROFILES[args.profile])
@@ -135,6 +139,9 @@ def bench_one(agents: int, args) -> dict:
         "failures": sum(m["failures"] for m in ticks),
         "waves": ", ".join(f"{w} {100 * s / total:.0f}%" for w, s in top),
         "peak_in_flight": server.peak if server else None,
+        "hero_checks": statistics.mean(m["checks"]["hero_checks"] + m["checks"]["social_checks"] for m in ticks)
+        if dm else None,
+        "bg_checks": statistics.mean(m["checks"]["background_checks"] for m in ticks) if dm else None,
     }
 
 
@@ -150,6 +157,7 @@ def main(argv=None):
     parser.add_argument("--profile", default="rtx5090", choices=sorted(hardware.CITY_PROFILES))
     parser.add_argument("--seed", type=int, default=ccfg.DEFAULT_SEED)
     parser.add_argument("--real", action="store_true", help="use the profile's real backends and the active city")
+    parser.add_argument("--dm", action="store_true", help="dice & DM on: tasks, checks, narration (agents/dm/)")
     args = parser.parse_args(argv)
 
     rows = []
@@ -158,16 +166,19 @@ def main(argv=None):
         rows.append(bench_one(n, args))
 
     mode = "real backends" if args.real else f"stub server: {args.latency}s/request, {args.concurrency} in flight"
-    print(f"\nCITY benchmark -- {mode}, {args.ticks} ticks of {args.tick_minutes} min, profile {args.profile}\n")
+    print(f"\nCITY benchmark -- {mode}, {args.ticks} ticks of {args.tick_minutes} min, profile {args.profile}"
+          f"{', dice & DM on' if args.dm else ''}\n")
     head = f"{'agents':>6} {'heroes':>6} {'bg':>5} {'s/tick':>7} {'ideal':>6} {'calls/tick':>10} {'embeds':>6} " \
-           f"{'hero':>6} {'bg':>6} {'bg steady':>9} {'fail':>4}  slowest waves"
+           f"{'hero':>6} {'bg':>6} {'bg steady':>9} {'fail':>4}" + (f" {'checks h/bg':>12}" if args.dm else "") + \
+           "  slowest waves"
     print(head)
     print("-" * len(head))
     for r in rows:
         ideal = f"{r['ideal_per_tick']:.2f}" if r["ideal_per_tick"] is not None else "-"
         print(f"{r['agents']:>6} {r['heroes']:>6} {r['background']:>5} {r['s_per_tick']:>7.2f} {ideal:>6} "
               f"{r['calls_per_tick']:>10.1f} {r['embeds_per_tick']:>6.1f} {r['hero_calls']:>6.2f} {r['bg_calls']:>6.3f} "
-              f"{r['bg_steady']:>9.3f} {r['failures']:>4}  {r['waves']}")
+              f"{r['bg_steady']:>9.3f} {r['failures']:>4}"
+              + (f" {r['hero_checks']:>5.1f}/{r['bg_checks']:<6.1f}" if args.dm else "") + f"  {r['waves']}")
     print("\nhero / bg / bg steady = LLM calls per agent per tick for that tier; target: bg < 0.2.")
     return rows
 

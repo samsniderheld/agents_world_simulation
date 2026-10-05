@@ -95,6 +95,10 @@ export function usePipelineCallbacks(
     setNodes((prev) => (prev ? prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, verbose } } : n)) : prev));
   }, [setNodes]);
 
+  const onDmChange = useCallback((nodeId: string, dm: boolean) => {
+    setNodes((prev) => (prev ? prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, dm } } : n)) : prev));
+  }, [setNodes]);
+
   const onSubjectChange = useCallback((nodeId: string, subjectId: string) => {
     setNodes((prev) => (prev ? prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, subjectId } } : n)) : prev));
   }, [setNodes]);
@@ -314,6 +318,7 @@ export function usePipelineCallbacks(
     onProviderChange,
     onChatModelChange,
     onVerboseChange,
+    onDmChange,
     onSubjectChange,
     onTreatmentGenerated,
     onTreatmentProviderChange,

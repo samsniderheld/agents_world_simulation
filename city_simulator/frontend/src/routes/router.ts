@@ -152,10 +152,13 @@ export function pathFor(scope: Scope): string {
   }
 }
 
-export function navigate(scope: Scope) {
+// `replace` swaps the current history entry instead of adding one (a
+// redirect, so Back doesn't land on the page that redirected).
+export function navigate(scope: Scope, opts: { replace?: boolean } = {}) {
   const path = pathFor(scope);
   if (path !== window.location.pathname + window.location.search) {
-    window.history.pushState(null, '', path);
+    if (opts.replace) window.history.replaceState(null, '', path);
+    else window.history.pushState(null, '', path);
     window.dispatchEvent(new PopStateEvent('popstate'));
   }
 }

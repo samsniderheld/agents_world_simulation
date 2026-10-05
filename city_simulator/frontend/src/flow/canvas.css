@@ -110,3 +110,20 @@
   stroke-width: 1px;
   cursor: grab;
 }
+
+/* A hero's node canvas (routes/AgentScreen.tsx), with a way back to their
+   character page. */
+.agent-canvas-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+}
+.agent-canvas-back {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 20;
+  flex: none;
+  padding: 6px 12px;
+}

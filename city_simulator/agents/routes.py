@@ -124,6 +124,7 @@ def _city_params(body):
         "convene_at": _convene_place_name(body),
         "persist_hero_memories": bool(body.get("persist_hero_memories", True)),
         "seed": opt_int("seed", 0, 2**31 - 1),
+        "dm": bool(body.get("dm", False)),
     }
 
 
@@ -176,6 +177,9 @@ def run():
         # Simulated time of day the run starts at, "HH:MM" (24-hour);
         # blank = 06:00.
         "start_time": _start_time(body.get("start_time")),
+        # Dice & DM (agents/dm/): tasks that can fail, checks, sheets.
+        "dm": bool(body.get("dm", False)),
+        "seed": _opt_int(body.get("seed")),
     }
     ok, error = jobs.start(params)
     return json_response({"ok": ok, "error": error}, status=200 if ok else 409)
@@ -251,22 +255,38 @@ def city_ask():
         return json_response({"error": str(e)}, status=502)
 
 
+@bp.get("/people/<person_id>")
+def person_page(person_id):
+    """Anyone in the active city -- a hero (char_*) or a background
+    resident (bg_*) -- in one shape, sheet first (agents/people.py): the
+    character page and the canvas drawer."""
+    from . import people
+    try:
+        return json_response(people.person(person_id, sheet_json=_sheet_json))
+    except ValueError as e:
+        return json_response({"error": str(e)}, status=404)
+
+
+def _sheet_json(sheet) -> dict:
+    """A sheet plus the derived bits the UI shows (modifiers, labels)."""
+    from .dm.rules import STAT_NAMES, STATS
+    from .dm.sheet import attitude_label, currency
+    return {
+        **sheet.to_dict(),
+        "modifiers": {s: sheet.mod(s) for s in STATS},
+        "stat_names": STAT_NAMES,
+        "mood_text": sheet.mood_text(),
+        "attitudes": {n: attitude_label(v) for n, v in sheet.relationships.items()},
+        "currency": currency(),
+    }
+
+
 @bp.get("/city/residents")
 def city_residents():
     """The active city's background residents (agents/city/zoom.py), for
     the Gallery."""
     from .city import zoom
     return json_response({"residents": zoom.residents()})
-
-
-@bp.get("/city/residents/<resident_id>")
-def city_resident(resident_id):
-    """One background resident's page (agents/city/zoom.py)."""
-    from .city import zoom
-    try:
-        return json_response(zoom.resident_detail(resident_id))
-    except ValueError as e:
-        return json_response({"error": str(e)}, status=404)
 
 
 @bp.post("/city/residents/<resident_id>/character")

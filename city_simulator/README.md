@@ -280,8 +280,22 @@ it.
 lists every node type plus the city's residents and places not yet on the
 canvas (drag or "+" to add); the right Inspector shows the city overview,
 chronicle and generation log, or the selected agent's/place's detail and
-media. Double-click an Agent or Location node (or its ⤢ button) to drill
-into that entity's own canvas (`/c/<city>/agent/<id>`, `/c/<city>/place/<id>`).
+media. Double-click an Agent node (or its ⤢ button) to open their character
+page (below), a Location node to drill into its own canvas
+(`/c/<city>/place/<id>`).
+
+**A character's page** (`/c/<city>/agent/<id>` for a hero,
+`/c/<city>/resident/<id>` for a CITY background resident) is one view for
+both, sheet first: the Dice & DM character sheet, then their story, the
+people they've dealt with (each a link to their page), memories, plans,
+where they were in the last City Simulation, media, treatments and every
+run's log. A resident's page has the same sections, just thinner, plus
+*make a hero*; once they're a hero their page is the hero's. A hero's node
+canvas (images, video, storyboards) is the page's *canvas →* switch, with
+the same view in its side panel -- which is also what the city canvas's
+Inspector shows for a selected agent. It all comes from one endpoint,
+`GET /api/agents/people/<id>` (`agents/people.py`).
+
 The header's **Gallery** button opens a card view of all agents and
 locations (`/c/<city>/gallery`); each card's hide toggle drops that entity
 from every canvas's "add" drawer without touching anything already placed
@@ -304,8 +318,8 @@ is the one table of allowed connections; port colors follow
 | **Agent** | `agent:out`, `run:out`; `style:in` | A resident. Has its own "▶ run" for a single-agent simulation. |
 | **Location** | `place:out`; `style:in` | A place. |
 | **Population** | `character-style:in`, `location-style:in` | One number, N: picks N of the city's locations (ones with no resident first, then ones without an exterior photo, newest first) and gives each a new resident who belongs there -- grounded at that place, so their bio and life history come from its founder and recorded history -- with a square portrait, plus a square exterior photo of the place if it has none (1024×1024, the image model's smallest size). A Style wired into *char style* applies to every portrait, one wired into *place style* to every exterior. Everything is generated in parallel (6 at a time; one at a time with the local image provider), as a background job with progress and a stop button; images attach to each agent's/place's media. Locations aren't created -- a city's places come from its history. |
-| **Simulation** | `agents:in` (many), `place:in`; `run:out` | Runs a tick loop for the connected agents. A connected Location *convenes* them there instead of at their own grounding places. Ticks, a free-text directive to steer the interaction, provider/model, and a verbose/actions-and-dialogue-only log filter. |
-| **City Simulation** | `agents:in` (many: the heroes), `place:in`; `run:out` | CITY mode: the wired agents (or, with none wired, every resident) are heroes with full cognition, plus N background residents generated from the city's own data who follow daily schedules. Hardware profile (Mac/Ollama, RTX 5090 or H100 with vLLM) and per-tier provider/model, ticks/length/start, directive, a "persist hero memories" toggle. While running: pause/resume/stop, per-tick metrics (time per wave, requests, tok/s, failures), the residents most involved with the heroes (promote any of them to hero), and a heroes-only or everyone log. Paused or finished: *zoom into a scene* picks a place and time window and creates a Simulation node wired with whoever was there. |
+| **Simulation** | `agents:in` (many), `place:in`; `run:out` | Runs a tick loop for the connected agents. A connected Location *convenes* them there instead of at their own grounding places. Ticks, a free-text directive to steer the interaction, provider/model, a verbose/actions-and-dialogue-only log filter, and *dice & DM* (stats, tasks that can fail, d20 checks, narrated consequences -- see `agents/README.md`). |
+| **City Simulation** | `agents:in` (many: the heroes), `place:in`; `run:out` | CITY mode: the wired agents (or, with none wired, every resident) are heroes with full cognition, plus N background residents generated from the city's own data who follow daily schedules. Hardware profile (Mac/Ollama, RTX 5090 or H100 with vLLM) and per-tier provider/model, ticks/length/start, directive, a "persist hero memories" toggle, *dice & DM*. While running: pause/resume/stop, per-tick metrics (time per wave, requests, tok/s, failures), the residents most involved with the heroes (promote any of them to hero), and a heroes-only or everyone log. Paused or finished: *zoom into a scene* picks a place and time window and creates a Simulation node wired with whoever was there. |
 | **Treatment** | `run:in`, `agent:in`, `place:in`, `style:in`; `treatment:out`, `shots:out` | Turns the connected run's transcript into a film treatment (provider/model selectable). Connected Agents/Locations feed the LLM their real bios (with appearance/wardrobe) and architecture descriptions as `CAST:`/`SETTING:` context. "▶ create storyboard" creates a **Storyboard** node seeded with one Frame per parsed shot. |
 | **Storyboard** | `shots:in`, `agent:in`, `place:in`, `style:in` | A container with its own canvas (`/storyboard/<id>`): the seeded Frame nodes, laid out in one row, each already wired to whatever Agent/Location/Style the Treatment had connected -- the same connections are redrawn to the Storyboard node itself on the outer canvas. The node shows thumbnails of its generated frames. |
 | **Image** | `image:in`, `agent:in`, `place:in`, `shot:in`, `style:in`; `image:out` | The one image node. Generates from its prompt (16:9, 9:16 or square) with any wired Style, Agent/Location photos, and input Images as references; *edit image* changes the current picture with a second prompt. The result stays on the node, or -- with *save to ... media* ticked, the default on an agent's or place's own canvas -- goes into that entity's media (its thumbnail, media grid, and other images' references). Storyboards seed one per shot (header "Shot 03"). Older Frame, agent/place Image and freeform Image nodes load as this one. |
@@ -517,6 +531,9 @@ don't exist, a prompt using a `{slot}` the app doesn't fill or dropping a
 reply marker the app reads (`NAME:`, `WHERE:`, `STORYBOARD:`...) -- and a
 small test history is generated with it; every problem is listed.
 `GET /api/themes/reference` lists every prompt and the slots it can use.
+The Dice & DM prompts (`prompts.dm`) and the background dice table
+(`city_life.dice`) are optional: a theme without them uses the default
+theme's.
 
 **Per city:** a city keeps its own copy of the theme it was generated
 with (`citystate/data/cities/<id>/theme.yaml`, downloadable from its card),
@@ -533,7 +550,10 @@ python3 -m agents.city.bench                 # CITY at 50/200/500/1000 agents on
 
 `tests/test_scene_regression.py` snapshots a SCENE run (event sequence and
 every prompt, against a deterministic stub): if it fails, SCENE's behaviour
-changed. Re-record deliberately with `UPDATE_GOLDEN=1`.
+changed. `tests/test_theme_golden.py` does the same for everything the
+theme drives (history, CITY), and `tests/test_dm_scene.py` /
+`tests/test_dm_city.py` for seeded runs with dice & DM on. Re-record
+deliberately with `UPDATE_GOLDEN=1`.
 
 ## Extending
 
