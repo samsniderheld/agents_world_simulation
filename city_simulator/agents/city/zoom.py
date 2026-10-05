@@ -334,17 +334,7 @@ def resident_detail(resident_id: str) -> dict:
     entry = (summary.get("background") or {}).get(resident_id)
     promoted_hero = next((h for h in summary.get("heroes", []) if h.get("promoted_from") == resident_id), None)
     memories = entry.get("recent", []) if entry else (summary.get("promoted_memories") or {}).get(record["name"], [])
-    stays = []
-    if record["name"] in summary.get("agents", []):
-        i = summary["agents"].index(record["name"])
-        for tick, row in enumerate(summary["positions"]):
-            where = summary["places"][row[i]] if row[i] >= 0 else None
-            if where and where.startswith("~"):
-                where = "home" if "home" in where else "somewhere across town"
-            if stays and stays[-1]["place"] == where:
-                stays[-1]["until"] = _clock(meta, tick + 1)
-            else:
-                stays.append({"place": where, "from": _clock(meta, tick), "until": _clock(meta, tick + 1)})
+    stays = stays_for(summary, record["name"])
     hero_names = {h["name"] for h in summary.get("heroes", [])}
     out["run"] = {
         "started_at": summary["started_at"],
@@ -358,6 +348,23 @@ def resident_detail(resident_id: str) -> dict:
         # the page shows the time separately.
         "memories": [{"time": _clock(meta, tick), "kind": kind,
                       "text": re.sub(r"^(Day \d+, )?\d{1,2}:\d{2} [AP]M: ", "", text)} for tick, kind, text in memories],
-        "stays": [s for s in stays if s["place"]],
+        "stays": stays,
     }
     return out
+
+
+def stays_for(summary: dict, name: str) -> list:
+    """Where someone (hero or resident) was over a CITY run, as stays:
+    [{"place", "from", "until"}] (HH:MM), [] if they weren't in it."""
+    if not summary or name not in summary.get("agents", []):
+        return []
+    meta, i, stays = summary["meta"], summary["agents"].index(name), []
+    for tick, row in enumerate(summary["positions"]):
+        where = summary["places"][row[i]] if row[i] >= 0 else None
+        if where and where.startswith("~"):
+            where = "home" if "home" in where else "somewhere across town"
+        if stays and stays[-1]["place"] == where:
+            stays[-1]["until"] = _clock(meta, tick + 1)
+        else:
+            stays.append({"place": where, "from": _clock(meta, tick), "until": _clock(meta, tick + 1)})
+    return [s for s in stays if s["place"]]

@@ -255,19 +255,16 @@ def city_ask():
         return json_response({"error": str(e)}, status=502)
 
 
-@bp.get("/sheet/<agent_id>")
-def character_sheet(agent_id):
-    """A character's Dice & DM sheet (agents/dm/) -- rolled and saved the
-    first time anyone asks, from their occupation and bio."""
-    from .dm import stats as dm_stats
-    city = citystate.get()
-    record = next((c for c in (city or {}).get("characters", []) if c["id"] == agent_id), None)
-    if record is None:
-        return json_response({"error": "no such agent"}, status=404)
-    sheet = dm_stats.sheet_from_record(record)
-    if not record.get("sheet"):
-        citystate.update_character_fields(agent_id, sheet=sheet.to_dict())
-    return json_response(_sheet_json(sheet))
+@bp.get("/people/<person_id>")
+def person_page(person_id):
+    """Anyone in the active city -- a hero (char_*) or a background
+    resident (bg_*) -- in one shape, sheet first (agents/people.py): the
+    character page and the canvas drawer."""
+    from . import people
+    try:
+        return json_response(people.person(person_id, sheet_json=_sheet_json))
+    except ValueError as e:
+        return json_response({"error": str(e)}, status=404)
 
 
 def _sheet_json(sheet) -> dict:
@@ -290,21 +287,6 @@ def city_residents():
     the Gallery."""
     from .city import zoom
     return json_response({"residents": zoom.residents()})
-
-
-@bp.get("/city/residents/<resident_id>")
-def city_resident(resident_id):
-    """One background resident's page (agents/city/zoom.py), with their
-    Dice & DM sheet -- the one a CITY run saved, or the roll a run would
-    give them (deterministic from their id; not saved here)."""
-    from .city import zoom
-    from .dm import stats as dm_stats
-    try:
-        detail = zoom.resident_detail(resident_id)
-    except ValueError as e:
-        return json_response({"error": str(e)}, status=404)
-    sheet = dm_stats.sheet_from_record({**detail, "sheet": detail.get("sheet")}, seed_key=resident_id)
-    return json_response({**detail, "sheet": _sheet_json(sheet)})
 
 
 @bp.post("/city/residents/<resident_id>/character")

@@ -150,10 +150,10 @@ function App() {
       <main className="app-main">
         {scope.kind === 'root' && <CitiesScreen />}
         {scope.kind === 'city' && <CityCanvas cityId={scope.cityId} />}
-        {scope.kind === 'agent' && <AgentScreen cityId={scope.cityId} characterId={scope.agentId} />}
+        {scope.kind === 'agent' && <AgentScreen cityId={scope.cityId} characterId={scope.agentId} from={scope.from} />}
         {scope.kind === 'place' && <PlaceScreen cityId={scope.cityId} placeId={scope.placeId} />}
         {scope.kind === 'gallery' && <GalleryScreen cityId={scope.cityId} />}
-        {scope.kind === 'resident' && <ResidentScreen cityId={scope.cityId} residentId={scope.residentId} />}
+        {scope.kind === 'resident' && <ResidentScreen cityId={scope.cityId} residentId={scope.residentId} from={scope.from} />}
         {scope.kind === 'scratch' && <ScratchScreen boardId={scope.boardId} from={scope.from} />}
         {scope.kind === 'storyboard' && <StoryboardScreen storyboardId={scope.storyboardId} from={scope.from} />}
       </main>

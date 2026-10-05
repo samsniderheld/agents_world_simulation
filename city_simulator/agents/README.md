@@ -514,8 +514,8 @@ done to them:
 Stats are rolled once (4d6 drop lowest) from the occupation's archetype
 (`dm/stats.py`), seeded by the character's id. The sheet is saved:
 characters in their record, and background residents in `background.json`.
-A run picks up where the last one left off. The inspector's **Sheet** tab
-and a resident's page show it.
+A run picks up where the last one left off. Every character's page (hero
+or resident, `people.py`) leads with it.
 
 **The loop:**
 

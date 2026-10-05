@@ -26,8 +26,7 @@ import type {
   CityInsight,
   ThemeSummary,
   BackgroundResident,
-  ResidentDetail,
-  CharacterSheet,
+  Person,
 } from './types';
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -242,9 +241,8 @@ export const agentsApi = {
   cityAsk: (question: string) =>
     request<CityInsight>('/api/agents/city/ask', { method: 'POST', body: json({ question }) }),
   // A character's Dice & DM sheet (rolled and saved the first time it's asked for).
-  sheet: (agentId: string) => request<CharacterSheet>(`/api/agents/sheet/${encodeURIComponent(agentId)}`),
+  person: (id: string) => request<Person>(`/api/agents/people/${encodeURIComponent(id)}`),
   cityResidents: () => request<{ residents: BackgroundResident[] }>('/api/agents/city/residents'),
-  cityResident: (id: string) => request<ResidentDetail>(`/api/agents/city/residents/${encodeURIComponent(id)}`),
   cityResidentToCharacter: (id: string) =>
     request<{ character: Character }>(`/api/agents/city/residents/${encodeURIComponent(id)}/character`, { method: 'POST' }),
   cityZoomOptions: () => request<CityZoomOptions>('/api/agents/city/zoom'),

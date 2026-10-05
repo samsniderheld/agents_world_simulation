@@ -280,8 +280,22 @@ it.
 lists every node type plus the city's residents and places not yet on the
 canvas (drag or "+" to add); the right Inspector shows the city overview,
 chronicle and generation log, or the selected agent's/place's detail and
-media. Double-click an Agent or Location node (or its ⤢ button) to drill
-into that entity's own canvas (`/c/<city>/agent/<id>`, `/c/<city>/place/<id>`).
+media. Double-click an Agent node (or its ⤢ button) to open their character
+page (below), a Location node to drill into its own canvas
+(`/c/<city>/place/<id>`).
+
+**A character's page** (`/c/<city>/agent/<id>` for a hero,
+`/c/<city>/resident/<id>` for a CITY background resident) is one view for
+both, sheet first: the Dice & DM character sheet, then their story, the
+people they've dealt with (each a link to their page), memories, plans,
+where they were in the last City Simulation, media, treatments and every
+run's log. A resident's page has the same sections, just thinner, plus
+*make a hero*; once they're a hero their page is the hero's. A hero's node
+canvas (images, video, storyboards) is the page's *canvas →* switch, with
+the same view in its side panel -- which is also what the city canvas's
+Inspector shows for a selected agent. It all comes from one endpoint,
+`GET /api/agents/people/<id>` (`agents/people.py`).
+
 The header's **Gallery** button opens a card view of all agents and
 locations (`/c/<city>/gallery`); each card's hide toggle drops that entity
 from every canvas's "add" drawer without touching anything already placed

@@ -6,8 +6,10 @@ const STAT_ORDER = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'];
 // A Dice & DM character sheet (agents/dm/sheet.py): the six stats with
 // modifiers, then what the dice have done to them -- mood, conditions,
 // money, goals, and how they feel about people.
-export function SheetView({ sheet }: { sheet: CharacterSheet }) {
-  const feelings = Object.entries(sheet.relationships)
+// `feelings` false leaves relationships out (the character view lists them
+// with the people they've met instead).
+export function SheetView({ sheet, feelings: showFeelings = true }: { sheet: CharacterSheet; feelings?: boolean }) {
+  const feelings = Object.entries(showFeelings ? sheet.relationships : {})
     .filter(([, v]) => Math.abs(v) >= 5)
     .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
   return (
@@ -65,7 +67,9 @@ export function SheetView({ sheet }: { sheet: CharacterSheet }) {
         </>
       )}
       {!sheet.goals.length && !feelings.length && (
-        <div className="sheet-dim">Goals and feelings appear once a run with dice & DM on has involved them.</div>
+        <div className="sheet-dim">
+          {showFeelings ? 'Goals and feelings appear' : 'Goals appear'} once a run with dice &amp; DM on has involved them.
+        </div>
       )}
     </div>
   );

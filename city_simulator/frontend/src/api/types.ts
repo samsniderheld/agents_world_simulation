@@ -42,20 +42,37 @@ export interface BackgroundResident {
   character_name: string | null;
 }
 
-// GET /api/agents/city/residents/<id> -- one resident's page.
-export interface ResidentDetail extends Omit<BackgroundResident, 'hero_interactions'> {
-  // Dice & DM: the sheet a CITY run saved, or the one it would roll them.
-  sheet?: CharacterSheet;
-  run: null | {
+// GET /api/agents/people/<id> (agents/people.py) -- anyone in the city, a
+// hero (char_*) or a background resident (bg_*), in one shape for the
+// character page and the canvas drawer. Lists are newest first; a
+// resident's are thinner (no plans, run log, treatments or media).
+export interface Person {
+  id: string;
+  kind: 'hero' | 'resident';
+  name: string;
+  age: number | null;
+  occupation: string | null;
+  quirk: string | null;
+  bio: string | null;
+  shift?: string;
+  places: { role: string; place: string }[];
+  life: { year: number; text: string }[];
+  sheet: CharacterSheet;
+  plans: { run_started_at: string | null; tick: number; items: string[] }[];
+  memories: { time: string; kind: string; text: string; importance: number | null; run_started_at: string | null }[];
+  people: { name: string; id: string | null; hero: boolean; meetings: number; attitude: number; attitude_label: string }[];
+  last_city_run: null | {
     started_at: string;
-    in_run: boolean;
-    became_hero: boolean;
-    hero_interactions: number | null;
-    schedule: string | null; // "llm" | "template"
-    acquaintances: { name: string; count: number; hero: boolean }[];
-    memories: { time: string; kind: string; text: string }[];
     stays: { place: string; from: string; until: string }[];
+    hero_interactions?: number | null;
+    schedule?: string | null; // "llm" | "template"
   };
+  runs: { started_at: string | null; mode: string; dm: boolean; events: AgentEvent[] }[];
+  treatments: Treatment[];
+  media: MediaItem[];
+  // The background resident they are (or were, before being made a hero).
+  resident_id: string | null;
+  can_make_hero: boolean;
 }
 
 // GET /api/themes -- a city theme (themes/*.yaml, or uploaded).
@@ -507,7 +524,7 @@ export interface CityInsight {
   started_at: string;
 }
 
-// GET /api/agents/sheet/<id> -- a Dice & DM character sheet (agents/dm/).
+// A Dice & DM character sheet (agents/dm/), as Person.sheet carries it.
 export interface CharacterSheet {
   stats: Record<string, number>;
   modifiers: Record<string, number>;
