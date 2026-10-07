@@ -1,142 +1,132 @@
 {
- "events": "944d7b708240879e",
- "prompts": "f46dedb2787988de",
+ "events": "83e750d52cabccfd",
+ "prompts": "b4db8cd51314ba5f",
  "checks": [
   [
    0,
-   "Lou Marino",
-   "STR 5+0=5 vs 15 -- failure"
+   "Sal Greco",
+   "CHA 3+4=7 vs 20 -- failure"
   ],
   [
    0,
-   "Vera Katz",
-   "CHA 18+2=20 vs 20 -- success"
+   "Tom Walsh",
+   "INT 16+2=18 vs 25 -- failure"
+  ],
+  [
+   0,
+   "Lou Marino",
+   "persuade Margarethe Lombardi: CHA 7+0=7 vs WIS 16 -- failure"
   ],
   [
    0,
    "Sal Greco",
-   "INT 3+1=4 vs 25 -- failure"
-  ],
-  [
-   0,
-   "Tom Walsh",
-   "DEX 16+1=17 vs 20 -- failure"
-  ],
-  [
-   0,
-   "Tom Walsh",
-   "persuade Patrick Kessler: CHA 10-1=9 vs WIS 6 -- success"
-  ],
-  [
-   0,
-   "Vera Katz",
-   "threaten Margarethe Lombardi: STR 3-1=2 vs WIS 7 -- failure"
+   "threaten Michael Katz: STR 9-1=8 vs WIS 9 -- failure"
   ],
   [
    1,
    "Lou Marino",
-   "INT 13+1=14 vs 10 -- success"
+   "WIS 13+3=16 vs 20 -- failure"
   ],
   [
    1,
    "Vera Katz",
-   "WIS 5+2=7 vs 20 -- failure"
+   "DEX 5+2=7 vs 15 -- failure"
+  ],
+  [
+   1,
+   "Sal Greco",
+   "INT 6+1=7 vs 10 -- failure"
   ],
   [
    1,
    "Tom Walsh",
-   "WIS 13+2=15 vs 25 -- failure"
-  ],
-  [
-   1,
-   "Tom Walsh",
-   "threaten Fiona O'Malley: STR 3-1=2 vs WIS 15 -- failure"
+   "STR 13-1=12 vs 20 -- failure"
   ],
   [
    1,
    "Lou Marino",
-   "threaten Vera Katz: STR 5+0=5 vs WIS 16 -- failure"
+   "threaten Sal Zimmerman: STR 10+0=10 vs WIS 10 -- failure"
+  ],
+  [
+   1,
+   "Vera Katz",
+   "persuade Murray Fitzgerald: CHA 9+2=11 vs WIS 8 -- success"
+  ],
+  [
+   1,
+   "Sal Greco",
+   "persuade Liam Krueger: CHA 12+4=16 vs WIS 21 -- failure"
   ],
   [
    2,
    "Lou Marino",
-   "CHA 9+0=9 vs 10 -- failure"
+   "INT 9+1=10 vs 20 -- failure"
   ],
   [
    2,
    "Vera Katz",
-   "CHA 19+2=21 vs 25 -- failure"
+   "DEX 19+2=21 vs 25 -- failure"
   ],
   [
    2,
    "Sal Greco",
-   "CON 15+0=15 vs 15 -- success"
-  ],
-  [
-   2,
-   "Tom Walsh",
-   "CHA 10-1=9 vs 10 -- failure"
-  ],
-  [
-   2,
-   "Sal Greco",
-   "threaten Cornelius Krueger: STR 19-1=18 vs WIS 7 -- success"
-  ],
-  [
-   2,
-   "Tom Walsh",
-   "persuade Michael Goldstein: CHA 11-1=10 vs WIS 13 -- failure"
+   "CHA 15+4=19 vs 15 -- success"
   ],
   [
    2,
    "Vera Katz",
-   "persuade Lou Marino: CHA 10+1=11 vs WIS 16 -- failure"
+   "threaten Tom Walsh: STR 8-1=7 vs WIS 4 -- success"
   ],
   [
    3,
    "Vera Katz",
-   "INT 4-1=3 vs 15 -- failure"
+   "CHA 4+2=6 vs 20 -- failure"
   ],
   [
    3,
    "Sal Greco",
-   "CON 5+0=5 vs 10 -- failure"
+   "CHA 5+4=9 vs 20 -- failure"
   ],
   [
    3,
    "Tom Walsh",
-   "WIS 9+2=11 vs 10 -- success"
+   "INT 9+2=11 vs 15 -- failure"
   ],
   [
    3,
    "Lou Marino",
-   "persuade Aoife Marino: CHA 11+0=11 vs WIS 16 -- failure"
+   "threaten Murray Fitzgerald: STR 16+0=16 vs WIS 17 -- failure"
+  ],
+  [
+   3,
+   "Sal Greco",
+   "persuade Seamus Silverman: CHA 18+4=22 vs WIS 16 -- success"
   ]
  ],
  "counts": [
   {
-   "checks": 39,
-   "hero_checks": 4,
+   "checks": 37,
+   "hero_checks": 2,
    "social_checks": 2,
    "background_checks": 33
   },
   {
-   "checks": 32,
-   "hero_checks": 3,
-   "social_checks": 2,
-   "background_checks": 27
-  },
-  {
-   "checks": 8,
+   "checks": 35,
    "hero_checks": 4,
    "social_checks": 3,
-   "background_checks": 1
+   "background_checks": 28
+  },
+  {
+   "checks": 6,
+   "hero_checks": 3,
+   "social_checks": 1,
+   "background_checks": 2
   },
   {
    "checks": 5,
    "hero_checks": 3,
-   "social_checks": 1,
-   "background_checks": 1
+   "social_checks": 2,
+   "background_checks": 0
   }
  ]
 }

@@ -15,8 +15,8 @@
 # part of a theme: see agents/config.py, history/data/config.yaml, hardware.py.
 theme:
   id: noir_nyc
-  name: Film-noir New York, 1959
-  description: An alternate-history New York City from Dutch New Amsterdam (1624) to a rain-slick, film-noir 1959.
+  name: New York, 1959 -- daily life
+  description: An alternate-history New York City from Dutch New Amsterdam (1624) to a rain-slick, film-noir 1959. It's the setting for existential, french new wave style, stories about the beauties of daily life.
 
 # ============================================================================
 # WORLD
@@ -25,9 +25,9 @@ theme:
 world:
   present_year: 1959
   currency: dollars
-  visual_look: 'moody film noir aesthetic: high-contrast black-and-white lighting, hard venetian-blind shadows,
-    wet city streets, dramatic low-key lighting, deep chiaroscuro shadow, 1940s wardrobe and production design.the
-    background should look like a painting, in the style of edward hopper.'
+  visual_look: 'quiet, observational slice-of-life look: soft natural daylight and warm window light, muted period
+    color, gentle shadows, ordinary streets, kitchens, shops and diners, late-1950s wardrobe and production design,
+    unhurried framing with room to breathe. The background should look like a painting, in the style of Edward Hopper.'
 
 # ============================================================================
 # ERAS
@@ -1551,35 +1551,35 @@ city_life:
   small_talk_topics:
   - the weather
   - the ball game
-  - a rumor about the precinct
+  - what's on television tonight
   - rent going up
-  - the numbers
+  - the kids on the block
   - somebody's cousin
   - the new place on the corner
   - work
-  - an old debt
+  - a recipe
   - the neighborhood
   importance_keywords:
-  - police
-  - cop
-  - money
-  - gun
-  - dead
-  - death
-  - murder
-  - love
-  - fight
-  - debt
-  - fire
-  - arrest
-  - missing
-  - secret
-  - threat
-  - blood
-  - stolen
-  - raid
-  - fired
+  - birthday
+  - letter
+  - baby
   - wedding
+  - anniversary
+  - new job
+  - promotion
+  - moving
+  - visit
+  - love
+  - friend
+  - family
+  - sick
+  - hospital
+  - funeral
+  - fired
+  - money
+  - gift
+  - first time
+  - last day
   everyone_words:
   - everyone
   - everybody
@@ -1634,27 +1634,27 @@ city_life:
         crit_success: ['{name} had the best shift in memory {where} -- the boss noticed, and the tips were good.']
         success: ['{name} put in a solid stretch {activity} {where}.', '{name} got through the work {where} without a hitch.']
         failure: ['{name} fumbled through {activity} {where}; nothing went right.', '{name} got chewed out {where} for a mistake.']
-        crit_failure: ['{name} made a real mess of things {where} and might not have a job tomorrow.']
+        crit_failure: ['{name} had one of those days {where} -- spilled, dropped and forgot everything, and laughed about it later.']
       drink:
         crit_success: ['{name} had a grand night {where}; somebody else paid for the last round.']
         success: ['{name} had a couple {where} and felt better for it.']
-        failure: ['{name} had one too many {where} and said something they regret.']
-        crit_failure: ['{name} drank themselves sick {where} and had to be helped out.']
+        failure: ['{name} nursed one drink {where} and found nobody much to talk to.']
+        crit_failure: ['{name} knocked a full glass into a stranger''s lap {where} and spent the evening apologizing.']
       errands:
         crit_success: ['{name} got everything done {where} and found a bargain besides.']
         success: ['{name} took care of {activity} {where}.']
         failure: ['{name} wasted the time on {activity}: wrong line, wrong change, wrong day.']
-        crit_failure: ['{name} lost their wallet while {activity} {where}.']
+        crit_failure: ['{name} came home from {activity} without the one thing they went out for.']
       social:
         crit_success: ['{name} was the life of the party {where}; everybody wanted a word.']
         success: ['{name} had a pleasant time {activity} {where}.']
         failure: ['{name} felt left out {where}; the talk went on without them.']
-        crit_failure: ['{name} got into a shouting match {where} and stormed out.']
+        crit_failure: ['{name} called someone by the wrong name {where} and could not stop blushing.']
       leisure:
         crit_success: ['{name} had a rare, perfect hour {activity} {where}.']
         success: ['{name} spent a quiet while {activity} {where}.']
         failure: ['{name} could not settle, {activity} {where}, mind elsewhere.']
-        crit_failure: ['{name} had a miserable time {activity} {where}; everything went wrong.']
+        crit_failure: ['{name} got caught in the rain {activity} {where} and came home soaked to the bone.']
 
 # ============================================================================
 # SCENE FALLBACK CAST
@@ -1668,23 +1668,23 @@ fallback_cast:
     location: Ozzy's Bar
   Lou:
     age: 45
-    traits: down on his luck private eye detective, cynical, lonely, alcoholic
-    currently: nursing a hangover at Ozzy's Bar
+    traits: private eye with a slow week, cynical but kind underneath, lonely since his divorce
+    currently: stopping in at Ozzy's Bar for a coffee and the crossword
     location: Ozzy's Bar
   Veronica:
     age: 32
-    traits: sultry lounge singer, sharp-tongued, guarded, more dangerous than she lets on
+    traits: lounge singer, warm, wry, quietly saving up to record a single
     currently: rehearsing her set for tonight's show at Ozzy's Bar
     location: Ozzy's Bar
   Marsh:
     age: 50
-    traits: corrupt police detective, gruff, always working an angle, hides menace behind a friendly voice
-    currently: stopping by Ozzy's Bar to collect a favor
+    traits: beat cop who mostly helps old ladies across the street, gruff voice, soft heart, counting the days to retirement
+    currently: taking his lunch break at Ozzy's Bar
     location: Ozzy's Bar
   Sal:
     age: 61
-    traits: aging mob boss, calm and courteous on the surface, ruthless underneath, expects respect
-    currently: holding court in his usual booth at Ozzy's Bar
+    traits: retired tailor, courtly and particular, misses his late wife, loves to give unasked-for advice
+    currently: reading the paper in his usual booth at Ozzy's Bar
     location: Ozzy's Bar
 
 # ============================================================================
@@ -1729,7 +1729,7 @@ prompts:
     character_constraint_occupation: ', whose occupation is exactly "{occupation}"'
     character_constraint_sex: ' and who is {sex}'
     character_dossier: |-
-      You are writing a short character dossier for a resident of an alternate-history New York City, living around 1959, in a film noir style world. the character should feel like an archetype from those types of movies.Here is a real piece of that city's generated history:
+      You are writing a short character dossier for a resident of an alternate-history New York City, living around 1959. The character can be a film-noir archetype -- a detective, a small-time crook, a femme fatale -- or, more often, an ordinary working person; either way, what defines them is their everyday life: their work, habits, the people they care about, and their small hopes and worries, not a dramatic plot. Here is a real piece of that city's generated history:
 
       {history_lines}
 
@@ -1776,7 +1776,7 @@ prompts:
       {memories}
 
       {name} typically starts the day around: {currently}.
-      Plan what {name} is trying to do over the next {horizon}{window}: their goals for that whole stretch and what they'll actually spend it on, sized to the stretch -- a week's plan is a week of intentions, not one day's errands. This is NOT the same stretch as any of the memories above -- move the story forward: pick up an unfinished thread, follow up on someone mentioned above, or react to a consequence of what already happened.
+      Plan what {name} is trying to do over the next {horizon}{window}: their goals for that whole stretch and what they'll actually spend it on, sized to the stretch -- a week's plan is a week of intentions, not one day's errands. This is NOT the same stretch as any of the memories above -- let their ordinary life carry on: their work and routines, small errands and pleasures, and the people they care about, picking up a little where things left off. Keep it everyday and low-key: even a detective or a crook mostly lives an ordinary day -- no big plots, schemes or confrontations.
 
       Give exactly {n_items} items in the order they'll happen, each covering roughly {per_item}. Each item is a short phrase. One item per line, no numbering, no times.
     plan_window: ', from {now} until {until}'
@@ -1855,7 +1855,7 @@ prompts:
       where the numbers in parentheses are the statement numbers it's based on.
   treatment:
     main: |-
-      You are a film treatment writer adapting a scene transcript into a short video vignette pitch, in a film noir style.
+      You are a film treatment writer adapting a scene transcript into a short video vignette pitch: a quiet slice-of-life story set in this film-noir city -- small everyday moments, routines and human connection, not crime plots or melodrama.
 
       Cast available in this scene: {cast_names}. Only write about characters who actually appear in the transcript below; do not invent any other named characters.
 
@@ -1869,7 +1869,7 @@ prompts:
       (one line per character who actually appears)
 
       SYNOPSIS:
-      <a tight paragraph, 4-8 sentences, describing what happens in this vignette, written as noir prose>
+      <a tight paragraph, 4-8 sentences, describing what happens in this vignette, in understated slice-of-life prose that lingers on small moments>
 
       STORYBOARD:
       1. <shot description> | Character: <physical description of whoever appears in this shot -- their build, face, and wardrobe, drawn from the cast appearance reference above, not invented -- or "none" for a shot with no one in frame> | Art direction: <set/production design notes> | Lighting: <lighting setup> | DOP: <camera angle, lens, and movement>
@@ -1891,10 +1891,10 @@ prompts:
       consistent with the transcript): {directive}'
   city:
     prefix: |-
-      This is a simulation of a city: an alternate-history New York City in {present_year}, a film-noir world of rain-slick streets, smoke-filled bars, cops on the take and people keeping secrets. Everything happens in {present_year}: no anachronisms, nothing supernatural.
-      {history}Rules for every reply: only people named in the prompt exist -- never invent or name anyone else; refer to anyone else generically ('the bartender', 'a cop'). Answer in exactly the format asked for, with nothing before or after it.
+      This is a simulation of a city: an alternate-history New York City in {present_year}, a film-noir world of rain-slick streets and smoke-filled bars -- but the stories here are about everyday life: work, routines, neighbors and small moments, not crime plots. Everything happens in {present_year}: no anachronisms, nothing supernatural.
+      {history}Rules for every reply: only people named in the prompt exist -- never invent or name anyone else; refer to anyone else generically ('the bartender', 'a neighbor'). Answer in exactly the format asked for, with nothing before or after it.
     prefix_history: 'The city''s history, briefly: {summary}'
-    hero_tier: You are writing for one of the story's main characters. Be specific, stay true to their personality
+    hero_tier: You are writing for one of the main characters of a slice-of-life story. Be specific, stay true to their personality
       and memories, and keep each answer short.
     background_tier: You are writing for a minor resident of the city. Keep it brief, plain and routine -- ordinary
       life, not drama.
@@ -1912,7 +1912,7 @@ prompts:
       {memories}
 
       {name} typically starts the day around: {currently}.
-      Plan what {name} is trying to do over the next {horizon}, from {now} until {until}: their goals for that stretch and what they'll actually spend it on, moving their story forward.
+      Plan what {name} is trying to do over the next {horizon}, from {now} until {until}: their goals for that stretch and what they'll actually spend it on, carrying on their everyday life -- work, routines, small errands and the people they care about.
       Give exactly {n_items} items in order, each covering about {per_item}; each a short phrase, no times. Reply as JSON: {"items": ["...", ...]}
     plan_no_memories: (no memories yet)
     decompose: |-
@@ -1976,7 +1976,7 @@ prompts:
     bio_upgrade: |-
       {name} is a {age}-year-old {occupation} in this city in {present_year}. What little is known: {bio}
       Their usual haunts: {work}, {haunt}. They are about to appear in a scene at {place}.
-      Write a 4-5 sentence character dossier, third person, consistent with the facts above: who they are, what they want, one secret or pressure in their life, and a concrete PHYSICAL DESCRIPTION and WARDROBE a costume designer could use. Then, on its own last line, 'QUIRK: <one distinctive habit, a few words>'.
+      Write a 4-5 sentence character dossier, third person, consistent with the facts above: who they are, what they want, one small hope or worry in their life, and a concrete PHYSICAL DESCRIPTION and WARDROBE a costume designer could use. Then, on its own last line, 'QUIRK: <one distinctive habit, a few words>'.
     report: |-
       {header}
 
@@ -2012,7 +2012,7 @@ prompts:
 
       {now_line}{name}'s current goal: "{step}"
 
-      Break this into {n} tasks, one for each stretch of {span}, that {name} attempts in order. A task can be routine (it simply happens) or something that could go wrong. For each task give: the action (one short line), the ability it tests (STR, DEX, CON, INT, WIS or CHA), how hard it is (trivial, easy, medium, hard or very hard), and who it involves, if it involves someone named above. Play to {name}'s strengths and goals, but let them take real risks -- not everything should be easy.{where}
+      Break this into {n} tasks, one for each stretch of {span}, that {name} attempts in order. A task can be routine (it simply happens) or something that could go wrong. For each task give: the action (one short line), the ability it tests (STR, DEX, CON, INT, WIS or CHA), how hard it is (trivial, easy, medium, hard or very hard), and who it involves, if it involves someone named above. Play to {name}'s strengths and goals. These are everyday challenges -- getting something right at work, making a good impression, finding what they need, fixing what's broken -- not crimes or dangerous stunts; not everything should be easy.{where}
       Reply as JSON: {"tasks": [{"action": "...", "stat": "DEX", "difficulty": "medium", "target": ""}, ...]{where_json}}
     decompose_where: 'Also pick where {name} should be for this whole goal: one of these places, or "STAY" to remain
       at {location}: {places}.'
@@ -2023,7 +2023,7 @@ prompts:
       At {place}, {name} attempts: {action} ({stat_name}, {difficulty}).
       The dice decide: {outcome}. ({check})
 
-      You are the game master. Narrate what happens in one or two vivid sentences, true to the outcome -- a success succeeds, a failure fails, and a critical result is dramatic. Then say in a few words how {name} feels about it. Only if it clearly follows from what happened, add one effect: money gained or lost (a number of {currency}, negative for a loss -- paying for something is a loss; leave 0 unless money really changed hands) and/or one condition from: {conditions}.
+      You are the game master. Narrate what happens in one or two vivid sentences, true to the outcome -- a success succeeds, a failure fails, and a critical result is memorable -- a small triumph, or a funny, human mishap, never a catastrophe. Then say in a few words how {name} feels about it. Only if it clearly follows from what happened, add one effect: money gained or lost (a number of {currency}, negative for a loss -- paying for something is a loss; leave 0 unless money really changed hands) and/or one condition from: {conditions}.
       Reply as JSON: {"narration": "...", "feeling": "...", "money": 0, "condition": ""}
     narrate_fallback: '{name} attempted to {action} -- {outcome}.'
     outcome_memory: '{name} tried to {action} ({check}): {narration} {name} feels {feeling}.'
@@ -2041,7 +2041,7 @@ prompts:
       New observation: {observation}
 
       What does {name} do? Reply with exactly one line, one of:
-      TALK <intent>: <what {name} wants from {other}> -- where <intent> is one of persuade, deceive, intimidate, charm, ask for help, threaten
+      TALK <intent>: <what {name} wants from {other}> -- where <intent> is one of persuade, charm, ask for help, deceive
       REACT: <a different action, without talking>
       CONTINUE
     social_won: '{actor} tried to {intent} {target} ({check}) and it WORKED: {target} is won over and gives {actor}

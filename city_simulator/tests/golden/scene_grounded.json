@@ -18,7 +18,17 @@
    0
   ],
   [
+   "move",
+   "Oswald",
+   0
+  ],
+  [
    "action",
+   "Oswald",
+   0
+  ],
+  [
+   "memory",
    "Oswald",
    0
   ],
@@ -48,17 +58,7 @@
    0
   ],
   [
-   "move",
-   "Lou",
-   0
-  ],
-  [
    "action",
-   "Lou",
-   0
-  ],
-  [
-   "memory",
    "Lou",
    0
   ],
@@ -128,17 +128,7 @@
    0
   ],
   [
-   "move",
-   "Marsh",
-   0
-  ],
-  [
    "action",
-   "Marsh",
-   0
-  ],
-  [
-   "memory",
    "Marsh",
    0
   ],
@@ -189,26 +179,41 @@
   ],
   [
    "observe",
-   "Oswald",
-   0
-  ],
-  [
-   "continue",
-   "Oswald",
-   0
-  ],
-  [
-   "memory",
-   "Oswald",
-   0
-  ],
-  [
-   "observe",
    "Lou",
    0
   ],
   [
    "react",
+   "Lou",
+   0
+  ],
+  [
+   "dialogue",
+   "Lou",
+   0
+  ],
+  [
+   "dialogue",
+   "Marsh",
+   0
+  ],
+  [
+   "dialogue",
+   "Lou",
+   0
+  ],
+  [
+   "dialogue",
+   "Marsh",
+   0
+  ],
+  [
+   "memory",
+   "Marsh",
+   0
+  ],
+  [
+   "memory",
    "Lou",
    0
   ],
@@ -225,40 +230,40 @@
   [
    "decompose",
    "Oswald",
+   1
+  ],
+  [
+   "action",
+   "Oswald",
+   1
+  ],
+  [
+   "memory",
+   "Oswald",
+   1
+  ],
+  [
+   "memory",
+   "Oswald",
+   1
+  ],
+  [
+   "decompose",
+   "Lou",
    1
   ],
   [
    "move",
-   "Oswald",
-   1
-  ],
-  [
-   "action",
-   "Oswald",
-   1
-  ],
-  [
-   "memory",
-   "Oswald",
-   1
-  ],
-  [
-   "memory",
-   "Oswald",
-   1
-  ],
-  [
-   "memory",
-   "Oswald",
-   1
-  ],
-  [
-   "decompose",
    "Lou",
    1
   ],
   [
    "action",
+   "Lou",
+   1
+  ],
+  [
+   "memory",
    "Lou",
    1
   ],
@@ -276,164 +281,114 @@
    "decompose",
    "Veronica",
    1
+  ],
+  [
+   "action",
+   "Veronica",
+   1
+  ],
+  [
+   "memory",
+   "Veronica",
+   1
+  ],
+  [
+   "memory",
+   "Veronica",
+   1
+  ],
+  [
+   "decompose",
+   "Marsh",
+   1
+  ],
+  [
+   "action",
+   "Marsh",
+   1
+  ],
+  [
+   "memory",
+   "Marsh",
+   1
+  ],
+  [
+   "memory",
+   "Marsh",
+   1
+  ],
+  [
+   "decompose",
+   "Sal",
+   1
+  ],
+  [
+   "action",
+   "Sal",
+   1
+  ],
+  [
+   "memory",
+   "Sal",
+   1
+  ],
+  [
+   "memory",
+   "Sal",
+   1
+  ],
+  [
+   "observe",
+   "Oswald",
+   1
+  ],
+  [
+   "continue",
+   "Oswald",
+   1
+  ],
+  [
+   "memory",
+   "Oswald",
+   1
+  ],
+  [
+   "observe",
+   "Marsh",
+   1
+  ],
+  [
+   "react",
+   "Marsh",
+   1
+  ],
+  [
+   "memory",
+   "Marsh",
+   1
+  ],
+  [
+   "memory",
+   "Marsh",
+   1
+  ],
+  [
+   "decompose",
+   "Oswald",
+   2
   ],
   [
    "move",
-   "Veronica",
-   1
-  ],
-  [
-   "action",
-   "Veronica",
-   1
-  ],
-  [
-   "memory",
-   "Veronica",
-   1
-  ],
-  [
-   "memory",
-   "Veronica",
-   1
-  ],
-  [
-   "memory",
-   "Veronica",
-   1
-  ],
-  [
-   "decompose",
-   "Marsh",
-   1
-  ],
-  [
-   "action",
-   "Marsh",
-   1
-  ],
-  [
-   "memory",
-   "Marsh",
-   1
-  ],
-  [
-   "memory",
-   "Marsh",
-   1
-  ],
-  [
-   "decompose",
-   "Sal",
-   1
-  ],
-  [
-   "action",
-   "Sal",
-   1
-  ],
-  [
-   "memory",
-   "Sal",
-   1
-  ],
-  [
-   "memory",
-   "Sal",
-   1
-  ],
-  [
-   "observe",
-   "Oswald",
-   1
-  ],
-  [
-   "continue",
-   "Oswald",
-   1
-  ],
-  [
-   "observe",
-   "Oswald",
-   1
-  ],
-  [
-   "continue",
-   "Oswald",
-   1
-  ],
-  [
-   "observe",
-   "Veronica",
-   1
-  ],
-  [
-   "react",
-   "Veronica",
-   1
-  ],
-  [
-   "dialogue",
-   "Veronica",
-   1
-  ],
-  [
-   "dialogue",
-   "Marsh",
-   1
-  ],
-  [
-   "dialogue",
-   "Veronica",
-   1
-  ],
-  [
-   "dialogue",
-   "Marsh",
-   1
-  ],
-  [
-   "dialogue",
-   "Veronica",
-   1
-  ],
-  [
-   "memory",
-   "Marsh",
-   1
-  ],
-  [
-   "memory",
-   "Oswald",
-   1
-  ],
-  [
-   "memory",
-   "Oswald",
-   1
-  ],
-  [
-   "memory",
-   "Veronica",
-   1
-  ],
-  [
-   "memory",
-   "Veronica",
-   1
-  ],
-  [
-   "memory",
-   "Veronica",
-   1
-  ],
-  [
-   "decompose",
    "Oswald",
    2
   ],
   [
    "action",
+   "Oswald",
+   2
+  ],
+  [
+   "memory",
    "Oswald",
    2
   ],
@@ -511,169 +466,229 @@
    "decompose",
    "Sal",
    2
-  ],
-  [
-   "action",
-   "Sal",
-   2
-  ],
-  [
-   "memory",
-   "Sal",
-   2
-  ],
-  [
-   "memory",
-   "Sal",
-   2
-  ],
-  [
-   "observe",
-   "Oswald",
-   2
-  ],
-  [
-   "react",
-   "Oswald",
-   2
-  ],
-  [
-   "dialogue",
-   "Oswald",
-   2
-  ],
-  [
-   "dialogue",
-   "Veronica",
-   2
-  ],
-  [
-   "dialogue",
-   "Oswald",
-   2
-  ],
-  [
-   "dialogue",
-   "Veronica",
-   2
-  ],
-  [
-   "memory",
-   "Oswald",
-   2
-  ],
-  [
-   "memory",
-   "Oswald",
-   2
-  ],
-  [
-   "memory",
-   "Oswald",
-   2
-  ],
-  [
-   "memory",
-   "Veronica",
-   2
-  ],
-  [
-   "decompose",
-   "Oswald",
-   3
-  ],
-  [
-   "action",
-   "Oswald",
-   3
-  ],
-  [
-   "memory",
-   "Oswald",
-   3
-  ],
-  [
-   "memory",
-   "Oswald",
-   3
-  ],
-  [
-   "decompose",
-   "Lou",
-   3
-  ],
-  [
-   "action",
-   "Lou",
-   3
-  ],
-  [
-   "memory",
-   "Lou",
-   3
-  ],
-  [
-   "memory",
-   "Lou",
-   3
-  ],
-  [
-   "decompose",
-   "Veronica",
-   3
-  ],
-  [
-   "action",
-   "Veronica",
-   3
-  ],
-  [
-   "memory",
-   "Veronica",
-   3
-  ],
-  [
-   "memory",
-   "Veronica",
-   3
-  ],
-  [
-   "decompose",
-   "Marsh",
-   3
-  ],
-  [
-   "action",
-   "Marsh",
-   3
-  ],
-  [
-   "memory",
-   "Marsh",
-   3
-  ],
-  [
-   "memory",
-   "Marsh",
-   3
-  ],
-  [
-   "decompose",
-   "Sal",
-   3
   ],
   [
    "move",
    "Sal",
-   3
+   2
   ],
   [
    "action",
    "Sal",
+   2
+  ],
+  [
+   "memory",
+   "Sal",
+   2
+  ],
+  [
+   "memory",
+   "Sal",
+   2
+  ],
+  [
+   "memory",
+   "Sal",
+   2
+  ],
+  [
+   "observe",
+   "Oswald",
+   2
+  ],
+  [
+   "continue",
+   "Oswald",
+   2
+  ],
+  [
+   "observe",
+   "Oswald",
+   2
+  ],
+  [
+   "react",
+   "Oswald",
+   2
+  ],
+  [
+   "observe",
+   "Veronica",
+   2
+  ],
+  [
+   "react",
+   "Veronica",
+   2
+  ],
+  [
+   "dialogue",
+   "Veronica",
+   2
+  ],
+  [
+   "dialogue",
+   "Sal",
+   2
+  ],
+  [
+   "dialogue",
+   "Veronica",
+   2
+  ],
+  [
+   "dialogue",
+   "Sal",
+   2
+  ],
+  [
+   "dialogue",
+   "Veronica",
+   2
+  ],
+  [
+   "memory",
+   "Oswald",
+   2
+  ],
+  [
+   "memory",
+   "Oswald",
+   2
+  ],
+  [
+   "memory",
+   "Oswald",
+   2
+  ],
+  [
+   "memory",
+   "Sal",
+   2
+  ],
+  [
+   "memory",
+   "Veronica",
+   2
+  ],
+  [
+   "memory",
+   "Veronica",
+   2
+  ],
+  [
+   "memory",
+   "Veronica",
+   2
+  ],
+  [
+   "decompose",
+   "Oswald",
+   3
+  ],
+  [
+   "action",
+   "Oswald",
    3
   ],
   [
    "memory",
+   "Oswald",
+   3
+  ],
+  [
+   "memory",
+   "Oswald",
+   3
+  ],
+  [
+   "decompose",
+   "Lou",
+   3
+  ],
+  [
+   "action",
+   "Lou",
+   3
+  ],
+  [
+   "memory",
+   "Lou",
+   3
+  ],
+  [
+   "memory",
+   "Lou",
+   3
+  ],
+  [
+   "decompose",
+   "Veronica",
+   3
+  ],
+  [
+   "move",
+   "Veronica",
+   3
+  ],
+  [
+   "action",
+   "Veronica",
+   3
+  ],
+  [
+   "memory",
+   "Veronica",
+   3
+  ],
+  [
+   "memory",
+   "Veronica",
+   3
+  ],
+  [
+   "memory",
+   "Veronica",
+   3
+  ],
+  [
+   "decompose",
+   "Marsh",
+   3
+  ],
+  [
+   "move",
+   "Marsh",
+   3
+  ],
+  [
+   "action",
+   "Marsh",
+   3
+  ],
+  [
+   "memory",
+   "Marsh",
+   3
+  ],
+  [
+   "memory",
+   "Marsh",
+   3
+  ],
+  [
+   "memory",
+   "Marsh",
+   3
+  ],
+  [
+   "decompose",
+   "Sal",
+   3
+  ],
+  [
+   "action",
    "Sal",
    3
   ],
@@ -703,47 +718,22 @@
    3
   ],
   [
-   "react",
-   "Oswald",
-   3
-  ],
-  [
-   "observe",
-   "Oswald",
-   3
-  ],
-  [
    "continue",
    "Oswald",
    3
   ],
   [
    "observe",
-   "Veronica",
+   "Marsh",
    3
   ],
   [
    "react",
-   "Veronica",
-   3
-  ],
-  [
-   "dialogue",
-   "Veronica",
-   3
-  ],
-  [
-   "dialogue",
    "Marsh",
    3
   ],
   [
-   "dialogue",
-   "Veronica",
-   3
-  ],
-  [
-   "dialogue",
+   "memory",
    "Marsh",
    3
   ],
@@ -763,23 +753,48 @@
    3
   ],
   [
-   "memory",
-   "Oswald",
+   "observe",
+   "Lou",
    3
   ],
   [
-   "memory",
-   "Oswald",
+   "react",
+   "Lou",
    3
   ],
   [
-   "memory",
+   "dialogue",
+   "Lou",
+   3
+  ],
+  [
+   "dialogue",
+   "Veronica",
+   3
+  ],
+  [
+   "dialogue",
+   "Lou",
+   3
+  ],
+  [
+   "dialogue",
    "Veronica",
    3
   ],
   [
    "memory",
-   "Veronica",
+   "Lou",
+   3
+  ],
+  [
+   "memory",
+   "Lou",
+   3
+  ],
+  [
+   "memory",
+   "Lou",
    3
   ],
   [
@@ -890,81 +905,31 @@
   [
    "observe",
    "Oswald",
+   4
+  ],
+  [
+   "react",
+   "Oswald",
+   4
+  ],
+  [
+   "observe",
+   "Oswald",
+   4
+  ],
+  [
+   "react",
+   "Oswald",
+   4
+  ],
+  [
+   "observe",
+   "Marsh",
    4
   ],
   [
    "continue",
-   "Oswald",
-   4
-  ],
-  [
-   "observe",
-   "Oswald",
-   4
-  ],
-  [
-   "react",
-   "Oswald",
-   4
-  ],
-  [
-   "observe",
-   "Oswald",
-   4
-  ],
-  [
-   "react",
-   "Oswald",
-   4
-  ],
-  [
-   "dialogue",
-   "Oswald",
-   4
-  ],
-  [
-   "dialogue",
-   "Sal",
-   4
-  ],
-  [
-   "dialogue",
-   "Oswald",
-   4
-  ],
-  [
-   "observe",
-   "Veronica",
-   4
-  ],
-  [
-   "react",
-   "Veronica",
-   4
-  ],
-  [
-   "dialogue",
-   "Veronica",
-   4
-  ],
-  [
-   "dialogue",
    "Marsh",
-   4
-  ],
-  [
-   "dialogue",
-   "Veronica",
-   4
-  ],
-  [
-   "dialogue",
-   "Marsh",
-   4
-  ],
-  [
-   "dialogue",
-   "Veronica",
    4
   ],
   [
@@ -993,33 +958,23 @@
    4
   ],
   [
-   "memory",
-   "Oswald",
+   "observe",
+   "Lou",
+   4
+  ],
+  [
+   "react",
+   "Lou",
    4
   ],
   [
    "memory",
-   "Oswald",
+   "Lou",
    4
   ],
   [
    "memory",
-   "Sal",
-   4
-  ],
-  [
-   "memory",
-   "Veronica",
-   4
-  ],
-  [
-   "memory",
-   "Veronica",
-   4
-  ],
-  [
-   "memory",
-   "Veronica",
+   "Lou",
    4
   ],
   [
@@ -1028,17 +983,7 @@
    5
   ],
   [
-   "move",
-   "Oswald",
-   5
-  ],
-  [
    "action",
-   "Oswald",
-   5
-  ],
-  [
-   "memory",
    "Oswald",
    5
   ],
@@ -1088,47 +1033,52 @@
    5
   ],
   [
-   "action",
-   "Veronica",
-   5
-  ],
-  [
-   "memory",
-   "Veronica",
-   5
-  ],
-  [
-   "memory",
-   "Veronica",
-   5
-  ],
-  [
-   "decompose",
-   "Marsh",
-   5
-  ],
-  [
-   "action",
-   "Marsh",
-   5
-  ],
-  [
-   "memory",
-   "Marsh",
-   5
-  ],
-  [
-   "memory",
-   "Marsh",
-   5
-  ],
-  [
-   "decompose",
-   "Sal",
-   5
-  ],
-  [
    "move",
+   "Veronica",
+   5
+  ],
+  [
+   "action",
+   "Veronica",
+   5
+  ],
+  [
+   "memory",
+   "Veronica",
+   5
+  ],
+  [
+   "memory",
+   "Veronica",
+   5
+  ],
+  [
+   "memory",
+   "Veronica",
+   5
+  ],
+  [
+   "decompose",
+   "Marsh",
+   5
+  ],
+  [
+   "action",
+   "Marsh",
+   5
+  ],
+  [
+   "memory",
+   "Marsh",
+   5
+  ],
+  [
+   "memory",
+   "Marsh",
+   5
+  ],
+  [
+   "decompose",
    "Sal",
    5
   ],
@@ -1148,8 +1098,13 @@
    5
   ],
   [
-   "memory",
-   "Sal",
+   "observe",
+   "Oswald",
+   5
+  ],
+  [
+   "continue",
+   "Oswald",
    5
   ],
   [
@@ -1169,42 +1124,7 @@
   ],
   [
    "dialogue",
-   "Sal",
-   5
-  ],
-  [
-   "dialogue",
-   "Oswald",
-   5
-  ],
-  [
-   "memory",
-   "Oswald",
-   5
-  ],
-  [
-   "memory",
-   "Oswald",
-   5
-  ],
-  [
-   "memory",
-   "Oswald",
-   5
-  ],
-  [
-   "memory",
-   "Sal",
-   5
-  ],
-  [
-   "observe",
-   "Lou",
-   5
-  ],
-  [
-   "react",
-   "Lou",
+   "Veronica",
    5
   ],
   [
@@ -1219,42 +1139,57 @@
   ],
   [
    "observe",
-   "Veronica",
+   "Lou",
    5
   ],
   [
    "react",
-   "Veronica",
+   "Lou",
    5
   ],
   [
    "dialogue",
-   "Veronica",
+   "Lou",
    5
   ],
   [
    "dialogue",
-   "Marsh",
+   "Sal",
    5
   ],
   [
    "dialogue",
-   "Veronica",
+   "Lou",
    5
   ],
   [
    "dialogue",
-   "Marsh",
+   "Sal",
    5
   ],
   [
    "dialogue",
-   "Veronica",
+   "Lou",
    5
   ],
   [
    "memory",
-   "Marsh",
+   "Oswald",
+   5
+  ],
+  [
+   "memory",
+   "Oswald",
+   5
+  ],
+  [
+   "memory",
+   "Oswald",
+   5
+  ],
+  [
+   "memory",
+   "Oswald",
    5
   ],
   [
@@ -1274,7 +1209,7 @@
   ],
   [
    "memory",
-   "Veronica",
+   "Lou",
    5
   ],
   [
@@ -1284,10 +1219,10 @@
   ],
   [
    "memory",
-   "Veronica",
+   "Sal",
    5
   ]
  ],
- "prompt_count": 109,
- "prompts_sha256": "f5f51d960663218013e38365c87f2a663e7b14cee7adcaff770fbe228e8c34c5"
+ "prompt_count": 106,
+ "prompts_sha256": "ea9524fb686d6743afb27bbf790847b7c7a604353b1e547ee19d348a541456c7"
 }

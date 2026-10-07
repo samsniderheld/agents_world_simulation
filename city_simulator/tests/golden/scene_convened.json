@@ -163,7 +163,7 @@
    0
   ],
   [
-   "continue",
+   "react",
    "Oswald",
    0
   ],
@@ -173,7 +173,7 @@
    0
   ],
   [
-   "continue",
+   "react",
    "Oswald",
    0
   ],
@@ -223,11 +223,6 @@
    0
   ],
   [
-   "dialogue",
-   "Veronica",
-   0
-  ],
-  [
    "observe",
    "Marsh",
    0
@@ -238,23 +233,13 @@
    0
   ],
   [
-   "dialogue",
-   "Marsh",
+   "memory",
+   "Oswald",
    0
   ],
   [
-   "dialogue",
-   "Sal",
-   0
-  ],
-  [
-   "dialogue",
-   "Marsh",
-   0
-  ],
-  [
-   "dialogue",
-   "Sal",
+   "memory",
+   "Oswald",
    0
   ],
   [
@@ -295,16 +280,6 @@
   [
    "memory",
    "Veronica",
-   0
-  ],
-  [
-   "memory",
-   "Sal",
-   0
-  ],
-  [
-   "memory",
-   "Marsh",
    0
   ],
   [
@@ -415,6 +390,26 @@
   [
    "memory",
    "Sal",
+   1
+  ],
+  [
+   "observe",
+   "Oswald",
+   1
+  ],
+  [
+   "react",
+   "Oswald",
+   1
+  ],
+  [
+   "observe",
+   "Oswald",
+   1
+  ],
+  [
+   "react",
+   "Oswald",
    1
   ],
   [
@@ -438,8 +433,28 @@
    1
   ],
   [
+   "observe",
+   "Lou",
+   1
+  ],
+  [
+   "react",
+   "Lou",
+   1
+  ],
+  [
    "dialogue",
-   "Oswald",
+   "Lou",
+   1
+  ],
+  [
+   "dialogue",
+   "Veronica",
+   1
+  ],
+  [
+   "dialogue",
+   "Lou",
    1
   ],
   [
@@ -449,47 +464,12 @@
   ],
   [
    "observe",
-   "Lou",
+   "Marsh",
    1
   ],
   [
-   "react",
-   "Lou",
-   1
-  ],
-  [
-   "observe",
-   "Lou",
-   1
-  ],
-  [
-   "react",
-   "Lou",
-   1
-  ],
-  [
-   "dialogue",
-   "Lou",
-   1
-  ],
-  [
-   "dialogue",
-   "Sal",
-   1
-  ],
-  [
-   "dialogue",
-   "Lou",
-   1
-  ],
-  [
-   "dialogue",
-   "Sal",
-   1
-  ],
-  [
-   "dialogue",
-   "Lou",
+   "continue",
+   "Marsh",
    1
   ],
   [
@@ -514,12 +494,17 @@
   ],
   [
    "memory",
-   "Lou",
+   "Oswald",
    1
   ],
   [
    "memory",
-   "Lou",
+   "Oswald",
+   1
+  ],
+  [
+   "memory",
+   "Oswald",
    1
   ],
   [
@@ -544,7 +529,7 @@
   ],
   [
    "memory",
-   "Sal",
+   "Marsh",
    1
   ],
   [
@@ -663,6 +648,16 @@
    2
   ],
   [
+   "continue",
+   "Oswald",
+   2
+  ],
+  [
+   "observe",
+   "Oswald",
+   2
+  ],
+  [
    "react",
    "Oswald",
    2
@@ -674,7 +669,32 @@
   ],
   [
    "dialogue",
-   "Veronica",
+   "Marsh",
+   2
+  ],
+  [
+   "dialogue",
+   "Oswald",
+   2
+  ],
+  [
+   "dialogue",
+   "Marsh",
+   2
+  ],
+  [
+   "dialogue",
+   "Oswald",
+   2
+  ],
+  [
+   "observe",
+   "Lou",
+   2
+  ],
+  [
+   "continue",
+   "Lou",
    2
   ],
   [
@@ -694,7 +714,7 @@
   ],
   [
    "dialogue",
-   "Marsh",
+   "Sal",
    2
   ],
   [
@@ -703,6 +723,16 @@
    2
   ],
   [
+   "dialogue",
+   "Sal",
+   2
+  ],
+  [
+   "memory",
+   "Oswald",
+   2
+  ],
+  [
    "memory",
    "Oswald",
    2
@@ -744,7 +774,12 @@
   ],
   [
    "memory",
-   "Veronica",
+   "Lou",
+   2
+  ],
+  [
+   "memory",
+   "Sal",
    2
   ],
   [
@@ -868,7 +903,17 @@
    3
   ],
   [
-   "react",
+   "continue",
+   "Oswald",
+   3
+  ],
+  [
+   "observe",
+   "Oswald",
+   3
+  ],
+  [
+   "continue",
    "Oswald",
    3
   ],
@@ -879,31 +924,6 @@
   ],
   [
    "react",
-   "Oswald",
-   3
-  ],
-  [
-   "dialogue",
-   "Oswald",
-   3
-  ],
-  [
-   "dialogue",
-   "Marsh",
-   3
-  ],
-  [
-   "dialogue",
-   "Oswald",
-   3
-  ],
-  [
-   "dialogue",
-   "Marsh",
-   3
-  ],
-  [
-   "dialogue",
    "Oswald",
    3
   ],
@@ -928,8 +948,28 @@
    3
   ],
   [
-   "memory",
-   "Oswald",
+   "observe",
+   "Marsh",
+   3
+  ],
+  [
+   "react",
+   "Marsh",
+   3
+  ],
+  [
+   "dialogue",
+   "Marsh",
+   3
+  ],
+  [
+   "dialogue",
+   "Sal",
+   3
+  ],
+  [
+   "dialogue",
+   "Marsh",
    3
   ],
   [
@@ -975,6 +1015,21 @@
   [
    "memory",
    "Veronica",
+   3
+  ],
+  [
+   "memory",
+   "Sal",
+   3
+  ],
+  [
+   "memory",
+   "Marsh",
+   3
+  ],
+  [
+   "memory",
+   "Marsh",
    3
   ],
   [
@@ -983,6 +1038,6 @@
    3
   ]
  ],
- "prompt_count": 87,
- "prompts_sha256": "fe7ee006462b7493408a4351fbc81594c1e52d73afb490da53b4f908f104a1a9"
+ "prompt_count": 91,
+ "prompts_sha256": "bbfdba7964e12b77c5dcd931a799affd09865504b296f50d931e4f845112fd2f"
 }
