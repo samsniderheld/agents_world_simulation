@@ -86,8 +86,13 @@ def delete_city(city_id: str):
 
 
 def get_status() -> dict:
+    """The job's phase and error, plus -- while it runs -- its progress
+    (history/log.py's stage, done/total and elapsed time)."""
     with _lock:
-        return dict(_status)
+        status = dict(_status)
+    if status["phase"] == "running":
+        status["progress"] = history_log.progress()
+    return status
 
 
 def get_data():

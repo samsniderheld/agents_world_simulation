@@ -69,7 +69,9 @@ def generate(seed=None, figures_per_era=None, events_per_figure=None):
     all_places = []
     all_events = []
 
+    history_log.stage("history", total=len(schedule))
     for year, figure, _birth_era in schedule:
+        history_log.advance()
         if not figure.alive:
             continue
         # The era this event actually happens in -- not the figure's birth
@@ -173,7 +175,7 @@ def run_history(seed=None, figures_per_era=None, events_per_figure=None,
 
 
 def _run_history(seed, figures_per_era, events_per_figure, characters_count, use_llm) -> dict:
-    history_log.reset()
+    history_log.reset(stages=["history"] + (["residents"] if characters_count else []) + ["summary"])
     config.LLM_FILL_NAMES = bool(use_llm)
     if not use_llm:
         config.LLM_FLOURISH_RATE = 0.0
@@ -184,13 +186,19 @@ def _run_history(seed, figures_per_era, events_per_figure, characters_count, use
     )
     history_log.log(f"{len(figures)} figures, {len(places)} places, {len(events_list)} events.")
 
-    history_log.log(f"Generating {characters_count} present-day residents...")
-    characters_list = characters.generate_characters(
-        places, figures, count=characters_count, seed=seed,
-    )
-    for c in characters_list:
-        history_log.log(f"  {c['name']}, {c['age']} -- {c['occupation']} (connected to {c['place_name']})")
+    characters_list = []
+    if characters_count:     # the web app makes residents separately (count 0)
+        history_log.log(f"Generating {characters_count} present-day residents...")
+        history_log.stage("residents", total=characters_count)
 
+        def resident_done(c):    # each one as it's written, not all at the end
+            history_log.log(f"  {c['name']}, {c['age']} -- {c['occupation']} (connected to {c['place_name']})")
+            history_log.advance()
+        characters_list = characters.generate_characters(
+            places, figures, count=characters_count, seed=seed, on_each=resident_done,
+        )
+
+    history_log.stage("summary")
     history_log.log("Writing a summary of the city's history...")
     summary_text = summary.generate_summary(figures, places, events_list, all_eras())
     history_log.log("Summary complete.")

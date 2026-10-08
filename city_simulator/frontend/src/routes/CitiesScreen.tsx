@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { history, themesApi } from '../api/client';
 import type { CitySummary } from '../api/types';
+import { GenerationPanel } from './GenerationPanel';
 import { NewCityModal } from './NewCityModal';
 import { navigate } from './router';
 import { useJobStore } from '../state/jobStore';
@@ -39,6 +40,12 @@ export function CitiesScreen() {
   }
 
   const generating = historyStatus?.phase === 'running';
+  // A failed run's panel stays until dismissed (or the next run starts).
+  const [errorDismissed, setErrorDismissed] = useState(false);
+  useEffect(() => {
+    if (generating) setErrorDismissed(false);
+  }, [generating]);
+  const showPanel = historyStatus && (generating || (historyStatus.phase === 'error' && !errorDismissed));
 
   if (cities === null) return <div className="canvas-empty">Loading…</div>;
 
@@ -63,8 +70,19 @@ export function CitiesScreen() {
         />
       )}
 
+      {showPanel && (
+        <div className="gen-panel-wrap">
+          <GenerationPanel status={historyStatus} />
+          {historyStatus.phase === 'error' && (
+            <button className="node-run-btn gen-dismiss" onClick={() => setErrorDismissed(true)}>
+              dismiss
+            </button>
+          )}
+        </div>
+      )}
+
       {cities.length === 0 ? (
-        <div className="canvas-empty">No cities yet -- hit "+ New City" to generate one.</div>
+        !generating && <div className="canvas-empty">No cities yet -- hit "+ New City" to generate one.</div>
       ) : (
         <div className="cities-grid">
           {cities.map((c) => (

@@ -221,9 +221,10 @@ def _generate_life_history(character: dict, grounding: dict, rng: random.Random)
     return _fallback_life_history(character, grounding, rng)
 
 
-def generate_characters(places: list, figures: list, count: int = 10, seed=None) -> list:
+def generate_characters(places: list, figures: list, count: int = 10, seed=None, on_each=None) -> list:
     """10 (by default) present-day residents, each grounded in a different
-    place's history where possible."""
+    place's history where possible. `on_each(character)` is called as each
+    one is finished (progress reporting)."""
     rng = random.Random(seed)
     used_place_ids = set()
     out = []
@@ -243,6 +244,8 @@ def generate_characters(places: list, figures: list, count: int = 10, seed=None)
             char = _fallback_character(grounding, rng)
         char["history"] = _generate_life_history(char, grounding, rng)
         out.append(char)
+        if on_each:
+            on_each(char)
     return out
 
 

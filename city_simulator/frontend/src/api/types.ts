@@ -287,6 +287,16 @@ export interface JobStatus {
   error: string | null;
   // /api/agents/state only, and only for a CITY run: "city".
   mode?: string;
+  // /api/history/status only, while a city is generating (history/log.py).
+  progress?: GenerationProgress;
+}
+
+export interface GenerationProgress {
+  stage: string | null; // one of `stages`, null before the first starts
+  stages: string[]; // "history" | "residents" | "summary", in order
+  done: number;
+  total: number; // 0 when the stage has nothing to count
+  elapsed_seconds: number | null;
 }
 
 export interface AgentsState {

@@ -82,3 +82,155 @@
 .city-card-theme a {
   color: var(--text-dim);
 }
+
+/* A city being generated (GenerationPanel.tsx): stages, a progress bar,
+   elapsed time and the live log. */
+.gen-panel-wrap {
+  position: relative;
+  max-width: 760px;
+  margin-bottom: 24px;
+}
+.gen-panel {
+  background: var(--node-body);
+  border: 1px solid var(--node-running);
+  border-radius: var(--node-radius);
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.gen-panel.is-error {
+  border-color: var(--node-error);
+}
+.gen-dismiss {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  flex: none;
+  padding: 4px 10px;
+}
+.gen-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.gen-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+.gen-elapsed {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--node-text-dim);
+  font-variant-numeric: tabular-nums;
+}
+.gen-stages {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.gen-stage {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+.gen-mark {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--node-border);
+  border-radius: 50%;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-faint);
+}
+.gen-stage.is-done .gen-mark {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+.gen-stage.is-active .gen-mark {
+  border-color: var(--node-running);
+  color: var(--node-running);
+}
+.gen-stage-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.gen-stage-name {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text);
+}
+.gen-stage.is-pending .gen-stage-name {
+  color: var(--text-dim);
+}
+.gen-count {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--node-running);
+  font-variant-numeric: tabular-nums;
+}
+.gen-stage-detail {
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+.gen-bar {
+  position: relative;
+  height: 4px;
+  margin-top: 4px;
+  background: var(--node-border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.gen-bar-fill {
+  height: 100%;
+  background: var(--node-running);
+  transition: width 0.4s ease;
+}
+.gen-bar.is-indeterminate .gen-bar-fill {
+  position: absolute;
+  width: 30%;
+  animation: gen-slide 1.4s ease-in-out infinite;
+}
+@keyframes gen-slide {
+  from { left: -30%; }
+  to { left: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gen-bar.is-indeterminate .gen-bar-fill {
+    animation: none;
+    left: 0;
+    width: 100%;
+    opacity: 0.4;
+  }
+  .gen-bar-fill {
+    transition: none;
+  }
+}
+.gen-log {
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 8px 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--node-radius);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-dim);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
