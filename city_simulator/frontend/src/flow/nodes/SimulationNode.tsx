@@ -255,7 +255,7 @@ export function SimulationNode({ id, data, selected, height }: NodeProps<Simulat
 
       <div className="node-controls">
         <span className="node-subtitle">ticks</span>
-        <NumberField value={data.ticks} min={1} max={50} title="Number of ticks" onCommit={(v) => data.onTicksChange(id, v)} />
+        <NumberField value={data.ticks} min={1} title="Number of ticks" onCommit={(v) => data.onTicksChange(id, v)} />
         <span className="node-subtitle">×</span>
         <NumberField
           value={data.tickMinutes}
