@@ -87,7 +87,7 @@ if [ ! -f "$DIST" ] || [ -n "$(find "$APP_DIR/frontend/src" "$APP_DIR/frontend/p
 fi
 
 if up http://localhost:8420/; then
-  echo "App: already running (after a git pull, restart it: pkill -f app.py; then rerun this script)"
+  echo "App: already running (after a git pull, restart it: bash $(dirname "$0")/stop.sh app; then rerun this script)"
 else
   (cd "$APP_DIR" && nohup "$WS/app-venv/bin/python" app.py > "$LOGS/app.log" 2>&1 &)
   sleep 3
@@ -101,5 +101,6 @@ laptop, tunnel it -- RunPod's "SSH over exposed TCP" gives the IP and port:
 
   ssh -L 8420:localhost:8420 root@<pod-ip> -p <ssh-port> -i ~/.ssh/<your-key>
 
-then open http://localhost:8420.  Stop everything:  pkill -f 'vllm serve'; pkill -f app.py; pkill ollama
+then open http://localhost:8420.  Stop everything:  bash $(dirname "$0")/stop.sh
+(or just some of it: stop.sh app | vllm | ollama)
 MSG

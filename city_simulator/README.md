@@ -233,15 +233,22 @@ APP_USER=admin
 APP_PASSWORD=<something long>
 ```
 
-restart the app (`pkill -f app.py; bash city_simulator/deploy/runpod/start.sh`),
+restart the app (`bash city_simulator/deploy/runpod/stop.sh app; bash city_simulator/deploy/runpod/start.sh`),
 then in RunPod edit the pod and add **8420** under *Expose HTTP Ports*. The
 site is `https://<pod-id>-8420.proxy.runpod.net`; the browser asks for the
 user and password once. Editing a pod's ports restarts it, so run
 `setup.sh` and `start.sh` again afterwards.
 
-**After a `git pull`** on the pod: `pkill -f app.py; bash city_simulator/deploy/runpod/start.sh`
+**After a `git pull`** on the pod: `bash city_simulator/deploy/runpod/stop.sh app; bash city_simulator/deploy/runpod/start.sh`
 -- it rebuilds the frontend if its source changed and restarts the app; then
 hard-refresh the browser.
+
+**Stopping:** `bash city_simulator/deploy/runpod/stop.sh` stops the app, vLLM
+and Ollama (freeing the GPU); name any of `app`, `vllm`, `ollama` to stop
+just those -- e.g. `stop.sh vllm`, then `VLLM_MODEL=... start.sh` to serve a
+different model. It won't stop the app while a city is generating or a
+simulation is running (add `--force` to anyway), and prints the GPU memory
+afterwards.
 
 **After a pod restart** everything outside `/workspace` is gone: rerun
 `setup.sh` (a few minutes -- it only reinstalls system packages; venvs and
