@@ -57,9 +57,11 @@ local:
   quantize: true
   quantize_dtype: "int8"
 
-# ComfyUI (visuals/providers/comfyui.py): runs an API-format workflow on a
-# ComfyUI server (COMFYUI_URL in .env, default http://127.0.0.1:8188) for
-# every image generate/edit. Export a workflow with ComfyUI's "Export (API)"
+# ComfyUI (visuals/providers/comfyui.py): runs an API-format workflow for
+# every image generate/edit, on COMFYUI_URL (.env): a ComfyUI server
+# (default http://127.0.0.1:8188) or a RunPod Serverless endpoint running
+# worker-comfyui (https://api.runpod.ai/v2/<id>, with RUNPOD_API_KEY).
+# timeout_seconds covers a Serverless cold start too. Export a workflow with ComfyUI's "Export (API)"
 # into visuals/data/comfyui/, then describe it below.
 #
 # Image inputs are found automatically: every LoadImage node in the file is

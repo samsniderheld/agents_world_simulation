@@ -44,6 +44,8 @@ LOCAL_QUANTIZE = _RAW["local"]["quantize"]
 LOCAL_QUANTIZE_DTYPE = _RAW["local"]["quantize_dtype"]
 
 COMFYUI_URL = os.environ.get("COMFYUI_URL", "http://127.0.0.1:8188").rstrip("/")
+# Only for a RunPod Serverless COMFYUI_URL (https://api.runpod.ai/v2/<endpoint id>).
+RUNPOD_API_KEY = os.environ.get("RUNPOD_API_KEY", "")
 COMFYUI = _RAW.get("comfyui") or {}
 COMFYUI_DIR = _PACKAGE_DIR / "data"      # workflow files are relative to this
 

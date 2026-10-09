@@ -1,4 +1,5 @@
-"""Image generation on a ComfyUI server (COMFYUI_URL), by running an
+"""Image generation on ComfyUI -- a ComfyUI server, or a RunPod Serverless
+endpoint running RunPod's worker-comfyui (COMFYUI_URL) -- by running an
 API-format workflow -- one exported with ComfyUI's "Export (API)" -- filled
 in for each call. See config.yaml's `comfyui` section for how a workflow is
 described.
@@ -14,8 +15,10 @@ A call:
    downloads the output node's images (GET /view).
 """
 
+import base64
 import copy
 import hashlib
+import io
 import json
 import mimetypes
 import random
@@ -119,8 +122,22 @@ def prepare_graph(template: dict, spec: dict, prompt: str, image_names: list, se
 
 
 class ComfyUIProvider(Provider):
-    def __init__(self, base_url: str = None, session: requests.Session = None):
-        self.base_url = (base_url or config.COMFYUI_URL).rstrip("/")
+    """Two ways to reach ComfyUI, picked from COMFYUI_URL:
+
+    - a ComfyUI server (http://host:8188): images uploaded with
+      /upload/image, the job queued on /prompt, polled on /history/<id>,
+      results downloaded from /view;
+    - a RunPod Serverless endpoint (https://api.runpod.ai/v2/<id>, as
+      RunPod's worker-comfyui serves it): one POST /run carrying the
+      workflow and the images as base64, polled on /status/<job id>,
+      results returned inside the job's output. Needs RUNPOD_API_KEY.
+    """
+
+    def __init__(self, base_url: str = None, session: requests.Session = None, runpod: bool = None):
+        url = (base_url or config.COMFYUI_URL).rstrip("/")
+        endpoint = _runpod_base(url)
+        self.runpod = bool(endpoint) if runpod is None else runpod
+        self.base_url = endpoint or url
         self._session = session or requests.Session()
 
     # --- the workflow ---------------------------------------------------------------
@@ -141,22 +158,27 @@ class ComfyUIProvider(Provider):
             raise RuntimeError(f"{path.name} is a UI-format workflow; export it with ComfyUI's \"Export (API)\" instead")
         return graph
 
-    # --- the server -------------------------------------------------------------------
-    def _url(self, path: str) -> str:
-        return f"{self.base_url}{path}"
+    @staticmethod
+    def _settings() -> dict:
+        return config.COMFYUI or {}
 
+    # --- HTTP -------------------------------------------------------------------------
     def _call(self, method: str, path: str, **kw):
+        headers = kw.pop("headers", {})
+        if self.runpod:
+            if not config.RUNPOD_API_KEY:
+                raise RuntimeError("COMFYUI_URL is a RunPod Serverless endpoint: set RUNPOD_API_KEY in .env "
+                                   "(RunPod console -> Settings -> API Keys)")
+            headers["Authorization"] = f"Bearer {config.RUNPOD_API_KEY}"
         try:
-            resp = self._session.request(method, self._url(path), timeout=kw.pop("timeout", 60), **kw)
+            return self._session.request(method, f"{self.base_url}{path}", headers=headers,
+                                         timeout=kw.pop("timeout", 60), **kw)
         except requests.RequestException as e:
             raise RuntimeError(f"Could not reach ComfyUI at {self.base_url} ({type(e).__name__}). "
                                "Is it running? Set COMFYUI_URL in .env if it's elsewhere.") from e
-        return resp
 
-    def _upload(self, image_path: str) -> str:
-        data = Path(image_path).read_bytes()
-        suffix = Path(image_path).suffix or ".png"
-        name = hashlib.sha1(data).hexdigest()[:20] + suffix
+    # --- a ComfyUI server ----------------------------------------------------------------
+    def _upload(self, name: str, data: bytes) -> str:
         mime = mimetypes.guess_type(name)[0] or "image/png"
         resp = self._call("POST", "/upload/image", files={"image": (name, data, mime)},
                           data={"type": "input", "subfolder": UPLOAD_SUBFOLDER, "overwrite": "true"})
@@ -165,36 +187,81 @@ class ComfyUIProvider(Provider):
         info = resp.json()
         return f"{info['subfolder']}/{info['name']}" if info.get("subfolder") else info["name"]
 
-    def _queue(self, graph: dict) -> str:
-        resp = self._call("POST", "/prompt", json={"prompt": graph, "client_id": uuid.uuid4().hex})
+    def _run_on_server(self, graph_for, images: list, output: str) -> list:
+        names = [self._upload(name, data) for name, data in images]
+        resp = self._call("POST", "/prompt", json={"prompt": graph_for(names), "client_id": uuid.uuid4().hex})
         if resp.status_code >= 400:
             raise RuntimeError("ComfyUI refused the workflow: " + _describe_error(resp))
-        return resp.json()["prompt_id"]
+        prompt_id = resp.json()["prompt_id"]
+        entry = self._poll(lambda: self._server_status(prompt_id), prompt_id)
+        produced = (entry.get("outputs") or {}).get(output, {}).get("images", [])
+        results = []
+        for im in produced:
+            r = self._call("GET", "/view", timeout=120, params={
+                "filename": im["filename"], "subfolder": im.get("subfolder", ""), "type": im.get("type", "output")})
+            if r.status_code >= 400:
+                raise RuntimeError(f"couldn't download {im['filename']} from ComfyUI ({r.status_code})")
+            results.append((im["filename"], r.content, r.headers.get("Content-Type", "").split(";")[0].strip()))
+        return results
 
-    def _wait(self, prompt_id: str) -> dict:
-        settings = config.COMFYUI or {}
-        deadline = time.monotonic() + float(settings.get("timeout_seconds", 900))
-        while time.monotonic() < deadline:
-            resp = self._call("GET", f"/history/{prompt_id}")
-            if resp.status_code < 400:
-                entry = (resp.json() or {}).get(prompt_id)
-                if entry:
-                    status = entry.get("status") or {}
-                    if status.get("status_str") == "error":
-                        raise RuntimeError("ComfyUI failed while running the workflow: " + _execution_error(status))
-                    if status.get("completed", True):
-                        return entry
-            time.sleep(float(settings.get("poll_interval_seconds", 1)))
-        raise TimeoutError(f"ComfyUI job {prompt_id} didn't finish within {settings.get('timeout_seconds', 900)}s")
+    def _server_status(self, prompt_id: str):
+        resp = self._call("GET", f"/history/{prompt_id}")
+        entry = (resp.json() or {}).get(prompt_id) if resp.status_code < 400 else None
+        if not entry:
+            return None
+        status = entry.get("status") or {}
+        if status.get("status_str") == "error":
+            raise RuntimeError("ComfyUI failed while running the workflow: " + _execution_error(status))
+        return entry if status.get("completed", True) else None
 
-    def _download(self, image: dict) -> dict:
-        resp = self._call("GET", "/view", timeout=120, params={
-            "filename": image["filename"], "subfolder": image.get("subfolder", ""), "type": image.get("type", "output")})
+    # --- a RunPod Serverless endpoint -------------------------------------------------------
+    def _run_on_runpod(self, graph_for, images: list, output: str) -> list:
+        images = _fit_payload(images, RUNPOD_PAYLOAD_LIMIT)
+        names = [name for name, _ in images]
+        payload = {"input": {"workflow": graph_for(names), "images": [
+            {"name": name, "image": f"data:{mimetypes.guess_type(name)[0] or 'image/png'};base64,"
+                                    + base64.b64encode(data).decode()} for name, data in images]}}
+        resp = self._call("POST", "/run", json=payload, timeout=120)
+        if resp.status_code == 401:
+            raise RuntimeError("RunPod rejected RUNPOD_API_KEY (401) -- check the key in .env")
         if resp.status_code >= 400:
-            raise RuntimeError(f"couldn't download {image['filename']} from ComfyUI ({resp.status_code})")
-        content_type = resp.headers.get("Content-Type", "").split(";")[0].strip() or "image/png"
-        local_path = storage.save_bytes(resp.content, config.OUTPUTS_DIR, content_type=content_type,
-                                        fallback_name=image["filename"])
+            raise RuntimeError(f"RunPod refused the job ({resp.status_code}): {resp.text[:300]}")
+        job_id = resp.json()["id"]
+        try:
+            job = self._poll(lambda: self._runpod_status(job_id), job_id)
+        except TimeoutError:
+            self._call("POST", f"/cancel/{job_id}")      # don't leave a worker busy on it
+            raise
+        return _runpod_images(job.get("output"), self._session)
+
+    def _runpod_status(self, job_id: str):
+        resp = self._call("GET", f"/status/{job_id}")
+        if resp.status_code >= 400:
+            raise RuntimeError(f"RunPod status check failed ({resp.status_code}): {resp.text[:300]}")
+        job = resp.json()
+        state = job.get("status")
+        if state == "COMPLETED":
+            return job
+        if state in ("FAILED", "CANCELLED", "TIMED_OUT"):
+            raise RuntimeError(f"RunPod job {job_id} {state.lower()}: {_runpod_error(job)}")
+        return None                                     # IN_QUEUE / IN_PROGRESS (a cold start can take minutes)
+
+    # --- shared --------------------------------------------------------------------------
+    def _poll(self, check, job_id: str):
+        settings = self._settings()
+        timeout = float(settings.get("timeout_seconds", 900))
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            result = check()
+            if result is not None:
+                return result
+            time.sleep(float(settings.get("poll_interval_seconds", 1)))
+        raise TimeoutError(f"ComfyUI job {job_id} didn't finish within {timeout:.0f}s")
+
+    @staticmethod
+    def _save(filename: str, data: bytes, content_type: str) -> dict:
+        content_type = content_type or mimetypes.guess_type(filename)[0] or "image/png"
+        local_path = storage.save_bytes(data, config.OUTPUTS_DIR, content_type=content_type, fallback_name=filename)
         width = height = None
         try:
             from PIL import Image
@@ -210,7 +277,10 @@ class ComfyUIProvider(Provider):
         spec = self._spec()
         template = self._template(spec)
         paths = list(image_paths or [])[:int(spec.get("max_images", 4))]
-        names = [self._upload(p) for p in paths]
+        images = []
+        for path in paths:      # named by content: the same picture is the same file
+            data = Path(path).read_bytes()
+            images.append((hashlib.sha1(data).hexdigest()[:20] + (Path(path).suffix or ".png"), data))
         seed = options.get("seed")
         if seed is None:
             seed = random.randint(0, 2**48)
@@ -218,13 +288,84 @@ class ComfyUIProvider(Provider):
         size = sizes.get(options.get("aspect_ratio")) or sizes.get("1:1")
         if options.get("width") and options.get("height"):
             size = (options["width"], options["height"])
-        graph = prepare_graph(template, spec, prompt, names, seed, size)
-        entry = self._wait(self._queue(graph))
-        produced = (entry.get("outputs") or {}).get(spec["output"], {}).get("images", [])
+
+        def graph_for(names):
+            return prepare_graph(template, spec, prompt, names, seed, size)
+        run = self._run_on_runpod if self.runpod else self._run_on_server
+        produced = run(graph_for, images, spec["output"])
         if not produced:
             raise RuntimeError(f"ComfyUI finished, but output node {spec['output']!r} produced no images")
-        return {"images": [self._download(im) for im in produced], "description": "", "seed": seed,
+        return {"images": [self._save(*im) for im in produced], "description": "", "seed": seed,
                 "dropped_images": max(0, len(image_paths or []) - len(paths))}
+
+
+# RunPod caps a /run request body at 10 MB; leave room for the workflow.
+RUNPOD_PAYLOAD_LIMIT = 9 * 1024 * 1024
+
+
+def _runpod_base(url: str):
+    """https://api.runpod.ai/v2/<endpoint id> from any URL of that endpoint
+    (the /run or /runsync URL the console shows works too), else None."""
+    m = re.match(r"^(https?://api\.runpod\.ai/v2/[^/?#]+)", url or "")
+    return m.group(1) if m else None
+
+
+def _fit_payload(images: list, limit: int) -> list:
+    """The images as sent to RunPod: unchanged if they fit in `limit` as
+    base64, else re-encoded as JPEG (same size, much smaller files)."""
+    if sum(len(d) for _, d in images) * 4 // 3 <= limit:
+        return images
+    from PIL import Image
+    out = []
+    for name, data in images:
+        buf = io.BytesIO()
+        with Image.open(io.BytesIO(data)) as im:
+            im.convert("RGB").save(buf, format="JPEG", quality=90)
+        out.append((name.rsplit(".", 1)[0] + ".jpg", buf.getvalue()))
+    if sum(len(d) for _, d in out) * 4 // 3 > limit:
+        raise RuntimeError(f"{len(images)} images are too big to send to RunPod in one job (10 MB limit) "
+                           "even as JPEG -- lower comfyui.image_workflow.max_images")
+    return out
+
+
+def _runpod_images(output, session) -> list:
+    """[(filename, bytes, content_type)] from worker-comfyui's job output:
+    {"images": [{"filename", "type": "base64" | "s3_url", "data"}]}, or the
+    older {"message": <base64 or URL>}."""
+    if isinstance(output, dict) and output.get("images"):
+        items = output["images"]
+    elif isinstance(output, dict) and isinstance(output.get("message"), str):
+        msg = output["message"]
+        items = [{"filename": "output.png", "type": "s3_url" if msg.startswith("http") else "base64", "data": msg}]
+    else:
+        errors = output
+        if isinstance(output, dict):
+            errors = output.get("errors") or output.get("error") or output
+        raise RuntimeError(f"RunPod job finished without images: {str(errors)[:300]}")
+    results = []
+    for item in items:
+        data = item.get("data") or ""
+        if item.get("type") == "s3_url" or data.startswith("http"):
+            r = session.get(data, timeout=120)
+            r.raise_for_status()
+            content = r.content
+        else:
+            content = base64.b64decode(data.split(",", 1)[1] if data.startswith("data:") else data)
+        results.append((item.get("filename") or "output.png", content, ""))
+    return results
+
+
+def _runpod_error(job: dict) -> str:
+    err = job.get("error")
+    if not err and isinstance(job.get("output"), dict):
+        err = job["output"].get("error") or job["output"].get("errors")
+    if isinstance(err, str):
+        try:                        # workers often put a JSON blob in the error string
+            parsed = json.loads(err)
+            err = parsed.get("error_message") or parsed.get("message") or err
+        except ValueError:
+            pass
+    return str(err or "no error message")[:500]
 
 
 def _describe_error(resp) -> str:

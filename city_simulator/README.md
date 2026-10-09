@@ -81,7 +81,11 @@ themselves, every agent's runs, every entity's media, *and the canvases*
 
    Or run images on your own models through **ComfyUI**
    (`visuals/providers/comfyui.py`): set `VISUALS_PROVIDER=comfyui` and
-   `COMFYUI_URL` (default `http://127.0.0.1:8188`) in `.env`. Every image
+   `COMFYUI_URL` in `.env` -- a ComfyUI server (default
+   `http://127.0.0.1:8188`), or a **RunPod Serverless** endpoint running
+   RunPod's `worker-comfyui` (`https://api.runpod.ai/v2/<endpoint id>`, plus
+   `RUNPOD_API_KEY`; images travel inside the job as base64, re-encoded as
+   JPEG if they'd pass RunPod's 10 MB request limit). Every image
    generate/edit runs an API-format workflow (ComfyUI's *Export (API)*)
    from `visuals/data/comfyui/` -- the default is a Qwen-Image 2.1 edit
    workflow. However many images a node sends (its input images, style
