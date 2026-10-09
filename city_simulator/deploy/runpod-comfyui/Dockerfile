@@ -64,3 +64,8 @@ RUN set -eux; \
       [ -s "$f" ] || { echo "download failed: $f"; exit 1; }; \
     done; \
     ls -la diffusion_models text_encoders vae
+
+# 5. The entry point: worker-comfyui's own handler, moved aside and started by
+#    handler.py (RunPod's GitHub builder needs a handler file in the repo).
+RUN mv /handler.py /worker_comfyui_handler.py
+COPY handler.py /handler.py

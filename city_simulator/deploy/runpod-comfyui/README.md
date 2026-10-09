@@ -20,6 +20,11 @@ in the four model files:
 
 The finished image is about 40 GB.
 
+`handler.py` is the worker's entry point: RunPod's GitHub builder refuses a
+repo without a `runpod.serverless.start(...)` handler, so the Dockerfile moves
+worker-comfyui's own handler aside and `handler.py` loads and starts it --
+the worker behaves exactly like the stock one.
+
 ## Deploy
 
 **Option A -- let RunPod build it (no Docker needed).** In the RunPod console:
