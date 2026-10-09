@@ -26,7 +26,8 @@ class PrepareGraph(unittest.TestCase):
     def test_any_number_of_images(self):
         for n in (1, 2, 4):
             names = [f"city_simulator/img{i}.png" for i in range(n)]
-            g = comfyui.prepare_graph(TEMPLATE, SPEC, "a quiet morning", names, seed=42, size=(1664, 928))
+            g = comfyui.prepare_graph(TEMPLATE, SPEC, "a quiet morning", names, seed=42, size=(1376, 768),
+                                      resolution=1024)
             loaders = sorted(nid for nid, node in g.items() if node["class_type"] == "LoadImage")
             self.assertEqual(loaders, [f"cs_image_{i + 1}" for i in range(n)])
             self.assertEqual([g[l]["inputs"]["image"] for l in loaders], names)
@@ -38,6 +39,10 @@ class PrepareGraph(unittest.TestCase):
             self.assertEqual(g["459:500"]["inputs"]["prompt"], "a quiet morning")
             self.assertEqual(g["459:458"]["inputs"]["seed"], 42)
             self.assertEqual(g["459:500"]["inputs"]["sampling_mode.seed"], 42)
+            # the canvas is the node's size (custom size on), references resized to the budget
+            self.assertEqual(g["459:468"]["inputs"]["switch"], True)
+            self.assertEqual((g["459:456"]["inputs"]["width"], g["459:456"]["inputs"]["height"]), (1376, 768))
+            self.assertEqual(g["459:474"]["inputs"]["resolution"], 1024)
 
     def test_text_to_image(self):
         g = comfyui.prepare_graph(TEMPLATE, SPEC, "a quiet morning", [], seed=1, size=(1328, 1328))
@@ -54,6 +59,14 @@ class PrepareGraph(unittest.TestCase):
         before = json.dumps(TEMPLATE, sort_keys=True)
         comfyui.prepare_graph(TEMPLATE, SPEC, "x", ["a.png", "b.png", "c.png"], seed=1)
         self.assertEqual(before, json.dumps(TEMPLATE, sort_keys=True))
+
+
+class CanvasSize(unittest.TestCase):
+    def test_aspect_and_budget(self):
+        self.assertEqual(comfyui.canvas_size("16:9", 1024), (1376, 768))
+        self.assertEqual(comfyui.canvas_size("9:16", 2048), (1536, 2720))
+        self.assertEqual(comfyui.canvas_size("1:1", 1024), (1024, 1024))
+        self.assertEqual(comfyui.canvas_size("nonsense", 1024), (1024, 1024))
 
 
 class FakeComfy(BaseHTTPRequestHandler):
@@ -137,12 +150,14 @@ class AgainstAStandInServer(unittest.TestCase):
         return paths
 
     def test_three_images(self):
-        out = self.provider.generate_image("Lou at the counter", image_paths=self._images(3), aspect_ratio="16:9")
+        out = self.provider.generate_image("Lou at the counter", image_paths=self._images(3), aspect_ratio="16:9",
+                                           resolution="2K")
         self.assertEqual(len(FakeComfy.uploads), 3)
         graph = FakeComfy.prompts[0]
         self.assertEqual(len(image_inputs(graph, "459:474")), 3)
         self.assertTrue(all(graph[f"cs_image_{i}"]["inputs"]["image"].startswith("city_simulator/") for i in (1, 2, 3)))
-        self.assertEqual((graph["459:456"]["inputs"]["width"], graph["459:456"]["inputs"]["height"]), (1664, 928))
+        self.assertEqual((graph["459:456"]["inputs"]["width"], graph["459:456"]["inputs"]["height"]), (2720, 1536))
+        self.assertEqual(graph["459:474"]["inputs"]["resolution"], 2048)
         img = out["images"][0]
         self.assertTrue(Path(img["local_path"]).exists())
         self.assertEqual((img["width"], img["height"]), (64, 36))

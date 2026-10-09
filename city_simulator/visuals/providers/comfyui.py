@@ -17,6 +17,7 @@ A call:
 import copy
 import hashlib
 import json
+import math
 import mimetypes
 import random
 import re
@@ -46,10 +47,23 @@ def _split(path: str):
     return node, name
 
 
+def canvas_size(aspect_ratio: str, budget: int) -> tuple:
+    """(width, height) for an aspect ratio ("16:9") with about budget x budget
+    pixels, both multiples of 32 -- 16:9 at 1024 is 1376 x 768."""
+    try:
+        w, h = (float(x) for x in (aspect_ratio or "1:1").split(":"))
+    except ValueError:
+        w, h = 1.0, 1.0
+    width = math.sqrt(budget * budget * w / h)
+    height = budget * budget / width
+    return (max(32, int(round(width / 32)) * 32), max(32, int(round(height / 32)) * 32))
+
+
 def prepare_graph(template: dict, spec: dict, prompt: str, image_names: list, seed: int,
-                  size: tuple = None) -> dict:
+                  size: tuple = None, resolution: int = None) -> dict:
     """The workflow filled in for one call (pure: no I/O). `image_names` are
-    images already uploaded to ComfyUI's input folder."""
+    images already uploaded to ComfyUI's input folder; `size` is the canvas
+    (width, height), `resolution` the reference images' pixel budget."""
     graph = copy.deepcopy(template)
     placeholders = {nid for nid, n in graph.items() if n.get("class_type") == "LoadImage"}
     if image_names and not placeholders:
@@ -96,7 +110,12 @@ def prepare_graph(template: dict, spec: dict, prompt: str, image_names: list, se
         put(path, seed)
     if size and spec.get("size") in graph:
         graph[spec["size"]]["inputs"].update(width=int(size[0]), height=int(size[1]))
-    if not image_names:
+    if resolution and spec.get("resolution"):
+        put(spec["resolution"], int(resolution))
+    if image_names:
+        for path, value in (spec.get("with_images") or {}).items():
+            put(path, prompt if value == "{prompt}" else value)
+    else:
         for path, value in (spec.get("without_images") or {}).items():
             put(path, prompt if value == "{prompt}" else value)
 
@@ -207,11 +226,15 @@ class ComfyUIProvider(Provider):
         seed = options.get("seed")
         if seed is None:
             seed = random.randint(0, 2**48)
-        sizes = spec.get("sizes") or {}
-        size = sizes.get(options.get("aspect_ratio")) or sizes.get("1:1")
+        # The Image node's aspect ratio and resolution (1K / 2K) set the canvas
+        # and the reference images' pixel budget; explicit width/height win.
+        budgets = spec.get("resolutions") or {"1K": 1024, "2K": 2048}
+        budget = int(budgets.get(str(options.get("resolution") or "1K").upper(), budgets.get("1K", 1024)))
+        size = canvas_size(options.get("aspect_ratio") or "1:1", budget)
         if options.get("width") and options.get("height"):
-            size = (options["width"], options["height"])
-        entry = self._wait(self._queue(prepare_graph(template, spec, prompt, names, seed, size)))
+            size = (int(options["width"]), int(options["height"]))
+        graph = prepare_graph(template, spec, prompt, names, seed, size, resolution=budget)
+        entry = self._wait(self._queue(graph))
         produced = (entry.get("outputs") or {}).get(spec["output"], {}).get("images", [])
         if not produced:
             raise RuntimeError(f"ComfyUI finished, but output node {spec['output']!r} produced no images")

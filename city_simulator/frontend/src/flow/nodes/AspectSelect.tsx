@@ -21,3 +21,23 @@ export function AspectSelect({ value, onChange, square = false }: { value: Aspec
     </select>
   );
 }
+
+// The image size picker next to AspectSelect on the Image node, sent as
+// `options.resolution`: fal's image models take "1K"/"2K" directly; the
+// ComfyUI provider turns it into the canvas size and the reference images'
+// pixel budget (visuals/providers/comfyui.py). The local provider ignores it.
+export type Resolution = '1K' | '2K';
+
+export function ResolutionSelect({ value, onChange }: { value: Resolution; onChange: (v: Resolution) => void }) {
+  return (
+    <select
+      className="node-select node-aspect-select nodrag"
+      value={value}
+      title="Resolution: 1K is about 1 megapixel, 2K about 4"
+      onChange={(e) => onChange(e.target.value as Resolution)}
+    >
+      <option value="1K">1K</option>
+      <option value="2K">2K</option>
+    </select>
+  );
+}

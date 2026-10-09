@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Start ComfyUI on the pod in the background, listening on port 8188 for the
-# app (log: /workspace/logs/comfyui.log). Safe to rerun: leaves a running
-# ComfyUI alone. Run setup.sh first (and again after a pod restart).
+# Make sure ComfyUI is up on port 8188 for the app, and print the URL to put
+# in .env. A ComfyUI that's already running (e.g. a ComfyUI pod template's) is
+# left alone; otherwise this starts the one setup.sh installed, in the
+# background (log: /workspace/logs/comfyui.log).
 #
 # Expose port 8188 in the pod's settings (Edit Pod -> Expose HTTP Ports); the
 # app then reaches it at https://<pod id>-8188.proxy.runpod.net. There is no
@@ -14,10 +15,12 @@ VENV="$WS/comfyui-venv"
 LOGS="$WS/logs"; mkdir -p "$LOGS"
 up() { curl -s -o /dev/null --max-time 3 http://localhost:8188/system_stats; }
 
-[ -x "$VENV/bin/python" ] || { echo "No ComfyUI install yet -- run setup.sh first."; exit 1; }
-
 if up; then
   echo "ComfyUI: already running"
+elif [ ! -x "$VENV/bin/python" ]; then
+  echo "ComfyUI isn't running, and setup.sh didn't install one here. If the pod's template provides"
+  echo "ComfyUI, start it from the template (or restart the pod); otherwise run setup.sh first."
+  exit 1
 else
   (cd "$COMFY" && nohup "$VENV/bin/python" main.py --listen 0.0.0.0 --port 8188 > "$LOGS/comfyui.log" 2>&1 &)
   echo -n "ComfyUI: starting (log: $LOGS/comfyui.log) "

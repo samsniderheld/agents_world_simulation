@@ -7,14 +7,16 @@ it's started it stays up -- no per-request cold start.
 
 ## 1. The pod
 
-- **GPU:** 48 GB recommended (L40S, RTX 6000 Ada, A6000). The models are
-  ~25 GB of weights; a 24 GB card may work with ComfyUI swapping them, slower.
-- **Template:** any RunPod PyTorch / Ubuntu image.
-- **Volume:** 60 GB+ at `/workspace` (ComfyUI, its Python packages and the
-  models live there, so they survive pod restarts).
+- **GPU:** 48 GB recommended (L40S, RTX 6000 Ada, A6000, A100). The models
+  are ~25 GB of weights; a 24 GB card may work with ComfyUI swapping them, slower.
+- **Template:** RunPod's ComfyUI template is easiest (its ComfyUI, in
+  `/workspace/runpod-slim/ComfyUI`, starts with the pod). Any PyTorch / Ubuntu
+  image works too -- `setup.sh` then installs ComfyUI itself.
+- **Volume:** 60 GB+ at `/workspace` (ComfyUI and the models live there, so
+  they survive pod restarts).
 - **Expose HTTP Ports:** `8188`.
 
-## 2. Set up and start ComfyUI
+## 2. Models and a check
 
 In the pod's terminal (Jupyter or SSH):
 
@@ -22,18 +24,22 @@ In the pod's terminal (Jupyter or SSH):
 cd /workspace
 git clone https://github.com/samsniderheld/agents_world_simulation.git   # once
 cd agents_world_simulation && git checkout comfyui_pod
-bash city_simulator/deploy/runpod-comfyui/setup.sh   # first time ~10-20 min (models)
+bash city_simulator/deploy/runpod-comfyui/setup.sh
 bash city_simulator/deploy/runpod-comfyui/start.sh
 ```
 
-`setup.sh` installs ComfyUI v0.39.0 (the Qwen-Image 2.1 nodes need 0.37.0+;
-`COMFYUI_VERSION=master` for the newest), a CUDA 12.8 torch, ComfyUI's
-requirements and the four models, then checks every node the workflow uses
-is there. It's safe to rerun -- do so after every pod restart (RunPod wipes
-everything outside `/workspace`), then `start.sh` again.
+`setup.sh` finds the pod's ComfyUI -- the one running on port 8188, else
+one on the volume -- and puts the four models in the folders that ComfyUI
+reads them from (the same place its web UI's model downloads go; models
+already there are skipped). Then it checks ComfyUI has every node the
+workflow uses: the Qwen-Image 2.1 nodes need ComfyUI 0.37.0+, so an older
+install gets a clear message to update it. Only on a pod with no ComfyUI at
+all does it install one (v0.39.0 at `/workspace/ComfyUI`;
+`COMFYUI_VERSION=master` for the newest, `COMFYUI_DIR` to pick a folder).
 
-`start.sh` prints the URL to use. `stop.sh` stops ComfyUI; ComfyUI's own log
-is `/workspace/logs/comfyui.log`.
+`start.sh` makes sure ComfyUI is up and prints the URL to use; it only
+starts a ComfyUI that `setup.sh` installed (a template's runs on its own).
+`stop.sh` stops that one.
 
 ## 3. Point the app at it
 
@@ -46,6 +52,11 @@ COMFYUI_URL=https://<pod id>-8188.proxy.runpod.net
 
 then restart the app. Image and storyboard-frame nodes now run on the pod;
 video and music nodes still use fal.
+
+**Size:** the Image node's aspect ratio and **1K / 2K** pickers set the
+output: 1K is about 1 megapixel (16:9 = 1376 x 768), 2K about 4 (2720 x
+1536) -- also when reference images are wired in (their pixel budget follows
+the same setting).
 
 **No password:** ComfyUI has no login, so anyone who has the pod's URL can
 run jobs on it while it's up. Stop the pod when you're done (that also stops

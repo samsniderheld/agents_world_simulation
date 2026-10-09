@@ -3,7 +3,7 @@ import type { Node, NodeProps } from '@xyflow/react';
 import { city, visuals } from '../../api/client';
 import { pollVisualsUntilDone } from '../../api/pollVisuals';
 import { useLightboxStore } from '../../state/lightboxStore';
-import { AspectSelect, type AspectRatio } from './AspectSelect';
+import { AspectSelect, type AspectRatio, ResolutionSelect, type Resolution } from './AspectSelect';
 import { NodeShell } from './NodeShell';
 import { Port } from './Port';
 import { useProviderCapabilities } from './useProviderCapabilities';
@@ -18,6 +18,7 @@ export interface FrameNodeData extends Record<string, unknown> {
   editPrompt?: string;
   // Sent with both generate and edit (see AspectSelect).
   aspectRatio?: AspectRatio;
+  resolution?: Resolution;
   // Where the result lives. Either on this node (url/localPath, a file in
   // visuals/data/outputs) or, when saved to an agent's/place's media,
   // that media record (mediaId, in attachTo's media).
@@ -58,6 +59,7 @@ export interface FrameNodeData extends Record<string, unknown> {
       prompt?: string;
       editPrompt?: string;
       aspectRatio?: AspectRatio;
+      resolution?: Resolution;
       url?: string;
       localPath?: string;
       mediaId?: string;
@@ -88,6 +90,7 @@ export function FrameNode({ id, data, selected }: NodeProps<FrameNodeType>) {
   const capabilities = useProviderCapabilities();
   const canEdit = capabilities?.supports_reference_images !== false;
   const aspect = data.aspectRatio ?? '16:9';
+  const resolution = data.resolution ?? '1K';
   // Enrichment resolves these; the fallback covers a canvas rendered
   // before its city data has loaded (a node-kept result needs none).
   const imageUrl = data.imageUrl ?? (data.url ? visuals.fileUrl(data.url) : undefined);
@@ -98,7 +101,7 @@ export function FrameNode({ id, data, selected }: NodeProps<FrameNodeType>) {
     setError(null);
     setPending(kind);
     try {
-      const start = await visuals.generateImage({ ...params, options: { aspect_ratio: aspect } });
+      const start = await visuals.generateImage({ ...params, options: { aspect_ratio: aspect, resolution } });
       if (!start.ok) {
         setError(start.error ?? 'failed to start');
         return;
@@ -192,6 +195,7 @@ export function FrameNode({ id, data, selected }: NodeProps<FrameNodeType>) {
       )}
       <div className="node-controls">
         <AspectSelect value={aspect} onChange={(v) => data.onUpdate(id, { aspectRatio: v })} square />
+        <ResolutionSelect value={resolution} onChange={(v) => data.onUpdate(id, { resolution: v })} />
         <button className="node-run-btn" disabled={pending !== null || !prompt.trim()} onClick={onGenerate}>
           {pending === 'generate' ? 'generating…' : imageUrl ? '↻ regenerate' : '▶ generate'}
         </button>

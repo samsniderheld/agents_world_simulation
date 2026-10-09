@@ -71,8 +71,12 @@ local:
 # The rest is named as "<node id>.<input name>":
 #   prompt          inputs that get the prompt text
 #   seed            inputs that get a fresh random seed each call
-#   size            an EmptyLatentImage-style node: width/height from the aspect ratio
+#   size            an EmptyLatentImage-style node: its width/height become
+#                   the node's aspect ratio at the chosen resolution
+#   resolution      an input that gets the resolution's pixel budget
+#                   (resolutions: the Image node's 1K / 2K -> that budget)
 #   output          the node whose images are the result
+#   with_images     overrides when images are sent
 #   without_images  overrides for text-to-image (no images sent); "{prompt}"
 #                   is replaced by the prompt
 comfyui:
@@ -89,14 +93,17 @@ comfyui:
     prompt: ["459:500.prompt", "459:484.on_false"]
     seed: ["459:458.seed", "459:500.sampling_mode.seed"]
     size: "459:456"
+    # reference images are resized to about this many pixels squared
+    resolution: "459:474.resolution"
+    resolutions: {"1K": 1024, "2K": 2048}
     output: "461"
+    with_images:
+      # "custom size": the canvas is the node's aspect ratio and resolution,
+      # not image 1's own size
+      "459:468.switch": true
     without_images:
       # skip the edit prompt-enhancer (it needs an image) ...
       "459:474.prompt": "{prompt}"
       # ... and start from the empty latent instead of the input image
       "459:468.switch": true
-    sizes:
-      "1:1": [1328, 1328]
-      "16:9": [1664, 928]
-      "9:16": [928, 1664]
 
