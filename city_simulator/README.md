@@ -78,6 +78,16 @@ themselves, every agent's runs, every entity's media, *and the canvases*
    ```
    First use downloads the model; see `visuals/NOTES.md` for the
    hardware/memory details this was built against.
+
+   Or run images on your own models with **ComfyUI**
+   (`visuals/providers/comfyui.py`): `VISUALS_PROVIDER=comfyui` and
+   `COMFYUI_URL` in `.env`. Every image generate/edit runs an API-format
+   workflow from `visuals/data/comfyui/` (by default ComfyUI's Qwen-Image 2.1
+   image-edit template); however many images a node sends become that many
+   inputs to the workflow (up to its `max_images`), and with none it runs
+   text-to-image. To run ComfyUI on a RunPod pod, see
+   [`deploy/runpod-comfyui/`](deploy/runpod-comfyui/README.md). Video and
+   music still use fal.
 6. Ollama is the default for the Agents side too, but a Simulation or
    Treatment node's provider picker can switch that call to the **Claude
    API** instead (`agents/providers/claude.py`) -- needs its own key, same
