@@ -22,7 +22,7 @@ load_dotenv(_PROJECT_ROOT / ".env")
 with open(_YAML_PATH) as _f:
     _RAW = yaml.safe_load(_f)
 
-PROVIDER = _RAW["provider"]
+PROVIDER = os.environ.get("VISUALS_PROVIDER") or _RAW["provider"]
 
 FAL_API_KEY = os.environ.get("FAL_KEY")
 FAL_TEXT_TO_IMAGE_MODEL = _RAW["fal"]["text_to_image_model"]
@@ -42,6 +42,10 @@ LOCAL_NUM_INFERENCE_STEPS = _RAW["local"]["num_inference_steps"]
 LOCAL_GUIDANCE_SCALE = _RAW["local"]["guidance_scale"]
 LOCAL_QUANTIZE = _RAW["local"]["quantize"]
 LOCAL_QUANTIZE_DTYPE = _RAW["local"]["quantize_dtype"]
+
+COMFYUI_URL = os.environ.get("COMFYUI_URL", "http://127.0.0.1:8188").rstrip("/")
+COMFYUI = _RAW.get("comfyui") or {}
+COMFYUI_DIR = _PACKAGE_DIR / "data"      # workflow files are relative to this
 
 UPLOADS_DIR = _PACKAGE_DIR / "data" / "uploads"
 OUTPUTS_DIR = _PACKAGE_DIR / "data" / "outputs"

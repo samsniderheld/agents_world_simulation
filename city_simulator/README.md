@@ -78,6 +78,19 @@ themselves, every agent's runs, every entity's media, *and the canvases*
    ```
    First use downloads the model; see `visuals/NOTES.md` for the
    hardware/memory details this was built against.
+
+   Or run images on your own models through **ComfyUI**
+   (`visuals/providers/comfyui.py`): set `VISUALS_PROVIDER=comfyui` and
+   `COMFYUI_URL` (default `http://127.0.0.1:8188`) in `.env`. Every image
+   generate/edit runs an API-format workflow (ComfyUI's *Export (API)*)
+   from `visuals/data/comfyui/` -- the default is a Qwen-Image 2.1 edit
+   workflow. However many images a node sends (its input images, style
+   references, wired agents' and places' pictures, up to the workflow's
+   `max_images`) become that many LoadImage nodes, wired into the
+   workflow's numbered image inputs; with none, it runs as text-to-image.
+   To use another workflow, export it and describe it in
+   `visuals/data/config.yaml`'s `comfyui` section (where the prompt, seed,
+   size and output go). Video and music still need fal.
 6. Ollama is the default for the Agents side too, but a Simulation or
    Treatment node's provider picker can switch that call to the **Claude
    API** instead (`agents/providers/claude.py`) -- needs its own key, same

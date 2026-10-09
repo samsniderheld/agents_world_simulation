@@ -1,7 +1,7 @@
 # Which provider implementation backs the Visuals tab (see
-# visuals/providers/__init__.py's get_provider()). "fal" today; adding a
-# "local" entry here (once visuals/providers/local.py exists) is the whole
-# story for switching to a local model server -- routes.py/jobs.py/the
+# visuals/providers/__init__.py's get_provider()): "fal", "local" (Diffusers
+# on Apple Silicon) or "comfyui" (a ComfyUI server, see the comfyui section
+# below). VISUALS_PROVIDER in .env overrides this; routes.py/jobs.py/the
 # frontend never change.
 provider: fal
 
@@ -56,4 +56,45 @@ local:
   # we're on 0.36.0).
   quantize: true
   quantize_dtype: "int8"
+
+# ComfyUI (visuals/providers/comfyui.py): runs an API-format workflow on a
+# ComfyUI server (COMFYUI_URL in .env, default http://127.0.0.1:8188) for
+# every image generate/edit. Export a workflow with ComfyUI's "Export (API)"
+# into visuals/data/comfyui/, then describe it below.
+#
+# Image inputs are found automatically: every LoadImage node in the file is
+# a placeholder, and each numbered input that reads from one ("images.image_1",
+# "images.image_2" / "images.image0", "images.image1" ...) is grown or shrunk
+# to however many images the frontend sent (up to max_images), numbered the
+# same way. Nodes that don't feed the output (e.g. a Compare node) are dropped.
+#
+# Everything else is named as "<node id>.<input name>":
+#   prompt          inputs that receive the prompt text
+#   seed            inputs set to a fresh random seed each call
+#   size            an EmptyLatentImage-style node: width/height from the aspect ratio
+#   output          the node whose images are the result
+#   without_images  inputs to override for text-to-image (no images sent);
+#                   "{prompt}" is replaced by the prompt
+comfyui:
+  timeout_seconds: 900
+  poll_interval_seconds: 1
+  image_workflow:
+    file: "comfyui/qwen_image_2_1_edit.json"
+    # How many reference images the model takes; extra ones (the frontend
+    # sends input images first, then style references, then the wired
+    # agents'/places' pictures) are left off the end.
+    max_images: 4
+    prompt: ["459:500.prompt", "459:484.on_false"]
+    seed: ["459:458.seed", "459:500.sampling_mode.seed"]
+    size: "459:456"
+    output: "461"
+    without_images:
+      # skip the edit prompt-enhancer (it needs an image) ...
+      "459:474.prompt": "{prompt}"
+      # ... and start from the empty latent instead of the input image
+      "459:468.switch": true
+    sizes:
+      "1:1": [1328, 1328]
+      "16:9": [1664, 928]
+      "9:16": [928, 1664]
 

@@ -15,7 +15,7 @@ memory, and reconstructing it would mean reloading the model.
 
 from .. import config
 
-AVAILABLE_PROVIDERS = ["fal", "local"]
+AVAILABLE_PROVIDERS = ["fal", "local", "comfyui"]
 
 # What the node-based UI's canvas can honor per provider, so it can grey
 # out a port/field instead of failing at generate time (per the design
@@ -35,6 +35,13 @@ CAPABILITIES = {
         "supports_video": False,
         "supports_music": False,
     },
+    # comfyui.py: images only, any number of input images (up to the
+    # workflow's max_images) -- no video or music workflows wired up.
+    "comfyui": {
+        "supports_reference_images": True,
+        "supports_video": False,
+        "supports_music": False,
+    },
 }
 
 _instances = {}
@@ -51,6 +58,9 @@ def get_provider(name: str = None):
     elif name == "local":
         from .local import LocalProvider
         instance = LocalProvider()
+    elif name == "comfyui":
+        from .comfyui import ComfyUIProvider
+        instance = ComfyUIProvider()
     else:
         raise ValueError(f"unknown visuals provider: {name!r}")
 
