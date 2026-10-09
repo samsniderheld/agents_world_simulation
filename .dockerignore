@@ -1,4 +1,0 @@
-# Only the RunPod ComfyUI worker image (city_simulator/deploy/runpod-comfyui/)
-# is built with this repo as its context, and it needs just handler.py.
-*
-!handler.py

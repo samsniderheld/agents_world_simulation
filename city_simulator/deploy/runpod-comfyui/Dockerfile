@@ -2,8 +2,8 @@
 # edit workflow (visuals/data/comfyui/qwen_image_2_1_edit.json). See README.md
 # in this folder for building and deploying it.
 #
-# Build context: the repository root (RunPod's GitHub builder default) -- the
-# only file it uses from there is handler.py (see the root .dockerignore).
+# Build context: this folder (RunPod's GitHub builder uses the Dockerfile's
+# folder).
 #
 # RunPod's worker-comfyui base image (which speaks the request format the
 # app's ComfyUI provider sends) ships ComfyUI 0.34.0, but the workflow's
@@ -69,7 +69,8 @@ RUN set -eux; \
     ls -la diffusion_models text_encoders vae
 
 # 5. The entry point: worker-comfyui's own handler, moved aside and started by
-#    the repo-root handler.py (RunPod's GitHub builder only builds a repo with
-#    a runpod.serverless.start() handler at its top level).
+#    handler.py. (RunPod's GitHub builder also wants a runpod.serverless.start()
+#    handler at the top of the repo, so the repo root has an identical copy --
+#    tests/test_runpod_worker.py keeps the two the same.)
 RUN mv /handler.py /worker_comfyui_handler.py
 COPY handler.py /handler.py

@@ -20,12 +20,12 @@ in the four model files:
 
 The finished image is about 40 GB.
 
-The repo's top-level `handler.py` is the worker's entry point: RunPod's
-GitHub builder refuses a repo without a `runpod.serverless.start(...)` handler
-at its top level, so the Dockerfile moves worker-comfyui's own handler aside
-and `handler.py` loads and starts it -- the worker behaves exactly like the
-stock one. That's also why the image is built with the repo root as its
-context (the root `.dockerignore` sends only `handler.py`).
+`handler.py` is the worker's entry point: the Dockerfile moves
+worker-comfyui's own handler aside and `handler.py` loads and starts it -- the
+worker behaves exactly like the stock one. RunPod's GitHub builder also
+refuses a repo without a `runpod.serverless.start(...)` handler at its top
+level, so the repo root has an identical copy (`tests/test_runpod_worker.py`
+fails if they drift apart).
 
 ## Deploy
 
@@ -34,7 +34,7 @@ context (the root `.dockerignore` sends only `handler.py`).
 and branch, and set
 
 - Dockerfile path: `city_simulator/deploy/runpod-comfyui/Dockerfile`
-- Build context: the repository root (leave it at the default / `.`)
+- Build context: `city_simulator/deploy/runpod-comfyui` (the Dockerfile's folder)
 
 RunPod builds the image and deploys it; a push to that branch rebuilds it.
 
@@ -42,9 +42,8 @@ RunPod builds the image and deploys it; a push to that branch rebuilds it.
 Apple Silicon Mac would have to emulate x86, which is very slow at this size):
 
 ```bash
-# from the repository root
-docker build --platform linux/amd64 -f city_simulator/deploy/runpod-comfyui/Dockerfile \
-  -t <dockerhub-user>/comfyui-qwen21:1 .
+cd city_simulator/deploy/runpod-comfyui
+docker build --platform linux/amd64 -t <dockerhub-user>/comfyui-qwen21:1 .
 docker push <dockerhub-user>/comfyui-qwen21:1
 ```
 
