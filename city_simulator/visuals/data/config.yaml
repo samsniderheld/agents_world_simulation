@@ -86,8 +86,9 @@ local:
 #                   is replaced by the prompt
 #   aspect_ratio    (video) an input that gets the node's aspect ratio, named
 #                   as aspect_ratios maps it ("16:9" -> that input's value)
-#   duration        (video) an input that gets the clip length in seconds
-#                   (the node's, else default_duration)
+#   options         (video) the Video node's options -> the inputs they set:
+#                   duration (seconds), megapixels, steps, sampler, scheduler;
+#                   defaults gives each one's value when the node leaves it blank
 #   set             fixed values to set on every call (e.g. a different model file)
 comfyui:
   timeout_seconds: 900
@@ -132,9 +133,14 @@ comfyui:
       "16:9": "16:9 (Widescreen)"
       "9:16": "9:16 (Portrait Widescreen)"
       "1:1": "1:1 (Square)"
-    duration: "105:111.value"
-    # MiniMax H3 is trained on ~5-15 s clips (24 fps)
-    default_duration: 5
+    options:
+      duration: "105:111.value"         # seconds; the workflow turns it into frames at 24 fps
+      megapixels: "115.megapixels"      # with the aspect ratio: 0.4 = 864x480 at 16:9
+      steps: "105:9.steps"
+      sampler: "105:17.sampler_name"
+      scheduler: "105:9.scheduler"
+    defaults:
+      duration: 5                       # MiniMax H3 is trained on ~5-15 s clips
     # The workflow's text encoder is NVFP4 (made for Blackwell GPUs). If it
     # won't load on the video pod's GPU, use the int8 one instead -- run
     # `MINIMAX_TEXT_ENCODER=int8 setup.sh video` on the pod and uncomment:

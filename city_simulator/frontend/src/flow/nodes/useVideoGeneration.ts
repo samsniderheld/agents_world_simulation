@@ -15,11 +15,12 @@ export function useVideoGeneration() {
     stylePrompt?: string,
     aspectRatio: string = '16:9',
     provider?: string,
-  ): Promise<{ url: string; localPath: string } | null> {
+    extraOptions: Record<string, unknown> = {},
+  ): Promise<{ url: string; localPath: string; seed?: number } | null> {
     setError(null);
     setPending(true);
     try {
-      const start = await visuals.generateVideo({ prompt, imagePath, stylePrompt, options: { aspect_ratio: aspectRatio }, provider });
+      const start = await visuals.generateVideo({ prompt, imagePath, stylePrompt, options: { ...extraOptions, aspect_ratio: aspectRatio }, provider });
       if (!start.ok) {
         setError(start.error ?? 'failed to start');
         return null;
@@ -29,7 +30,7 @@ export function useVideoGeneration() {
         setError('generation finished with no video');
         return null;
       }
-      return { url: result.video.url, localPath: result.video.local_path };
+      return { url: result.video.url, localPath: result.video.local_path, seed: result.seed };
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       return null;

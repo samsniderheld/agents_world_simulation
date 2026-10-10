@@ -7,6 +7,7 @@ import { Port } from './Port';
 import { ProviderSelect } from './ProviderSelect';
 import { useVisualsProviders } from './useProviderCapabilities';
 import { useVideoGeneration } from './useVideoGeneration';
+import { VideoOptions, type VideoOptionValues } from './VideoOptions';
 
 export interface VideoNodeData extends Record<string, unknown> {
   // Resolved by the parent from the connected Frame node -- both stay
@@ -23,13 +24,20 @@ export interface VideoNodeData extends Record<string, unknown> {
   // Which service animates it ("fal" | "comfyui"); blank = the server's
   // default for video.
   provider?: string;
+  // ComfyUI only: the workflow's options (VideoOptions.tsx), and the seed the
+  // last clip was made with.
+  options?: VideoOptionValues;
+  lastSeed?: number;
   prompt: string;
   // Self-contained, like an Image node's own result -- a generated clip
   // belongs to this node/the treatment it's part of, not to any one
   // entity's media history.
   url?: string;
   localPath?: string;
-  onUpdate: (nodeId: string, patch: { prompt?: string; aspectRatio?: AspectRatio; provider?: string; url?: string; localPath?: string }) => void;
+  onUpdate: (
+    nodeId: string,
+    patch: { prompt?: string; aspectRatio?: AspectRatio; provider?: string; options?: VideoOptionValues; lastSeed?: number; url?: string; localPath?: string },
+  ) => void;
 }
 
 export type VideoNodeType = Node<VideoNodeData, 'video'>;
@@ -41,11 +49,13 @@ export function VideoNode({ id, data, selected }: NodeProps<VideoNodeType>) {
   const [prompt, setPrompt] = useState(data.prompt);
   const { pending, error, generate } = useVideoGeneration();
   const providers = useVisualsProviders();
+  const comfy = (data.provider || providers?.defaults.video) === 'comfyui';
 
   async function onGenerate() {
     if (!data.sourceImagePath) return;
-    const result = await generate(prompt, data.sourceImagePath, data.mergedStylePrompt, data.aspectRatio ?? '16:9', data.provider);
-    if (result) data.onUpdate(id, { prompt, url: result.url, localPath: result.localPath });
+    const result = await generate(prompt, data.sourceImagePath, data.mergedStylePrompt, data.aspectRatio ?? '16:9', data.provider,
+      comfy ? { ...(data.options ?? {}) } : {});
+    if (result) data.onUpdate(id, { prompt, url: result.url, localPath: result.localPath, lastSeed: result.seed });
   }
 
   const noSource = !data.sourceImagePath;
@@ -76,6 +86,9 @@ export function VideoNode({ id, data, selected }: NodeProps<VideoNodeType>) {
         onChange={(e) => setPrompt(e.target.value)}
         onBlur={() => prompt !== data.prompt && data.onUpdate(id, { prompt })}
       />
+      {comfy && (
+        <VideoOptions value={data.options ?? {}} lastSeed={data.lastSeed} onChange={(options) => data.onUpdate(id, { options })} />
+      )}
       {error && <div className="node-error-text">{error}</div>}
       <div className="node-controls">
         <AspectSelect value={data.aspectRatio ?? '16:9'} onChange={(v) => data.onUpdate(id, { aspectRatio: v })} />

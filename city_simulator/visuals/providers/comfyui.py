@@ -33,6 +33,9 @@ from .. import config, storage
 from .base import Provider
 
 _NUMBERED = re.compile(r"^(.*?)(\d+)$")      # "images.image_2" -> ("images.image_", "2")
+# The Video node's options: (type, min, max). Anything else passes through as
+# text (sampler/scheduler names; ComfyUI rejects unknown ones by name).
+VIDEO_OPTIONS = {"duration": (float, 1, 20), "megapixels": (float, 0.1, 4.0), "steps": (int, 1, 100)}
 UPLOAD_SUBFOLDER = "city_simulator"
 
 
@@ -281,13 +284,32 @@ class ComfyUIProvider(Provider):
         aspect = (spec.get("aspect_ratios") or {}).get(options.get("aspect_ratio") or "")
         if spec.get("aspect_ratio") and aspect:
             settings[spec["aspect_ratio"]] = aspect
-        if spec.get("duration"):
-            settings[spec["duration"]] = float(options.get("duration") or spec.get("default_duration") or 5)
-        graph = prepare_graph(template, spec, prompt, names, seed, settings=settings)
+        defaults = spec.get("defaults") or {}
+        for name, path in (spec.get("options") or {}).items():
+            value = options.get(name)
+            if value in (None, ""):
+                value = defaults.get(name)
+            if value in (None, ""):
+                continue                          # the workflow's own value stands
+            settings[path] = _video_option(name, value)
+        graph = prepare_graph(template, spec, prompt, names, int(seed), settings=settings)
         filename, data, content_type = self._run("video", spec, graph)[0]
         local_path = self._save(filename, data, content_type)
         return {"video": {"local_path": str(local_path), "url": storage.relative_path(local_path),
                           "content_type": content_type, "file_size": len(data)}, "seed": seed}
+
+
+def _video_option(name: str, value):
+    """A Video node option, as the workflow input wants it -- numbers typed
+    and kept in range."""
+    if name not in VIDEO_OPTIONS:
+        return str(value)
+    kind, low, high = VIDEO_OPTIONS[name]
+    try:
+        number = kind(float(value))
+    except (TypeError, ValueError):
+        raise ValueError(f"video option {name} should be a number, not {value!r}")
+    return max(low, min(high, number))
 
 
 def _output_files(output: dict) -> list:

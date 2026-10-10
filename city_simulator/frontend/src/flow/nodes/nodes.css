@@ -546,3 +546,56 @@
   font-size: 9.5px;
   color: var(--node-text-dim);
 }
+
+/* A node's collapsible option panel (VideoOptions.tsx): label / control rows */
+.node-options {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--node-text-dim);
+}
+.node-options > summary {
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.node-options-grid {
+  display: grid;
+  /* two label/control pairs per row, so the panel stays short */
+  grid-template-columns: auto minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 4px 8px;
+  margin: 6px 0;
+}
+.node-options-grid > label {
+  font-family: var(--mono);
+  font-size: 10.5px;
+}
+.node-options-grid .node-select {
+  width: 100%;
+  min-width: 0;
+}
+.node-options-seed {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.node-link-btn {
+  font: inherit;
+  font-size: 11px;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: var(--node-running);
+  white-space: nowrap;
+}
+.node-link-btn:hover {
+  text-decoration: underline;
+}
+.node-link-btn:focus-visible {
+  outline: 1px solid var(--node-running);
+  outline-offset: 2px;
+}

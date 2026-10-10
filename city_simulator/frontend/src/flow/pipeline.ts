@@ -212,11 +212,15 @@ export function toPipelineRenderNode(gn: GraphNode, cb: PipelineCallbacks, owner
       type: 'video',
       position: gn.position,
       width: gn.width ?? 540,
-      height: gn.height ?? 430,
+      // No default height: an unresized Video node grows to fit its content
+      // (e.g. the ComfyUI options panel opening); NodeShell keeps 430 as the floor.
+      height: gn.height,
       data: {
         prompt: (gn.data.prompt as string) ?? '',
         aspectRatio: gn.data.aspectRatio as string | undefined,
         provider: gn.data.provider as string | undefined,
+        options: gn.data.options as Record<string, unknown> | undefined,
+        lastSeed: gn.data.lastSeed as number | undefined,
         url: gn.data.url as string | undefined,
         localPath: gn.data.localPath as string | undefined,
         onUpdate: cb.onVideoUpdate,
@@ -361,7 +365,7 @@ export function pipelineToGraphNode(n: Node): GraphNode | null {
   }
   if (n.type === 'video') {
     const d = n.data as VideoNodeData;
-    return { id: n.id, type: 'video', position: n.position, width: n.width, height: n.height, data: { prompt: d.prompt, aspectRatio: d.aspectRatio, provider: d.provider, url: d.url, localPath: d.localPath } };
+    return { id: n.id, type: 'video', position: n.position, width: n.width, height: n.height, data: { prompt: d.prompt, aspectRatio: d.aspectRatio, provider: d.provider, options: d.options, lastSeed: d.lastSeed, url: d.url, localPath: d.localPath } };
   }
   if (n.type === 'style') {
     const d = n.data as StyleNodeData;

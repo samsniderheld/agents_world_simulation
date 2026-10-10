@@ -442,6 +442,7 @@ export interface GeneratedVideo {
 export interface VideoGenResult {
   kind: 'video' | 'video_reference';
   video: GeneratedVideo;
+  seed?: number; // ComfyUI: the seed this clip was made with
 }
 
 // Verified against providers/fal.py's generate_music() (the only

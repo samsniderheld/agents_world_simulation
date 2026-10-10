@@ -65,7 +65,7 @@ class PrepareGraph(unittest.TestCase):
 
 class VideoGraph(unittest.TestCase):
     def test_first_frame_aspect_duration(self):
-        settings = {VSPEC["aspect_ratio"]: VSPEC["aspect_ratios"]["16:9"], VSPEC["duration"]: 8.0}
+        settings = {VSPEC["aspect_ratio"]: VSPEC["aspect_ratios"]["16:9"], VSPEC["options"]["duration"]: 8.0}
         g = comfyui.prepare_graph(VTEMPLATE, VSPEC, "Lou walks out into the rain", ["city_simulator/frame.png"],
                                   seed=7, settings=settings)
         self.assertEqual(g["105:104"]["inputs"]["first_frame"], ["cs_image_1", 0])   # the source image
@@ -248,7 +248,31 @@ class AgainstAStandInServer(unittest.TestCase):
 
     def test_video_default_duration(self):
         self.provider.generate_video("x", self._images(1)[0], aspect_ratio="16:9")
-        self.assertEqual(FakeComfy.prompts[0]["105:111"]["inputs"]["value"], float(VSPEC["default_duration"]))
+        graph = FakeComfy.prompts[0]
+        self.assertEqual(graph["105:111"]["inputs"]["value"], float(VSPEC["defaults"]["duration"]))
+        # options left blank keep the workflow's own values
+        self.assertEqual(graph["105:9"]["inputs"]["steps"], 20)
+        self.assertEqual(graph["105:17"]["inputs"]["sampler_name"], "res_multistep")
+        self.assertEqual(graph["115"]["inputs"]["megapixels"], 0.4)
+
+    def test_video_options(self):
+        out = self.provider.generate_video("x", self._images(1)[0], aspect_ratio="16:9", duration="12",
+                                           megapixels=0.9, steps=30, sampler="euler", scheduler="karras", seed=1234)
+        g = FakeComfy.prompts[0]
+        self.assertEqual(g["105:111"]["inputs"]["value"], 12.0)
+        self.assertEqual(g["115"]["inputs"]["megapixels"], 0.9)
+        self.assertEqual(g["105:9"]["inputs"]["steps"], 30)
+        self.assertEqual(g["105:17"]["inputs"]["sampler_name"], "euler")
+        self.assertEqual(g["105:9"]["inputs"]["scheduler"], "karras")
+        self.assertEqual(g["105:15"]["inputs"]["noise_seed"], 1234)
+        self.assertEqual(out["seed"], 1234)
+
+    def test_video_options_are_checked(self):
+        self.provider.generate_video("x", self._images(1)[0], steps=500, duration=0)
+        g = FakeComfy.prompts[0]
+        self.assertEqual((g["105:9"]["inputs"]["steps"], g["105:111"]["inputs"]["value"]), (100, 1.0))
+        with self.assertRaises(ValueError):
+            self.provider.generate_video("x", self._images(1)[0], steps="lots")
 
     def test_separate_servers(self):
         p = comfyui.ComfyUIProvider(base_url="http://image-pod", video_url="http://video-pod")
