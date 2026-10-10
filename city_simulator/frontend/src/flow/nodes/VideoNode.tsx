@@ -4,6 +4,7 @@ import { visuals } from '../../api/client';
 import { AspectSelect, type AspectRatio } from './AspectSelect';
 import { NodeShell } from './NodeShell';
 import { Port } from './Port';
+import { ComfyServerField } from './ComfyServerField';
 import { ProviderSelect } from './ProviderSelect';
 import { useVisualsProviders } from './useProviderCapabilities';
 import { useVideoGeneration } from './useVideoGeneration';
@@ -28,6 +29,7 @@ export interface VideoNodeData extends Record<string, unknown> {
   // last clip was made with.
   options?: VideoOptionValues;
   lastSeed?: number;
+  comfyuiUrl?: string; // this node's own ComfyUI address (blank = the default)
   prompt: string;
   // Self-contained, like an Image node's own result -- a generated clip
   // belongs to this node/the treatment it's part of, not to any one
@@ -36,7 +38,7 @@ export interface VideoNodeData extends Record<string, unknown> {
   localPath?: string;
   onUpdate: (
     nodeId: string,
-    patch: { prompt?: string; aspectRatio?: AspectRatio; provider?: string; options?: VideoOptionValues; lastSeed?: number; url?: string; localPath?: string },
+    patch: { prompt?: string; aspectRatio?: AspectRatio; provider?: string; options?: VideoOptionValues; lastSeed?: number; comfyuiUrl?: string; url?: string; localPath?: string },
   ) => void;
 }
 
@@ -54,7 +56,7 @@ export function VideoNode({ id, data, selected }: NodeProps<VideoNodeType>) {
   async function onGenerate() {
     if (!data.sourceImagePath) return;
     const result = await generate(prompt, data.sourceImagePath, data.mergedStylePrompt, data.aspectRatio ?? '16:9', data.provider,
-      comfy ? { ...(data.options ?? {}) } : {});
+      comfy ? { ...(data.options ?? {}) } : {}, data.comfyuiUrl);
     if (result) data.onUpdate(id, { prompt, url: result.url, localPath: result.localPath, lastSeed: result.seed });
   }
 
@@ -86,6 +88,10 @@ export function VideoNode({ id, data, selected }: NodeProps<VideoNodeType>) {
         onChange={(e) => setPrompt(e.target.value)}
         onBlur={() => prompt !== data.prompt && data.onUpdate(id, { prompt })}
       />
+      {comfy && (
+        <ComfyServerField kind="video" value={data.comfyuiUrl ?? ''} info={providers}
+          onChange={(url) => data.onUpdate(id, { comfyuiUrl: url || undefined })} />
+      )}
       {comfy && (
         <VideoOptions value={data.options ?? {}} lastSeed={data.lastSeed} onChange={(options) => data.onUpdate(id, { options })} />
       )}

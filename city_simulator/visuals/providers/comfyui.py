@@ -151,9 +151,19 @@ class ComfyUIProvider(Provider):
     overrides it for video."""
 
     def __init__(self, base_url: str = None, session: requests.Session = None, video_url: str = None):
-        self.urls = {"image": (base_url or config.COMFYUI_IMAGE_URL).rstrip("/"),
-                     "video": (video_url or base_url or config.COMFYUI_VIDEO_URL).rstrip("/")}
+        self._fixed = {}
+        if base_url:
+            self._fixed = {"image": base_url.rstrip("/"), "video": (video_url or base_url).rstrip("/")}
+        elif video_url:
+            self._fixed = {"video": video_url.rstrip("/")}
         self._session = session or requests.Session()
+
+    @property
+    def urls(self) -> dict:
+        """Each kind's server: fixed at construction (tests), else the current
+        defaults (config -- a node's "make default" changes them live)."""
+        return {"image": self._fixed.get("image") or config.COMFYUI_IMAGE_URL,
+                "video": self._fixed.get("video") or config.COMFYUI_VIDEO_URL}
 
     @property
     def base_url(self) -> str:
@@ -178,8 +188,8 @@ class ComfyUIProvider(Provider):
         return graph
 
     # --- the server -------------------------------------------------------------------------
-    def _call(self, kind: str, method: str, path: str, **kw):
-        url = self.urls[kind]
+    def _call(self, kind: str, method: str, path: str, url: str = None, **kw):
+        url = url or self.urls[kind]
         try:
             return self._session.request(method, f"{url}{path}", timeout=kw.pop("timeout", 60), **kw)
         except requests.RequestException as e:
@@ -188,10 +198,10 @@ class ComfyUIProvider(Provider):
                                f"running and ComfyUI up (deploy/runpod-comfyui/start.sh)? It's {env} (or "
                                "COMFYUI_URL) in .env.") from e
 
-    def _upload(self, kind: str, image_path: str) -> str:
+    def _upload(self, kind: str, image_path: str, url: str = None) -> str:
         data = Path(image_path).read_bytes()
         name = hashlib.sha1(data).hexdigest()[:20] + (Path(image_path).suffix or ".png")
-        resp = self._call(kind, "POST", "/upload/image",
+        resp = self._call(kind, "POST", "/upload/image", url=url,
                           files={"image": (name, data, mimetypes.guess_type(name)[0] or "image/png")},
                           data={"type": "input", "subfolder": UPLOAD_SUBFOLDER, "overwrite": "true"})
         if resp.status_code >= 400:
@@ -199,10 +209,10 @@ class ComfyUIProvider(Provider):
         info = resp.json()
         return f"{info['subfolder']}/{info['name']}" if info.get("subfolder") else info["name"]
 
-    def _run(self, kind: str, spec: dict, graph: dict) -> list:
+    def _run(self, kind: str, spec: dict, graph: dict, url: str = None) -> list:
         """Queue `graph`, wait for it, and download the output node's files:
         [(filename, bytes, content_type)]."""
-        resp = self._call(kind, "POST", "/prompt", json={"prompt": graph, "client_id": uuid.uuid4().hex})
+        resp = self._call(kind, "POST", "/prompt", url=url, json={"prompt": graph, "client_id": uuid.uuid4().hex})
         if resp.status_code >= 400:
             raise RuntimeError("ComfyUI refused the workflow: " + _describe_error(resp))
         prompt_id = resp.json()["prompt_id"]
@@ -210,7 +220,7 @@ class ComfyUIProvider(Provider):
         deadline = time.monotonic() + timeout
         entry = None
         while time.monotonic() < deadline:
-            resp = self._call(kind, "GET", f"/history/{prompt_id}")
+            resp = self._call(kind, "GET", f"/history/{prompt_id}", url=url)
             entry = (resp.json() or {}).get(prompt_id) if resp.status_code < 400 else None
             if entry:
                 status = entry.get("status") or {}
@@ -227,7 +237,7 @@ class ComfyUIProvider(Provider):
             raise RuntimeError(f"ComfyUI finished, but output node {spec['output']!r} produced nothing")
         results = []
         for f in files:
-            r = self._call(kind, "GET", "/view", timeout=300, params={
+            r = self._call(kind, "GET", "/view", url=url, timeout=300, params={
                 "filename": f["filename"], "subfolder": f.get("subfolder", ""), "type": f.get("type", "output")})
             if r.status_code >= 400:
                 raise RuntimeError(f"couldn't download {f['filename']} from ComfyUI ({r.status_code})")
@@ -245,7 +255,8 @@ class ComfyUIProvider(Provider):
         spec = self._spec("image")
         template = self._template(spec)
         paths = list(image_paths or [])[:int(spec.get("max_images", 4))]
-        names = [self._upload("image", p) for p in paths]
+        url = normalize_url(options.pop("server_url", None))      # a node's own ComfyUI URL
+        names = [self._upload("image", p, url) for p in paths]
         seed = options.get("seed")
         if seed is None:
             seed = random.randint(0, 2**48)
@@ -258,7 +269,7 @@ class ComfyUIProvider(Provider):
             size = (int(options["width"]), int(options["height"]))
         graph = prepare_graph(template, spec, prompt, names, seed, size, resolution=budget)
         images = []
-        for filename, data, content_type in self._run("image", spec, graph):
+        for filename, data, content_type in self._run("image", spec, graph, url):
             local_path = self._save(filename, data, content_type)
             width = height = None
             try:
@@ -276,7 +287,8 @@ class ComfyUIProvider(Provider):
         aspect ratio and duration (seconds) go where the workflow says."""
         spec = self._spec("video")
         template = self._template(spec)
-        names = [self._upload("video", image_path)] if image_path else []
+        url = normalize_url(options.pop("server_url", None))      # a node's own ComfyUI URL
+        names = [self._upload("video", image_path, url)] if image_path else []
         seed = options.get("seed")
         if seed is None:
             seed = random.randint(0, 2**48)
@@ -293,10 +305,77 @@ class ComfyUIProvider(Provider):
                 continue                          # the workflow's own value stands
             settings[path] = _video_option(name, value)
         graph = prepare_graph(template, spec, prompt, names, int(seed), settings=settings)
-        filename, data, content_type = self._run("video", spec, graph)[0]
+        filename, data, content_type = self._run("video", spec, graph, url)[0]
         local_path = self._save(filename, data, content_type)
         return {"video": {"local_path": str(local_path), "url": storage.relative_path(local_path),
                           "content_type": content_type, "file_size": len(data)}, "seed": seed}
+
+
+def normalize_url(url):
+    """A ComfyUI address as typed on a node -> its base URL, or None if
+    blank. Pasting an endpoint (".../prompt") works too."""
+    url = (url or "").strip()
+    if not url:
+        return None
+    if not re.match(r"^https?://[^/\s]+", url):
+        raise ValueError(f"{url!r} isn't a ComfyUI address -- it should look like https://<pod id>-8188.proxy.runpod.net")
+    url = url.rstrip("/")
+    for suffix in ("/prompt", "/system_stats", "/api"):
+        if url.endswith(suffix):
+            url = url[: -len(suffix)]
+    return url
+
+
+def check_server(kind: str, url: str = None, session: requests.Session = None) -> dict:
+    """Is ComfyUI at `url` (default: that kind's) up, and does it have every
+    node and model file the kind's workflow uses? {"ok", "url", "version",
+    "gpu", "missing_nodes", "missing_models", "error"}."""
+    session = session or requests.Session()
+    url = normalize_url(url) or ComfyUIProvider().urls[kind]
+    out = {"ok": False, "url": url, "version": None, "gpu": None, "missing_nodes": [], "missing_models": [],
+           "error": None}
+    try:
+        stats = session.get(f"{url}/system_stats", timeout=15)
+        if stats.status_code >= 400:
+            out["error"] = f"no ComfyUI answering at {url} (HTTP {stats.status_code}) -- is the pod running?"
+            return out
+        info = stats.json()
+        out["version"] = (info.get("system") or {}).get("comfyui_version")
+        devices = info.get("devices") or []
+        if devices:
+            # "cuda:0 NVIDIA A100-SXM4-80GB : cudaMallocAsync" -> "NVIDIA A100-SXM4-80GB"
+            name = re.sub(r"^\w+:\d+\s+", "", devices[0].get("name", "").split(" : ")[0]).strip()
+            out["gpu"] = f"{name} ({round(devices[0].get('vram_total', 0) / 2**30)} GB)"
+        spec = ComfyUIProvider._spec(kind)
+        template = ComfyUIProvider._template(spec)
+        for class_type in sorted({n["class_type"] for n in template.values() if n.get("class_type")}):
+            r = session.get(f"{url}/object_info/{class_type}", timeout=15)
+            node_info = (r.json() or {}).get(class_type) if r.status_code < 400 else None
+            if not node_info:
+                out["missing_nodes"].append(class_type)
+                continue
+            # model files: every "*_name" input the workflow sets must be one the server lists
+            inputs = {**(node_info.get("input", {}).get("required") or {}),
+                      **(node_info.get("input", {}).get("optional") or {})}
+            for node in template.values():
+                if node.get("class_type") != class_type:
+                    continue
+                for name, value in node.get("inputs", {}).items():
+                    if not (name.endswith("_name") and isinstance(value, str) and name in inputs):
+                        continue
+                    choices = inputs[name][0] if inputs[name] else None
+                    if not isinstance(choices, list):        # newer servers: ["COMBO", {"options": [...]}]
+                        choices = (inputs[name][1] or {}).get("options") if len(inputs[name]) > 1 else None
+                    if isinstance(choices, list) and value not in choices and value not in out["missing_models"]:
+                        out["missing_models"].append(value)
+    except requests.RequestException as e:
+        out["error"] = f"couldn't reach {url} ({type(e).__name__}) -- is the pod running?"
+        return out
+    except (RuntimeError, ValueError) as e:
+        out["error"] = str(e)
+        return out
+    out["ok"] = not out["missing_nodes"] and not out["missing_models"]
+    return out
 
 
 def _video_option(name: str, value):

@@ -360,7 +360,21 @@ export interface VisualsProviders {
   available: string[];
   current: string;
   defaults: { image: string; video: string };
+  // the ComfyUI servers a node uses when it doesn't name one
+  comfyui_urls: { image: string; video: string };
   capabilities: Record<string, ProviderCapabilities>;
+}
+
+// POST /api/visuals/comfyui/check -- is that ComfyUI up, with the workflow's
+// nodes and model files?
+export interface ComfyCheck {
+  ok: boolean;
+  url?: string;
+  version?: string | null;
+  gpu?: string | null;
+  missing_nodes?: string[];
+  missing_models?: string[];
+  error?: string | null;
 }
 
 // The global style library (visuals/styles.py) -- independent of any

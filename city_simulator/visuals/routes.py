@@ -18,6 +18,8 @@ def providers_list():
         "current": config.PROVIDER,
         # what an Image / Video node uses when it doesn't pick a provider
         "defaults": {"image": providers.default_for("image"), "video": providers.default_for("video")},
+        # the ComfyUI servers a node uses when it doesn't name one
+        "comfyui_urls": {"image": config.COMFYUI_IMAGE_URL, "video": config.COMFYUI_VIDEO_URL},
         "capabilities": providers.CAPABILITIES,
     })
 
@@ -44,6 +46,37 @@ def set_provider():
         return json_response({"ok": False, "error": str(e)}, status=500)
     config.PROVIDER = name
     return json_response({"ok": True, "provider": name})
+
+
+@bp.post("/comfyui/check")
+def comfyui_check():
+    """Test a ComfyUI address from a node: is it up, and does it have the
+    kind's workflow nodes and model files? (body: {kind, url}; url blank =
+    that kind's default)"""
+    from .providers.comfyui import check_server
+    body = request.get_json(silent=True) or {}
+    kind = body.get("kind") if body.get("kind") in ("image", "video") else "image"
+    try:
+        return json_response(check_server(kind, body.get("url")))
+    except ValueError as e:
+        return json_response({"ok": False, "error": str(e)}, status=400)
+
+
+@bp.post("/comfyui/default")
+def comfyui_default():
+    """Make a node's ComfyUI address the default for its kind (saved, used
+    by every node without its own); a blank url goes back to .env's."""
+    from .providers.comfyui import normalize_url
+    body = request.get_json(silent=True) or {}
+    kind = body.get("kind")
+    if kind not in ("image", "video"):
+        return json_response({"ok": False, "error": "kind must be image or video"}, status=400)
+    try:
+        url = normalize_url(body.get("url"))
+    except ValueError as e:
+        return json_response({"ok": False, "error": str(e)}, status=400)
+    config.save_comfyui_default(kind, url)
+    return json_response({"ok": True, "comfyui_urls": {"image": config.COMFYUI_IMAGE_URL, "video": config.COMFYUI_VIDEO_URL}})
 
 
 @bp.get("/status")
@@ -116,6 +149,7 @@ def generate_image():
         "image_paths": image_paths or None,
         "options": body.get("options") or {},
         "provider": body.get("provider") or None,   # the node's pick; None = the default
+        "comfyui_url": body.get("comfyui_url") or None,   # the node's own ComfyUI address
     }
     ok, error = jobs.start("image", params)
     return json_response({"ok": ok, "error": error}, status=200 if ok else 409)
@@ -129,6 +163,7 @@ def generate_video():
         "image_path": body.get("image_path"),
         "options": body.get("options") or {},
         "provider": body.get("provider") or None,   # the node's pick; None = the default
+        "comfyui_url": body.get("comfyui_url") or None,   # the node's own ComfyUI address
     }
     ok, error = jobs.start("video", params)
     return json_response({"ok": ok, "error": error}, status=200 if ok else 409)

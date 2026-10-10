@@ -16,11 +16,12 @@ export function useVideoGeneration() {
     aspectRatio: string = '16:9',
     provider?: string,
     extraOptions: Record<string, unknown> = {},
+    comfyuiUrl?: string,
   ): Promise<{ url: string; localPath: string; seed?: number } | null> {
     setError(null);
     setPending(true);
     try {
-      const start = await visuals.generateVideo({ prompt, imagePath, stylePrompt, options: { ...extraOptions, aspect_ratio: aspectRatio }, provider });
+      const start = await visuals.generateVideo({ prompt, imagePath, stylePrompt, options: { ...extraOptions, aspect_ratio: aspectRatio }, provider, comfyuiUrl });
       if (!start.ok) {
         setError(start.error ?? 'failed to start');
         return null;

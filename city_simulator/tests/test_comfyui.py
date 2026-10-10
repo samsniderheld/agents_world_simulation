@@ -108,6 +108,44 @@ class ProviderChoice(unittest.TestCase):
         self.assertIsInstance(providers.provider_for("video", "comfyui"), comfyui.ComfyUIProvider)
 
 
+class Urls(unittest.TestCase):
+    def test_normalize(self):
+        n = comfyui.normalize_url
+        self.assertIsNone(n(""))
+        self.assertIsNone(n(None))
+        self.assertEqual(n(" https://abc-8188.proxy.runpod.net/ "), "https://abc-8188.proxy.runpod.net")
+        self.assertEqual(n("https://abc-8188.proxy.runpod.net/prompt"), "https://abc-8188.proxy.runpod.net")
+        with self.assertRaises(ValueError):
+            n("abc-8188.proxy.runpod.net")
+
+    def test_make_default_and_back(self):
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.object(config, "COMFYUI_DEFAULTS_FILE", Path(tmp) / "servers.json"), \
+                mock.patch.object(config, "COMFYUI_VIDEO_URL", config.COMFYUI_VIDEO_URL):
+            env_video = config._ENV_COMFYUI["video"]
+            config.save_comfyui_default("video", "https://new-video-8188.proxy.runpod.net")
+            self.assertEqual(comfyui.ComfyUIProvider().urls["video"], "https://new-video-8188.proxy.runpod.net")
+            self.assertEqual(json.loads((Path(tmp) / "servers.json").read_text()),
+                             {"video": "https://new-video-8188.proxy.runpod.net"})
+            config.save_comfyui_default("video", None)
+            self.assertEqual(config.COMFYUI_VIDEO_URL, env_video)
+
+    def test_job_passes_the_url_only_to_comfyui(self):
+        from visuals import jobs, providers
+        seen = {}
+
+        class Recorder:
+            def generate_image(self, prompt, image_paths=None, **options):
+                seen.update(options)
+                return {"images": []}
+        with mock.patch.object(providers, "provider_for", return_value=Recorder()):
+            jobs._worker("image", {"prompt": "x", "provider": "comfyui", "comfyui_url": "https://a-8188.proxy.runpod.net"})
+            self.assertEqual(seen.get("server_url"), "https://a-8188.proxy.runpod.net")
+            seen.clear()
+            jobs._worker("image", {"prompt": "x", "provider": "fal", "comfyui_url": "https://a-8188.proxy.runpod.net"})
+            self.assertNotIn("server_url", seen)
+
+
 class CanvasSize(unittest.TestCase):
     def test_aspect_and_budget(self):
         self.assertEqual(comfyui.canvas_size("16:9", 1024), (1376, 768))
@@ -146,6 +184,20 @@ class FakeComfy(BaseHTTPRequestHandler):
         self._json(404, {})
 
     def do_GET(self):
+        if self.path == "/system_stats":
+            return self._json(200, {"system": {"comfyui_version": "0.39.2"},
+                                    "devices": [{"name": "cuda:0 NVIDIA A100-SXM4-80GB : cudaMallocAsync",
+                                                 "vram_total": 80 * 2**30}]})
+        if self.path.startswith("/object_info/"):
+            class_type = self.path.rsplit("/", 1)[1]
+            if FakeComfy.fail == "missing" and class_type == "QwenImage21Cache":
+                return self._json(200, {})
+            spec = {"input": {"required": {}}}
+            if class_type == "UNETLoader":            # the server's model list
+                models = ["something_else.safetensors"] if FakeComfy.fail == "missing" \
+                    else ["qwen_image_2.1_int8_convrot.safetensors"]
+                spec["input"]["required"]["unet_name"] = [models]
+            return self._json(200, {class_type: spec})
         if self.path.startswith("/history/p1"):
             if FakeComfy.fail == "execution":
                 return self._json(200, {"p1": {"status": {"status_str": "error", "completed": False, "messages": [
@@ -277,6 +329,26 @@ class AgainstAStandInServer(unittest.TestCase):
     def test_separate_servers(self):
         p = comfyui.ComfyUIProvider(base_url="http://image-pod", video_url="http://video-pod")
         self.assertEqual(p.urls, {"image": "http://image-pod", "video": "http://video-pod"})
+
+    def test_a_nodes_own_url_wins(self):
+        here = f"http://127.0.0.1:{self.server.server_port}"
+        elsewhere = comfyui.ComfyUIProvider(base_url="http://127.0.0.1:9")     # default: nothing there
+        out = elsewhere.generate_image("x", server_url=here + "/prompt")       # pasted endpoint works too
+        self.assertTrue(out["images"])
+
+    def test_check_server(self):
+        here = f"http://127.0.0.1:{self.server.server_port}"
+        ok = comfyui.check_server("image", here)
+        self.assertTrue(ok["ok"], ok)
+        self.assertEqual((ok["version"], ok["gpu"]), ("0.39.2", "NVIDIA A100-SXM4-80GB (80 GB)"))
+        FakeComfy.fail = "missing"
+        bad = comfyui.check_server("image", here)
+        self.assertFalse(bad["ok"])
+        self.assertEqual(bad["missing_nodes"], ["QwenImage21Cache"])
+        self.assertEqual(bad["missing_models"], ["qwen_image_2.1_int8_convrot.safetensors"])
+        down = comfyui.check_server("image", "http://127.0.0.1:9")
+        self.assertFalse(down["ok"])
+        self.assertIn("couldn't reach", down["error"])
 
     def test_unreachable_server(self):
         with self.assertRaises(RuntimeError) as ctx:

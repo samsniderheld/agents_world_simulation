@@ -18,13 +18,18 @@ def _worker(kind: str, params: dict):
     global _result
     try:
         provider = providers.provider_for(kind, params.get("provider"))
+        options = dict(params.get("options", {}))
+        # A node's own ComfyUI address -- only for a job that runs on ComfyUI
+        # (fal would reject an option it doesn't know).
+        if params.get("comfyui_url") and (params.get("provider") or providers.default_for(kind)) == "comfyui":
+            options["server_url"] = params["comfyui_url"]
         if kind == "image":
             result = provider.generate_image(
-                params["prompt"], image_paths=params.get("image_paths"), **params.get("options", {}),
+                params["prompt"], image_paths=params.get("image_paths"), **options,
             )
         elif kind == "video":
             result = provider.generate_video(
-                params["prompt"], params["image_path"], **params.get("options", {}),
+                params["prompt"], params["image_path"], **options,
             )
         elif kind == "video_reference":
             result = provider.generate_video_from_reference(

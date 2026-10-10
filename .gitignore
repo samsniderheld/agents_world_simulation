@@ -23,3 +23,6 @@ city_simulator/visuals/data/styles.json
 # The persisted active city -- generated state, not source (history.json/
 # locations.json/agents/*/agent.json plus each entity's own media/ dir)
 city_simulator/citystate/data/
+
+# visuals/: ComfyUI servers set as defaults from a node (per machine, not source)
+city_simulator/visuals/data/comfyui_servers.json

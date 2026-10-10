@@ -196,6 +196,7 @@ export function toPipelineRenderNode(gn: GraphNode, cb: PipelineCallbacks, owner
         aspectRatio: gn.data.aspectRatio as string | undefined,
         resolution: gn.data.resolution as string | undefined,
         provider: gn.data.provider as string | undefined,
+        comfyuiUrl: gn.data.comfyuiUrl as string | undefined,
         url: gn.data.url as string | undefined,
         localPath: gn.data.localPath as string | undefined,
         mediaId: gn.data.mediaId as string | undefined,
@@ -219,6 +220,7 @@ export function toPipelineRenderNode(gn: GraphNode, cb: PipelineCallbacks, owner
         prompt: (gn.data.prompt as string) ?? '',
         aspectRatio: gn.data.aspectRatio as string | undefined,
         provider: gn.data.provider as string | undefined,
+        comfyuiUrl: gn.data.comfyuiUrl as string | undefined,
         options: gn.data.options as Record<string, unknown> | undefined,
         lastSeed: gn.data.lastSeed as number | undefined,
         url: gn.data.url as string | undefined,
@@ -356,6 +358,7 @@ export function pipelineToGraphNode(n: Node): GraphNode | null {
         aspectRatio: d.aspectRatio,
         resolution: d.resolution,
         provider: d.provider,
+        comfyuiUrl: d.comfyuiUrl,
         url: d.url,
         localPath: d.localPath,
         mediaId: d.mediaId,
@@ -365,7 +368,7 @@ export function pipelineToGraphNode(n: Node): GraphNode | null {
   }
   if (n.type === 'video') {
     const d = n.data as VideoNodeData;
-    return { id: n.id, type: 'video', position: n.position, width: n.width, height: n.height, data: { prompt: d.prompt, aspectRatio: d.aspectRatio, provider: d.provider, options: d.options, lastSeed: d.lastSeed, url: d.url, localPath: d.localPath } };
+    return { id: n.id, type: 'video', position: n.position, width: n.width, height: n.height, data: { prompt: d.prompt, aspectRatio: d.aspectRatio, provider: d.provider, comfyuiUrl: d.comfyuiUrl, options: d.options, lastSeed: d.lastSeed, url: d.url, localPath: d.localPath } };
   }
   if (n.type === 'style') {
     const d = n.data as StyleNodeData;

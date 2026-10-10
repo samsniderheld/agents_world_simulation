@@ -27,6 +27,7 @@ import type {
   BackgroundResident,
   Person,
   VisualsProviders,
+  ComfyCheck,
 } from './types';
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -302,6 +303,17 @@ export const visuals = {
 
   providers: () => request<VisualsProviders>('/api/visuals/providers'),
 
+  // Test a ComfyUI address (blank = that kind's default).
+  comfyuiCheck: (kind: 'image' | 'video', url?: string) =>
+    request<ComfyCheck>('/api/visuals/comfyui/check', { method: 'POST', body: json({ kind, url: url || undefined }) }),
+
+  // Make an address the default ComfyUI server for a kind (blank: back to .env's).
+  comfyuiSetDefault: (kind: 'image' | 'video', url?: string) =>
+    request<{ ok: boolean; error?: string; comfyui_urls?: { image: string; video: string } }>('/api/visuals/comfyui/default', {
+      method: 'POST',
+      body: json({ kind, url: url || undefined }),
+    }),
+
   setProvider: (provider: string) =>
     request<{ ok: boolean; provider?: string; error?: string }>('/api/visuals/provider', {
       method: 'POST',
@@ -329,6 +341,8 @@ export const visuals = {
     options?: Record<string, unknown>;
     // "fal" | "comfyui" | "local"; omitted = the server's default for images
     provider?: string;
+    // ComfyUI only: this node's own server; omitted = the default
+    comfyuiUrl?: string;
   }) =>
     request<{ ok: boolean; error: string | null }>('/api/visuals/generate-image', {
       method: 'POST',
@@ -339,16 +353,17 @@ export const visuals = {
         style_reference_images: params.styleReferenceImages,
         options: params.options ?? {},
         provider: params.provider || undefined,
+        comfyui_url: params.comfyuiUrl || undefined,
       }),
     }),
 
   // generate-video always needs a source image today -- there's no
   // text-to-video path in providers/base.py, so imagePath is required
   // here rather than optional.
-  generateVideo: (params: { prompt: string; imagePath: string; stylePrompt?: string; options?: Record<string, unknown>; provider?: string }) =>
+  generateVideo: (params: { prompt: string; imagePath: string; stylePrompt?: string; options?: Record<string, unknown>; provider?: string; comfyuiUrl?: string }) =>
     request<{ ok: boolean; error: string | null }>('/api/visuals/generate-video', {
       method: 'POST',
-      body: json({ prompt: params.prompt, image_path: params.imagePath, style_prompt: params.stylePrompt, options: params.options ?? {}, provider: params.provider || undefined }),
+      body: json({ prompt: params.prompt, image_path: params.imagePath, style_prompt: params.stylePrompt, options: params.options ?? {}, provider: params.provider || undefined, comfyui_url: params.comfyuiUrl || undefined }),
     }),
 
   generateVideoFromReference: (params: {

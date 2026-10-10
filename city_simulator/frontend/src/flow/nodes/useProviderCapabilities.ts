@@ -7,18 +7,33 @@ import { visuals } from '../../api/client';
 import type { ProviderCapabilities, VisualsProviders } from '../../api/types';
 
 let cached: Promise<VisualsProviders | null> | null = null;
+const listeners = new Set<(info: VisualsProviders | null) => void>();
+
+function load() {
+  cached ??= visuals.providers().catch(() => {
+    cached = null;
+    return null;
+  });
+  return cached;
+}
+
+// Re-fetch (e.g. after a node made its ComfyUI address the default) and
+// update every node showing it.
+export function refreshVisualsProviders() {
+  cached = null;
+  load().then((info) => listeners.forEach((fn) => fn(info)));
+}
 
 export function useVisualsProviders(): VisualsProviders | null {
   const [info, setInfo] = useState<VisualsProviders | null>(null);
   useEffect(() => {
     let cancelled = false;
-    cached ??= visuals.providers().catch(() => {
-      cached = null;
-      return null;
-    });
-    cached.then((res) => !cancelled && setInfo(res));
+    const listener = (next: VisualsProviders | null) => !cancelled && setInfo(next);
+    listeners.add(listener);
+    load().then(listener);
     return () => {
       cancelled = true;
+      listeners.delete(listener);
     };
   }, []);
   return info;

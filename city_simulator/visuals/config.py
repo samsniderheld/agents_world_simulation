@@ -55,6 +55,45 @@ COMFYUI_URL = os.environ.get("COMFYUI_URL", "http://127.0.0.1:8188").rstrip("/")
 # Image and video can run on separate ComfyUI servers (pods); each defaults to COMFYUI_URL.
 COMFYUI_IMAGE_URL = (os.environ.get("COMFYUI_IMAGE_URL") or COMFYUI_URL).rstrip("/")
 COMFYUI_VIDEO_URL = (os.environ.get("COMFYUI_VIDEO_URL") or COMFYUI_URL).rstrip("/")
+# A default set from a node ("make default") is saved here and wins over .env
+# (see save_comfyui_default below); .env stays the fallback.
+COMFYUI_DEFAULTS_FILE = _PACKAGE_DIR / "data" / "comfyui_servers.json"
+
+
+def _load_comfyui_defaults():
+    global COMFYUI_IMAGE_URL, COMFYUI_VIDEO_URL
+    try:
+        import json
+        saved = json.loads(COMFYUI_DEFAULTS_FILE.read_text())
+    except (OSError, ValueError):
+        return
+    COMFYUI_IMAGE_URL = (saved.get("image") or COMFYUI_IMAGE_URL).rstrip("/")
+    COMFYUI_VIDEO_URL = (saved.get("video") or COMFYUI_VIDEO_URL).rstrip("/")
+
+
+_ENV_COMFYUI = {"image": COMFYUI_IMAGE_URL, "video": COMFYUI_VIDEO_URL}
+_load_comfyui_defaults()
+
+
+def save_comfyui_default(kind: str, url: str = None):
+    """Make `url` the ComfyUI server for `kind` ("image" | "video") from now
+    on, saved for the next start too; None/"" goes back to .env's."""
+    global COMFYUI_IMAGE_URL, COMFYUI_VIDEO_URL
+    import json
+    try:
+        saved = json.loads(COMFYUI_DEFAULTS_FILE.read_text())
+    except (OSError, ValueError):
+        saved = {}
+    if url:
+        saved[kind] = url
+    else:
+        saved.pop(kind, None)
+    COMFYUI_DEFAULTS_FILE.write_text(json.dumps(saved, indent=2) + "\n")
+    value = (url or _ENV_COMFYUI[kind]).rstrip("/")
+    if kind == "image":
+        COMFYUI_IMAGE_URL = value
+    else:
+        COMFYUI_VIDEO_URL = value
 COMFYUI = _RAW.get("comfyui") or {}
 COMFYUI_DIR = _PACKAGE_DIR / "data"
 
