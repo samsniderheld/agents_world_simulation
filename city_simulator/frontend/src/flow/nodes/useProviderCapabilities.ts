@@ -1,29 +1,32 @@
-// Lets a node grey out a control it can't honor instead of failing at
-// generate time (per the design spec). Fetched fresh per node rather
-// than shared/cached -- this is a small, rarely-changing GET, and every
-// node needing it (currently just StyleNode's reference-image upload) is
-// cheap to have ask independently.
+// Which visuals providers exist, what each can do, and each kind's default
+// (GET /api/visuals/providers) -- for the Image/Video nodes' provider
+// pickers and for greying out controls a provider can't honor. Fetched once
+// per page load and shared; it only changes when the server restarts.
 import { useEffect, useState } from 'react';
 import { visuals } from '../../api/client';
-import type { ProviderCapabilities } from '../../api/types';
+import type { ProviderCapabilities, VisualsProviders } from '../../api/types';
 
-export function useProviderCapabilities(): ProviderCapabilities | null {
-  const [capabilities, setCapabilities] = useState<ProviderCapabilities | null>(null);
+let cached: Promise<VisualsProviders | null> | null = null;
 
+export function useVisualsProviders(): VisualsProviders | null {
+  const [info, setInfo] = useState<VisualsProviders | null>(null);
   useEffect(() => {
     let cancelled = false;
-    visuals
-      .providers()
-      .then((res) => {
-        if (!cancelled) setCapabilities(res.capabilities[res.current] ?? null);
-      })
-      .catch(() => {
-        if (!cancelled) setCapabilities(null);
-      });
+    cached ??= visuals.providers().catch(() => {
+      cached = null;
+      return null;
+    });
+    cached.then((res) => !cancelled && setInfo(res));
     return () => {
       cancelled = true;
     };
   }, []);
+  return info;
+}
 
-  return capabilities;
+// What `provider` (or, when blank, the default for `kind`) can do.
+export function useProviderCapabilities(kind: 'image' | 'video' = 'image', provider?: string): ProviderCapabilities | null {
+  const info = useVisualsProviders();
+  if (!info) return null;
+  return info.capabilities[provider || info.defaults[kind]] ?? null;
 }

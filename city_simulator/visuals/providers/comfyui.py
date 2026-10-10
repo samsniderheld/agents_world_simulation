@@ -1,17 +1,19 @@
-"""Image generation on a ComfyUI server (COMFYUI_URL) -- e.g. a RunPod pod
-set up with deploy/runpod-comfyui/ -- by running an API-format workflow
-(ComfyUI's "Export (API)") filled in for each call. config.yaml's `comfyui`
-section says which workflow and where its prompt, seed, size and output are.
+"""Images and video on ComfyUI servers -- images on COMFYUI_IMAGE_URL, video
+on COMFYUI_VIDEO_URL (both default to COMFYUI_URL), e.g. RunPod pods set up
+with deploy/runpod-comfyui/ -- by running an API-format workflow (ComfyUI's
+"Export (API)") filled in for each call. config.yaml's `comfyui` section
+says which workflow each kind runs and where its prompt, seed, size, aspect
+ratio, duration and output are.
 
 A call:
 1. uploads each input image (POST /upload/image), named by a hash of its
-   bytes so the same portrait is stored once;
+   bytes so the same picture is stored once;
 2. builds the graph (prepare_graph): one LoadImage per image, wired into
-   every numbered image input of the workflow (grown or shrunk to fit), the
-   prompt, a fresh seed and the latent size set, nodes that don't feed the
-   output dropped;
+   every image input of the workflow (numbered ones grown or shrunk to fit),
+   the prompt, a fresh seed and the other settings filled in, nodes that
+   don't feed the output dropped;
 3. queues it (POST /prompt), polls GET /history/<id> until it's done, and
-   downloads the output node's images (GET /view).
+   downloads the output node's files (GET /view).
 """
 
 import copy
@@ -60,10 +62,11 @@ def canvas_size(aspect_ratio: str, budget: int) -> tuple:
 
 
 def prepare_graph(template: dict, spec: dict, prompt: str, image_names: list, seed: int,
-                  size: tuple = None, resolution: int = None) -> dict:
+                  size: tuple = None, resolution: int = None, settings: dict = None) -> dict:
     """The workflow filled in for one call (pure: no I/O). `image_names` are
     images already uploaded to ComfyUI's input folder; `size` is the canvas
-    (width, height), `resolution` the reference images' pixel budget."""
+    (width, height), `resolution` the reference images' pixel budget, and
+    `settings` any other {"<node id>.<input>": value} to set."""
     graph = copy.deepcopy(template)
     placeholders = {nid for nid, n in graph.items() if n.get("class_type") == "LoadImage"}
     if image_names and not placeholders:
@@ -104,6 +107,8 @@ def prepare_graph(template: dict, spec: dict, prompt: str, image_names: list, se
             raise ValueError(f"comfyui workflow setting {path!r}: the workflow has no node {node!r}")
         graph[node]["inputs"][name] = value
 
+    for path, value in (spec.get("set") or {}).items():     # fixed overrides, e.g. another model file
+        put(path, value)
     for path in spec.get("prompt") or []:
         put(path, prompt)
     for path in spec.get("seed") or []:
@@ -118,6 +123,8 @@ def prepare_graph(template: dict, spec: dict, prompt: str, image_names: list, se
     else:
         for path, value in (spec.get("without_images") or {}).items():
             put(path, prompt if value == "{prompt}" else value)
+    for path, value in (settings or {}).items():
+        put(path, value)
 
     # Keep only what the output needs.
     output = spec.get("output")
@@ -137,16 +144,24 @@ def prepare_graph(template: dict, spec: dict, prompt: str, image_names: list, se
 
 
 class ComfyUIProvider(Provider):
-    def __init__(self, base_url: str = None, session: requests.Session = None):
-        self.base_url = (base_url or config.COMFYUI_URL).rstrip("/")
+    """`base_url` (tests) points both kinds at one server; `video_url`
+    overrides it for video."""
+
+    def __init__(self, base_url: str = None, session: requests.Session = None, video_url: str = None):
+        self.urls = {"image": (base_url or config.COMFYUI_IMAGE_URL).rstrip("/"),
+                     "video": (video_url or base_url or config.COMFYUI_VIDEO_URL).rstrip("/")}
         self._session = session or requests.Session()
+
+    @property
+    def base_url(self) -> str:
+        return self.urls["image"]
 
     # --- the workflow -----------------------------------------------------------------
     @staticmethod
-    def _spec() -> dict:
-        spec = config.COMFYUI.get("image_workflow")
+    def _spec(kind: str) -> dict:
+        spec = config.COMFYUI.get(f"{kind}_workflow")
         if not spec or not spec.get("file"):
-            raise RuntimeError("no ComfyUI workflow configured (visuals/data/config.yaml, comfyui.image_workflow)")
+            raise RuntimeError(f"no ComfyUI {kind} workflow configured (visuals/data/config.yaml, comfyui.{kind}_workflow)")
         return spec
 
     @staticmethod
@@ -160,17 +175,20 @@ class ComfyUIProvider(Provider):
         return graph
 
     # --- the server -------------------------------------------------------------------------
-    def _call(self, method: str, path: str, **kw):
+    def _call(self, kind: str, method: str, path: str, **kw):
+        url = self.urls[kind]
         try:
-            return self._session.request(method, f"{self.base_url}{path}", timeout=kw.pop("timeout", 60), **kw)
+            return self._session.request(method, f"{url}{path}", timeout=kw.pop("timeout", 60), **kw)
         except requests.RequestException as e:
-            raise RuntimeError(f"Could not reach ComfyUI at {self.base_url} ({type(e).__name__}). Is the pod "
-                               "running and ComfyUI started (deploy/runpod-comfyui/start.sh)? COMFYUI_URL is in .env.") from e
+            env = "COMFYUI_IMAGE_URL" if kind == "image" else "COMFYUI_VIDEO_URL"
+            raise RuntimeError(f"Could not reach the {kind} ComfyUI at {url} ({type(e).__name__}). Is the pod "
+                               f"running and ComfyUI up (deploy/runpod-comfyui/start.sh)? It's {env} (or "
+                               "COMFYUI_URL) in .env.") from e
 
-    def _upload(self, image_path: str) -> str:
+    def _upload(self, kind: str, image_path: str) -> str:
         data = Path(image_path).read_bytes()
         name = hashlib.sha1(data).hexdigest()[:20] + (Path(image_path).suffix or ".png")
-        resp = self._call("POST", "/upload/image",
+        resp = self._call(kind, "POST", "/upload/image",
                           files={"image": (name, data, mimetypes.guess_type(name)[0] or "image/png")},
                           data={"type": "input", "subfolder": UPLOAD_SUBFOLDER, "overwrite": "true"})
         if resp.status_code >= 400:
@@ -178,51 +196,53 @@ class ComfyUIProvider(Provider):
         info = resp.json()
         return f"{info['subfolder']}/{info['name']}" if info.get("subfolder") else info["name"]
 
-    def _queue(self, graph: dict) -> str:
-        resp = self._call("POST", "/prompt", json={"prompt": graph, "client_id": uuid.uuid4().hex})
+    def _run(self, kind: str, spec: dict, graph: dict) -> list:
+        """Queue `graph`, wait for it, and download the output node's files:
+        [(filename, bytes, content_type)]."""
+        resp = self._call(kind, "POST", "/prompt", json={"prompt": graph, "client_id": uuid.uuid4().hex})
         if resp.status_code >= 400:
             raise RuntimeError("ComfyUI refused the workflow: " + _describe_error(resp))
-        return resp.json()["prompt_id"]
-
-    def _wait(self, prompt_id: str) -> dict:
-        timeout = float(config.COMFYUI.get("timeout_seconds", 900))
+        prompt_id = resp.json()["prompt_id"]
+        timeout = float(spec.get("timeout_seconds") or config.COMFYUI.get("timeout_seconds", 900))
         deadline = time.monotonic() + timeout
+        entry = None
         while time.monotonic() < deadline:
-            resp = self._call("GET", f"/history/{prompt_id}")
+            resp = self._call(kind, "GET", f"/history/{prompt_id}")
             entry = (resp.json() or {}).get(prompt_id) if resp.status_code < 400 else None
             if entry:
                 status = entry.get("status") or {}
                 if status.get("status_str") == "error":
                     raise RuntimeError("ComfyUI failed running the workflow: " + _execution_error(status))
                 if status.get("completed", True):
-                    return entry
+                    break
+            entry = None
             time.sleep(float(config.COMFYUI.get("poll_interval_seconds", 1)))
-        raise TimeoutError(f"ComfyUI job {prompt_id} didn't finish within {timeout:.0f}s")
+        if entry is None:
+            raise TimeoutError(f"ComfyUI job {prompt_id} didn't finish within {timeout:.0f}s")
+        files = _output_files((entry.get("outputs") or {}).get(spec["output"], {}))
+        if not files:
+            raise RuntimeError(f"ComfyUI finished, but output node {spec['output']!r} produced nothing")
+        results = []
+        for f in files:
+            r = self._call(kind, "GET", "/view", timeout=300, params={
+                "filename": f["filename"], "subfolder": f.get("subfolder", ""), "type": f.get("type", "output")})
+            if r.status_code >= 400:
+                raise RuntimeError(f"couldn't download {f['filename']} from ComfyUI ({r.status_code})")
+            content_type = r.headers.get("Content-Type", "").split(";")[0].strip() \
+                or mimetypes.guess_type(f["filename"])[0] or "application/octet-stream"
+            results.append((f["filename"], r.content, content_type))
+        return results
 
-    def _download(self, image: dict) -> dict:
-        resp = self._call("GET", "/view", timeout=120, params={
-            "filename": image["filename"], "subfolder": image.get("subfolder", ""), "type": image.get("type", "output")})
-        if resp.status_code >= 400:
-            raise RuntimeError(f"couldn't download {image['filename']} from ComfyUI ({resp.status_code})")
-        content_type = resp.headers.get("Content-Type", "").split(";")[0].strip() or "image/png"
-        local_path = storage.save_bytes(resp.content, config.OUTPUTS_DIR, content_type=content_type,
-                                        fallback_name=image["filename"])
-        width = height = None
-        try:
-            from PIL import Image
-            with Image.open(local_path) as im:
-                width, height = im.size
-        except Exception:
-            pass
-        return {"local_path": str(local_path), "url": storage.relative_path(local_path),
-                "width": width, "height": height, "content_type": content_type}
+    @staticmethod
+    def _save(filename: str, data: bytes, content_type: str):
+        return storage.save_bytes(data, config.OUTPUTS_DIR, content_type=content_type, fallback_name=filename)
 
     # --- the Provider interface ---------------------------------------------------------------
     def generate_image(self, prompt: str, image_paths: list = None, **options) -> dict:
-        spec = self._spec()
+        spec = self._spec("image")
         template = self._template(spec)
         paths = list(image_paths or [])[:int(spec.get("max_images", 4))]
-        names = [self._upload(p) for p in paths]
+        names = [self._upload("image", p) for p in paths]
         seed = options.get("seed")
         if seed is None:
             seed = random.randint(0, 2**48)
@@ -234,11 +254,49 @@ class ComfyUIProvider(Provider):
         if options.get("width") and options.get("height"):
             size = (int(options["width"]), int(options["height"]))
         graph = prepare_graph(template, spec, prompt, names, seed, size, resolution=budget)
-        entry = self._wait(self._queue(graph))
-        produced = (entry.get("outputs") or {}).get(spec["output"], {}).get("images", [])
-        if not produced:
-            raise RuntimeError(f"ComfyUI finished, but output node {spec['output']!r} produced no images")
-        return {"images": [self._download(im) for im in produced], "description": "", "seed": seed}
+        images = []
+        for filename, data, content_type in self._run("image", spec, graph):
+            local_path = self._save(filename, data, content_type)
+            width = height = None
+            try:
+                from PIL import Image
+                with Image.open(local_path) as im:
+                    width, height = im.size
+            except Exception:
+                pass
+            images.append({"local_path": str(local_path), "url": storage.relative_path(local_path),
+                           "width": width, "height": height, "content_type": content_type})
+        return {"images": images, "description": "", "seed": seed}
+
+    def generate_video(self, prompt: str, image_path: str, **options) -> dict:
+        """Animate `image_path` (the workflow's first frame). The Video node's
+        aspect ratio and duration (seconds) go where the workflow says."""
+        spec = self._spec("video")
+        template = self._template(spec)
+        names = [self._upload("video", image_path)] if image_path else []
+        seed = options.get("seed")
+        if seed is None:
+            seed = random.randint(0, 2**48)
+        settings = {}
+        aspect = (spec.get("aspect_ratios") or {}).get(options.get("aspect_ratio") or "")
+        if spec.get("aspect_ratio") and aspect:
+            settings[spec["aspect_ratio"]] = aspect
+        if spec.get("duration"):
+            settings[spec["duration"]] = float(options.get("duration") or spec.get("default_duration") or 5)
+        graph = prepare_graph(template, spec, prompt, names, seed, settings=settings)
+        filename, data, content_type = self._run("video", spec, graph)[0]
+        local_path = self._save(filename, data, content_type)
+        return {"video": {"local_path": str(local_path), "url": storage.relative_path(local_path),
+                          "content_type": content_type, "file_size": len(data)}, "seed": seed}
+
+
+def _output_files(output: dict) -> list:
+    """The files an output node reported. ComfyUI lists them under "images"
+    (Save Image, and Save Video too), or "videos"/"gifs"/"audio" for others."""
+    files = []
+    for key in ("images", "videos", "gifs", "audio"):
+        files += [f for f in output.get(key) or [] if isinstance(f, dict) and f.get("filename")]
+    return files
 
 
 def _describe_error(resp) -> str:

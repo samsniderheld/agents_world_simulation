@@ -22,7 +22,13 @@ load_dotenv(_PROJECT_ROOT / ".env")
 with open(_YAML_PATH) as _f:
     _RAW = yaml.safe_load(_f)
 
+# The default provider for images and for video (an Image/Video node can
+# pick another per node): VISUALS_IMAGE_PROVIDER / VISUALS_VIDEO_PROVIDER, else
+# config.yaml's image_provider / video_provider, else VISUALS_PROVIDER /
+# provider for both. Music always uses fal.
 PROVIDER = os.environ.get("VISUALS_PROVIDER") or _RAW["provider"]
+IMAGE_PROVIDER = os.environ.get("VISUALS_IMAGE_PROVIDER") or _RAW.get("image_provider") or PROVIDER
+VIDEO_PROVIDER = os.environ.get("VISUALS_VIDEO_PROVIDER") or _RAW.get("video_provider") or PROVIDER
 
 FAL_API_KEY = os.environ.get("FAL_KEY")
 FAL_TEXT_TO_IMAGE_MODEL = _RAW["fal"]["text_to_image_model"]
@@ -46,6 +52,9 @@ LOCAL_QUANTIZE_DTYPE = _RAW["local"]["quantize_dtype"]
 # The ComfyUI provider (providers/comfyui.py): where ComfyUI is, and the
 # workflow it runs (config.yaml's comfyui section; files under data/).
 COMFYUI_URL = os.environ.get("COMFYUI_URL", "http://127.0.0.1:8188").rstrip("/")
+# Image and video can run on separate ComfyUI servers (pods); each defaults to COMFYUI_URL.
+COMFYUI_IMAGE_URL = (os.environ.get("COMFYUI_IMAGE_URL") or COMFYUI_URL).rstrip("/")
+COMFYUI_VIDEO_URL = (os.environ.get("COMFYUI_VIDEO_URL") or COMFYUI_URL).rstrip("/")
 COMFYUI = _RAW.get("comfyui") or {}
 COMFYUI_DIR = _PACKAGE_DIR / "data"
 

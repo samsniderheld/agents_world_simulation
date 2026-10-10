@@ -354,6 +354,15 @@ export interface ProviderCapabilities {
   supports_music: boolean;
 }
 
+// GET /api/visuals/providers: which providers exist, what each can do, and
+// which one an Image / Video node uses when it doesn't pick one.
+export interface VisualsProviders {
+  available: string[];
+  current: string;
+  defaults: { image: string; video: string };
+  capabilities: Record<string, ProviderCapabilities>;
+}
+
 // The global style library (visuals/styles.py) -- independent of any
 // city, reusable across canvases. Just a text prompt plus reference
 // images; the current fal/Gemini provider has no negative-prompt or

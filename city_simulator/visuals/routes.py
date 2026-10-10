@@ -16,6 +16,8 @@ def providers_list():
     return json_response({
         "available": providers.AVAILABLE_PROVIDERS,
         "current": config.PROVIDER,
+        # what an Image / Video node uses when it doesn't pick a provider
+        "defaults": {"image": providers.default_for("image"), "video": providers.default_for("video")},
         "capabilities": providers.CAPABILITIES,
     })
 
@@ -113,6 +115,7 @@ def generate_image():
         "prompt": _style_prompt(body),
         "image_paths": image_paths or None,
         "options": body.get("options") or {},
+        "provider": body.get("provider") or None,   # the node's pick; None = the default
     }
     ok, error = jobs.start("image", params)
     return json_response({"ok": ok, "error": error}, status=200 if ok else 409)
@@ -125,6 +128,7 @@ def generate_video():
         "prompt": _style_prompt(body),
         "image_path": body.get("image_path"),
         "options": body.get("options") or {},
+        "provider": body.get("provider") or None,   # the node's pick; None = the default
     }
     ok, error = jobs.start("video", params)
     return json_response({"ok": ok, "error": error}, status=200 if ok else 409)

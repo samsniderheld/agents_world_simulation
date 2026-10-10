@@ -6,7 +6,8 @@ import { useLightboxStore } from '../../state/lightboxStore';
 import { AspectSelect, type AspectRatio, ResolutionSelect, type Resolution } from './AspectSelect';
 import { NodeShell } from './NodeShell';
 import { Port } from './Port';
-import { useProviderCapabilities } from './useProviderCapabilities';
+import { ProviderSelect } from './ProviderSelect';
+import { useProviderCapabilities, useVisualsProviders } from './useProviderCapabilities';
 
 export interface FrameNodeData extends Record<string, unknown> {
   // Set on storyboard shots (Treatment's "create storyboard"): the header
@@ -19,6 +20,9 @@ export interface FrameNodeData extends Record<string, unknown> {
   // Sent with both generate and edit (see AspectSelect).
   aspectRatio?: AspectRatio;
   resolution?: Resolution;
+  // Which service generates it ("fal" | "comfyui" | "local"); blank = the
+  // server's default for images.
+  provider?: string;
   // Where the result lives. Either on this node (url/localPath, a file in
   // visuals/data/outputs) or, when saved to an agent's/place's media,
   // that media record (mediaId, in attachTo's media).
@@ -60,6 +64,7 @@ export interface FrameNodeData extends Record<string, unknown> {
       editPrompt?: string;
       aspectRatio?: AspectRatio;
       resolution?: Resolution;
+      provider?: string;
       url?: string;
       localPath?: string;
       mediaId?: string;
@@ -87,7 +92,8 @@ export function FrameNode({ id, data, selected }: NodeProps<FrameNodeType>) {
   const openLightbox = useLightboxStore((s) => s.open);
   // The local provider is text-to-image only -- it can't take an input
   // image, so editing is greyed out rather than failing at submit time.
-  const capabilities = useProviderCapabilities();
+  const providers = useVisualsProviders();
+  const capabilities = useProviderCapabilities('image', data.provider);
   const canEdit = capabilities?.supports_reference_images !== false;
   const aspect = data.aspectRatio ?? '16:9';
   const resolution = data.resolution ?? '1K';
@@ -101,7 +107,7 @@ export function FrameNode({ id, data, selected }: NodeProps<FrameNodeType>) {
     setError(null);
     setPending(kind);
     try {
-      const start = await visuals.generateImage({ ...params, options: { aspect_ratio: aspect, resolution } });
+      const start = await visuals.generateImage({ ...params, options: { aspect_ratio: aspect, resolution }, provider: data.provider });
       if (!start.ok) {
         setError(start.error ?? 'failed to start');
         return;
@@ -196,6 +202,7 @@ export function FrameNode({ id, data, selected }: NodeProps<FrameNodeType>) {
       <div className="node-controls">
         <AspectSelect value={aspect} onChange={(v) => data.onUpdate(id, { aspectRatio: v })} square />
         <ResolutionSelect value={resolution} onChange={(v) => data.onUpdate(id, { resolution: v })} />
+        <ProviderSelect kind="image" value={data.provider ?? ''} info={providers} onChange={(v) => data.onUpdate(id, { provider: v || undefined })} />
         <button className="node-run-btn" disabled={pending !== null || !prompt.trim()} onClick={onGenerate}>
           {pending === 'generate' ? 'generating…' : imageUrl ? '↻ regenerate' : '▶ generate'}
         </button>

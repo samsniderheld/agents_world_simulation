@@ -60,7 +60,7 @@ def _square_image(prompt: str, style: dict = None):
     style = style or {}
     prompt = ", ".join(p for p in (prompt, (style.get("prompt") or "").strip()) if p)
     refs = [r for r in (style.get("reference_images") or []) if r] or None
-    result = visual_providers.get_provider().generate_image(prompt, refs, aspect_ratio="1:1")
+    result = visual_providers.provider_for("image").generate_image(prompt, refs, aspect_ratio="1:1")
     if not result.get("images"):
         raise RuntimeError("the image provider returned no image")
     image = result["images"][0]
@@ -164,7 +164,7 @@ def _worker(count: int, on_characters_added, character_style: dict, location_sty
         from visuals import config as visuals_config
         # Without images every step is an LLM call; the local image provider
         # (on this machine's GPU) is the only reason to go one at a time.
-        parallel = 1 if with_images and visuals_config.PROVIDER == "local" else MAX_PARALLEL
+        parallel = 1 if with_images and visuals_config.IMAGE_PROVIDER == "local" else MAX_PARALLEL
         with ThreadPoolExecutor(max_workers=parallel) as pool:
             futures = [pool.submit(_make_character, place, character_style, on_characters_added, with_images)
                        for place in targets]

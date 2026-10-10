@@ -17,24 +17,21 @@ _result = None   # last completed job's result dict, or None
 def _worker(kind: str, params: dict):
     global _result
     try:
+        provider = providers.provider_for(kind, params.get("provider"))
         if kind == "image":
-            provider = providers.get_provider()
             result = provider.generate_image(
                 params["prompt"], image_paths=params.get("image_paths"), **params.get("options", {}),
             )
         elif kind == "video":
-            provider = providers.get_provider()
             result = provider.generate_video(
                 params["prompt"], params["image_path"], **params.get("options", {}),
             )
         elif kind == "video_reference":
-            provider = providers.get_provider()
             result = provider.generate_video_from_reference(
                 params["prompt"], video_path=params.get("video_path"),
                 image_paths=params.get("image_paths"), **params.get("options", {}),
             )
         elif kind == "music":
-            provider = providers.get_provider()
             result = provider.generate_music(params["prompt"], **params.get("options", {}))
         else:
             raise ValueError(f"unknown visuals job kind: {kind!r}")

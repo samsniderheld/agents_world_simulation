@@ -16,6 +16,8 @@ from visuals.providers import comfyui
 
 SPEC = config.COMFYUI["image_workflow"]
 TEMPLATE = json.loads((Path(config.COMFYUI_DIR) / SPEC["file"]).read_text())
+VSPEC = config.COMFYUI["video_workflow"]
+VTEMPLATE = json.loads((Path(config.COMFYUI_DIR) / VSPEC["file"]).read_text())
 
 
 def image_inputs(graph, node):
@@ -59,6 +61,51 @@ class PrepareGraph(unittest.TestCase):
         before = json.dumps(TEMPLATE, sort_keys=True)
         comfyui.prepare_graph(TEMPLATE, SPEC, "x", ["a.png", "b.png", "c.png"], seed=1)
         self.assertEqual(before, json.dumps(TEMPLATE, sort_keys=True))
+
+
+class VideoGraph(unittest.TestCase):
+    def test_first_frame_aspect_duration(self):
+        settings = {VSPEC["aspect_ratio"]: VSPEC["aspect_ratios"]["16:9"], VSPEC["duration"]: 8.0}
+        g = comfyui.prepare_graph(VTEMPLATE, VSPEC, "Lou walks out into the rain", ["city_simulator/frame.png"],
+                                  seed=7, settings=settings)
+        self.assertEqual(g["105:104"]["inputs"]["first_frame"], ["cs_image_1", 0])   # the source image
+        self.assertEqual(g["cs_image_1"]["inputs"]["image"], "city_simulator/frame.png")
+        self.assertEqual(g["105:104"]["inputs"]["prompt"], "Lou walks out into the rain")
+        self.assertEqual(g["105:15"]["inputs"]["noise_seed"], 7)
+        self.assertEqual(g["115"]["inputs"]["aspect_ratio"], "16:9 (Widescreen)")
+        self.assertEqual(g["105:111"]["inputs"]["value"], 8.0)
+        for gone in ("114", "119", "120"):     # the template image, and the unconnected size helpers
+            self.assertNotIn(gone, g)
+
+    def test_fixed_overrides(self):
+        spec = {**VSPEC, "set": {"105:13.clip_name": "qwen3vl_32b_minimax_h3_int8_convrot.safetensors"}}
+        g = comfyui.prepare_graph(VTEMPLATE, spec, "x", ["f.png"], seed=1)
+        self.assertEqual(g["105:13"]["inputs"]["clip_name"], "qwen3vl_32b_minimax_h3_int8_convrot.safetensors")
+
+    def test_needs_its_image(self):
+        with self.assertRaises(ValueError):
+            comfyui.prepare_graph(VTEMPLATE, VSPEC, "x", [], seed=1)
+
+
+class ProviderChoice(unittest.TestCase):
+    def test_defaults_fall_back_to_fal_for_what_comfyui_cant_do(self):
+        from visuals import providers
+        with mock.patch.object(config, "IMAGE_PROVIDER", "comfyui"), \
+                mock.patch.object(config, "VIDEO_PROVIDER", "local"), mock.patch.object(config, "PROVIDER", "comfyui"):
+            self.assertEqual(providers.default_for("image"), "comfyui")
+            self.assertEqual(providers.default_for("video"), "fal")            # local can't make video
+            self.assertEqual(providers.default_for("music"), "fal")
+            self.assertEqual(providers.default_for("video_reference"), "fal")
+
+    def test_refuses_what_a_provider_cant_do(self):
+        from visuals import providers
+        with self.assertRaises(RuntimeError):
+            providers.provider_for("music", "comfyui")
+        with self.assertRaises(RuntimeError):
+            providers.provider_for("video", "local")
+        with self.assertRaises(ValueError):
+            providers.provider_for("image", "nope")
+        self.assertIsInstance(providers.provider_for("video", "comfyui"), comfyui.ComfyUIProvider)
 
 
 class CanvasSize(unittest.TestCase):
@@ -105,7 +152,14 @@ class FakeComfy(BaseHTTPRequestHandler):
                     ["execution_error", {"node_id": "459:458", "node_type": "KSampler",
                                          "exception_message": "CUDA out of memory"}]]}}})
             return self._json(200, {"p1": {"status": {"status_str": "success", "completed": True}, "outputs": {
-                "461": {"images": [{"filename": "Qwen_image_2.1_00001_.png", "subfolder": "", "type": "output"}]}}}})
+                "461": {"images": [{"filename": "Qwen_image_2.1_00001_.png", "subfolder": "", "type": "output"}]},
+                "92": {"images": [{"filename": "MiniMax_H3_00001_.mp4", "subfolder": "video", "type": "output"}],
+                       "animated": [True]}}}})
+        if self.path.startswith("/view") and ".mp4" in self.path:
+            self.send_response(200)
+            self.send_header("Content-Type", "video/mp4")
+            self.end_headers()
+            return self.wfile.write(b"\x00\x00\x00\x18ftypmp42fake-video")
         if self.path.startswith("/view"):
             from PIL import Image
             buf = io.BytesIO()
@@ -181,10 +235,29 @@ class AgainstAStandInServer(unittest.TestCase):
             self.provider.generate_image("x")
         self.assertIn("node 459:458 (KSampler): CUDA out of memory", str(ctx.exception))
 
+    def test_video(self):
+        frame = self._images(1)[0]
+        out = self.provider.generate_video("Lou walks out into the rain", frame, aspect_ratio="9:16", duration=6)
+        graph = FakeComfy.prompts[0]
+        self.assertEqual(graph["115"]["inputs"]["aspect_ratio"], "9:16 (Portrait Widescreen)")
+        self.assertEqual(graph["105:111"]["inputs"]["value"], 6.0)
+        self.assertEqual(len(FakeComfy.uploads), 1)
+        video = out["video"]
+        self.assertEqual(video["content_type"], "video/mp4")
+        self.assertTrue(Path(video["local_path"]).exists() and video["local_path"].endswith(".mp4"))
+
+    def test_video_default_duration(self):
+        self.provider.generate_video("x", self._images(1)[0], aspect_ratio="16:9")
+        self.assertEqual(FakeComfy.prompts[0]["105:111"]["inputs"]["value"], float(VSPEC["default_duration"]))
+
+    def test_separate_servers(self):
+        p = comfyui.ComfyUIProvider(base_url="http://image-pod", video_url="http://video-pod")
+        self.assertEqual(p.urls, {"image": "http://image-pod", "video": "http://video-pod"})
+
     def test_unreachable_server(self):
         with self.assertRaises(RuntimeError) as ctx:
             comfyui.ComfyUIProvider(base_url="http://127.0.0.1:9").generate_image("x")
-        self.assertIn("Could not reach ComfyUI", str(ctx.exception))
+        self.assertIn("Could not reach the image ComfyUI", str(ctx.exception))
 
 
 if __name__ == "__main__":

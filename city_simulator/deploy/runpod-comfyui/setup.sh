@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# Get a RunPod pod's ComfyUI ready to be the app's image server: the
-# Qwen-Image 2.1 models where that ComfyUI looks for them, and a check that it
-# has every node the app's workflow uses. Idempotent -- rerun it any time
-# (models already there are skipped; an interrupted download resumes).
+# Get a RunPod pod's ComfyUI ready to be the app's image or video server: the
+# workflow's models where that ComfyUI looks for them, and a check that it has
+# every node the workflow uses. Idempotent -- rerun it any time (models
+# already there are skipped; an interrupted download resumes).
 #
-#   bash city_simulator/deploy/runpod-comfyui/setup.sh
+#   bash city_simulator/deploy/runpod-comfyui/setup.sh          # image pod (Qwen-Image 2.1, ~25 GB)
+#   bash city_simulator/deploy/runpod-comfyui/setup.sh video    # video pod (MiniMax H3, ~42 GB)
 #
 # Which ComfyUI, in order:
 #   1. COMFYUI_DIR, if set (a ComfyUI folder);
@@ -18,19 +19,38 @@
 #
 # Settings (environment variables, all optional):
 #   COMFYUI_DIR      use this ComfyUI folder
-#   COMFYUI_VERSION  for a new install: a release tag (default v0.39.0; the
+#   MINIMAX_TEXT_ENCODER  video: nvfp4 (default, the workflow's; made for Blackwell
+#                    GPUs) or int8 (27 GB; then set the workflow to use it -- see
+#                    visuals/data/config.yaml's video_workflow)
+#   COMFYUI_VERSION  for a new install: a release tag (default v0.39.2; the
 #                    Qwen-Image 2.1 nodes need v0.37.0+) or "master"
 #   WORKSPACE        default /workspace
 set -euo pipefail
 
 WS="${WORKSPACE:-/workspace}"
 API="http://localhost:8188"
-NODES="TextEncodeQwenImage21 QwenImage21Cache TextGenerate ComfySwitchNode SaveImageAdvanced BatchImagesNode PrimitiveStringMultiline PreviewAny"
-REPO="https://huggingface.co/Comfy-Org/Qwen-Image-2.1/resolve/main"
-MODELS="diffusion_models/qwen_image_2.1_int8_convrot.safetensors
+MODE="${1:-image}"
+case "$MODE" in
+  image)   # visuals/data/comfyui/qwen_image_2_1_edit.json
+    LABEL="Qwen-Image 2.1 (~25 GB)"
+    NODES="TextEncodeQwenImage21 QwenImage21Cache TextGenerate ComfySwitchNode SaveImageAdvanced BatchImagesNode PrimitiveStringMultiline PreviewAny"
+    REPO="https://huggingface.co/Comfy-Org/Qwen-Image-2.1/resolve/main"
+    MODELS="diffusion_models/qwen_image_2.1_int8_convrot.safetensors
 text_encoders/qwen3vl_8b_int8_convrot.safetensors
 text_encoders/qwen3.5_9b_qwen_image_2.1_pe_i2i.int8_convrot.safetensors
-vae/qwen_image_2.1_vae_bf16.safetensors"
+vae/qwen_image_2.1_vae_bf16.safetensors" ;;
+  video)   # visuals/data/comfyui/minimax_h3_i2v.json
+    LABEL="MiniMax H3 (~42 GB)"
+    NODES="MiniMaxH3ImageToVideo ResolutionSelector CreateVideo SaveVideo ComfyMathExpression VAEDecodeAudio PrimitiveFloat SamplerCustomAdvanced BasicGuider BasicScheduler KSamplerSelect RandomNoise"
+    REPO="https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main"
+    TE="qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors"
+    [ "${MINIMAX_TEXT_ENCODER:-nvfp4}" = "int8" ] && TE="qwen3vl_32b_minimax_h3_int8_convrot.safetensors"
+    MODELS="diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors
+text_encoders/$TE
+vae/minimax_h3_video_vae_fp16.safetensors
+vae/minimax_h3_audio_vae_fp32.safetensors" ;;
+  *) echo "usage: $0 [image|video]"; exit 2 ;;
+esac
 running() { curl -s -o /dev/null --max-time 3 "$API/system_stats"; }
 
 # --- which ComfyUI -------------------------------------------------------------------
@@ -47,7 +67,7 @@ fi
 
 if [ -z "$COMFY" ] && ! running; then
   # Nothing on the pod: install one (start it with start.sh).
-  COMFY="$WS/ComfyUI"; VENV="$WS/comfyui-venv"; VERSION="${COMFYUI_VERSION:-v0.39.0}"
+  COMFY="$WS/ComfyUI"; VENV="$WS/comfyui-venv"; VERSION="${COMFYUI_VERSION:-v0.39.2}"
   SUDO=""; [ "$(id -u)" -ne 0 ] && SUDO="sudo"
   echo "== no ComfyUI found: installing ComfyUI $VERSION at $COMFY"
   $SUDO apt-get update -y
@@ -81,7 +101,7 @@ print((own or paths)[0])"
   fi
 }
 
-echo "== Qwen-Image 2.1 models (~25 GB the first time)"
+echo "== $LABEL models"
 echo "$MODELS" | while read -r f; do
   kind="${f%%/*}"; name="${f#*/}"
   dir="$(model_dir "$kind")"; dest="$dir/$name"
@@ -104,8 +124,8 @@ for node in $NODES; do
 done
 if [ -n "$missing" ]; then
   echo "This ComfyUI is missing:$missing"
-  echo "The Qwen-Image 2.1 nodes need ComfyUI 0.37.0 or later -- update it (ComfyUI Manager -> Update ComfyUI,"
-  echo "or git pull in its folder) and restart it, then rerun this script."
+  echo "Update ComfyUI (ComfyUI Manager -> Update ComfyUI, or git pull in its folder; the Qwen-Image 2.1"
+  echo "nodes need 0.37.0+, MiniMax H3 0.39.0+), restart it, then rerun this script."
   exit 1
 fi
 running && echo "  all there ($(curl -s --max-time 5 "$API/system_stats" | python3 -c 'import json,sys; print("ComfyUI", json.load(sys.stdin)["system"].get("comfyui_version"))'))" \

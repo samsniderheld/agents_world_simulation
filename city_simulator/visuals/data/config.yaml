@@ -1,9 +1,13 @@
-# Which provider implementation backs the Visuals tab (see
-# visuals/providers/__init__.py's get_provider()): "fal", "local" (Diffusers
-# on Apple Silicon) or "comfyui" (a ComfyUI server -- see the comfyui section
-# below). VISUALS_PROVIDER in .env overrides this; routes.py/jobs.py/the
-# frontend never change.
+# Which provider makes images and video (see visuals/providers/__init__.py):
+# "fal", "local" (Diffusers on Apple Silicon, images only) or "comfyui" (a
+# ComfyUI server -- see the comfyui section below). `provider` is the default
+# for both; image_provider / video_provider set one kind. In .env,
+# VISUALS_PROVIDER / VISUALS_IMAGE_PROVIDER / VISUALS_VIDEO_PROVIDER override
+# these, and an Image or Video node can pick a different one per node.
+# Music always uses fal.
 provider: fal
+# image_provider: comfyui
+# video_provider: comfyui
 
 fal:
   text_to_image_model: "fal-ai/gemini-3-pro-image-preview"
@@ -57,10 +61,11 @@ local:
   quantize: true
   quantize_dtype: "int8"
 
-# ComfyUI (visuals/providers/comfyui.py): every image generate/edit runs an
-# API-format workflow (ComfyUI's "Export (API)") on the ComfyUI server at
-# COMFYUI_URL (.env) -- e.g. a RunPod pod set up with deploy/runpod-comfyui/.
-# Images only; video and music still go through fal.
+# ComfyUI (visuals/providers/comfyui.py): every image generate/edit and every
+# video runs an API-format workflow (ComfyUI's "Export (API)") on a ComfyUI
+# server -- images on COMFYUI_IMAGE_URL, video on COMFYUI_VIDEO_URL (.env; both
+# default to COMFYUI_URL), e.g. RunPod pods set up with deploy/runpod-comfyui/.
+# Music still goes through fal.
 #
 # Image inputs are found automatically: every LoadImage node in the workflow
 # is a placeholder, and each numbered input fed from one ("images.image_1",
@@ -79,6 +84,11 @@ local:
 #   with_images     overrides when images are sent
 #   without_images  overrides for text-to-image (no images sent); "{prompt}"
 #                   is replaced by the prompt
+#   aspect_ratio    (video) an input that gets the node's aspect ratio, named
+#                   as aspect_ratios maps it ("16:9" -> that input's value)
+#   duration        (video) an input that gets the clip length in seconds
+#                   (the node's, else default_duration)
+#   set             fixed values to set on every call (e.g. a different model file)
 comfyui:
   timeout_seconds: 900
   poll_interval_seconds: 1
@@ -107,3 +117,26 @@ comfyui:
       # ... and start from the empty latent instead of the input image
       "459:468.switch": true
 
+  video_workflow:
+    # ComfyUI's MiniMax H3 image-to-video template (video with sound; needs
+    # its four models -- `deploy/runpod-comfyui/setup.sh video` downloads them).
+    # The Video node's source image becomes the first frame.
+    file: "comfyui/minimax_h3_i2v.json"
+    max_images: 1
+    timeout_seconds: 1800
+    prompt: ["105:104.prompt"]
+    seed: ["105:15.noise_seed"]
+    output: "92"
+    aspect_ratio: "115.aspect_ratio"
+    aspect_ratios:
+      "16:9": "16:9 (Widescreen)"
+      "9:16": "9:16 (Portrait Widescreen)"
+      "1:1": "1:1 (Square)"
+    duration: "105:111.value"
+    # MiniMax H3 is trained on ~5-15 s clips (24 fps)
+    default_duration: 5
+    # The workflow's text encoder is NVFP4 (made for Blackwell GPUs). If it
+    # won't load on the video pod's GPU, use the int8 one instead -- run
+    # `MINIMAX_TEXT_ENCODER=int8 setup.sh video` on the pod and uncomment:
+    # set:
+    #   "105:13.clip_name": "qwen3vl_32b_minimax_h3_int8_convrot.safetensors"

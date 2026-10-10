@@ -15,7 +15,6 @@ import type {
   MediaItem,
   PopulationStatus,
   PopulationStyle,
-  ProviderCapabilities,
   SavedGraph,
   SavedGraphSummary,
   Style,
@@ -27,6 +26,7 @@ import type {
   ThemeSummary,
   BackgroundResident,
   Person,
+  VisualsProviders,
 } from './types';
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -300,8 +300,7 @@ export const visuals = {
   // to relocate the file into (see city.fileUrl for that other case).
   fileUrl: (url: string) => `/api/visuals/files/${url}`,
 
-  providers: () =>
-    request<{ available: string[]; current: string; capabilities: Record<string, ProviderCapabilities> }>('/api/visuals/providers'),
+  providers: () => request<VisualsProviders>('/api/visuals/providers'),
 
   setProvider: (provider: string) =>
     request<{ ok: boolean; provider?: string; error?: string }>('/api/visuals/provider', {
@@ -328,6 +327,8 @@ export const visuals = {
     stylePrompt?: string;
     styleReferenceImages?: string[];
     options?: Record<string, unknown>;
+    // "fal" | "comfyui" | "local"; omitted = the server's default for images
+    provider?: string;
   }) =>
     request<{ ok: boolean; error: string | null }>('/api/visuals/generate-image', {
       method: 'POST',
@@ -337,16 +338,17 @@ export const visuals = {
         style_prompt: params.stylePrompt,
         style_reference_images: params.styleReferenceImages,
         options: params.options ?? {},
+        provider: params.provider || undefined,
       }),
     }),
 
   // generate-video always needs a source image today -- there's no
   // text-to-video path in providers/base.py, so imagePath is required
   // here rather than optional.
-  generateVideo: (params: { prompt: string; imagePath: string; stylePrompt?: string; options?: Record<string, unknown> }) =>
+  generateVideo: (params: { prompt: string; imagePath: string; stylePrompt?: string; options?: Record<string, unknown>; provider?: string }) =>
     request<{ ok: boolean; error: string | null }>('/api/visuals/generate-video', {
       method: 'POST',
-      body: json({ prompt: params.prompt, image_path: params.imagePath, style_prompt: params.stylePrompt, options: params.options ?? {} }),
+      body: json({ prompt: params.prompt, image_path: params.imagePath, style_prompt: params.stylePrompt, options: params.options ?? {}, provider: params.provider || undefined }),
     }),
 
   generateVideoFromReference: (params: {

@@ -33,10 +33,15 @@ fi
 URL="https://${RUNPOD_POD_ID:-<pod id>}-8188.proxy.runpod.net"
 cat <<MSG
 
-In city_simulator/.env on the machine running the app:
+In city_simulator/.env on the machine running the app -- for an image pod:
 
-  VISUALS_PROVIDER=comfyui
-  COMFYUI_URL=$URL
+  VISUALS_IMAGE_PROVIDER=comfyui
+  COMFYUI_IMAGE_URL=$URL
+
+or for a video pod:
+
+  VISUALS_VIDEO_PROVIDER=comfyui
+  COMFYUI_VIDEO_URL=$URL
 
 then restart the app. Stop ComfyUI with: bash $(dirname "$0")/stop.sh
 MSG
