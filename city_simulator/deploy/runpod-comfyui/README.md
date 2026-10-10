@@ -11,6 +11,43 @@ one pod for both, if it has room):
 
 Once started they stay up -- no per-request cold start.
 
+## The quick way: pods.py, from your Mac
+
+`pods.py` creates and deletes the pods for you through RunPod's API:
+
+```bash
+python deploy/runpod-comfyui/pods.py up image     # create (or reuse) the image pod, ready to use
+python deploy/runpod-comfyui/pods.py up video
+python deploy/runpod-comfyui/pods.py status       # pods, $/hr, URLs, is ComfyUI up
+python deploy/runpod-comfyui/pods.py down all     # delete both pods (stops GPU billing)
+```
+
+It needs `RUNPOD_API_KEY` in `city_simulator/.env` (RunPod console ->
+Settings -> API Keys). GPUs, data center and sizes are in `pods.yaml`.
+
+- **Nothing is lost on `down`.** Each kind has a RunPod network volume
+  (`city-sim-comfyui-image` / `-video`) mounted at `/workspace`, holding
+  ComfyUI and its models. `down` deletes only the pod; the next `up` attaches
+  the same volume, so it's ready in minutes. Between runs you pay only the
+  volume's storage. `down image --volume` deletes the volume too (it asks
+  first; `--yes` skips that).
+- **The first `up` of a kind sets the volume up.** RunPod's ComfyUI template
+  copies ComfyUI onto the volume on first boot; `up` then runs `setup.sh` on
+  the pod over SSH (your `~/.ssh/*.pub` key is given to the pod) to download
+  the models and, if the template's ComfyUI is too old for the workflow's
+  nodes, update it and restart the pod. Expect 15-30 minutes the first time
+  (25-42 GB of models); later `up`s take a few minutes. With no SSH key, it
+  tells you the one command to run in the pod's web terminal.
+- **The app follows along.** When the pod is ready, `up` makes its URL the
+  app's default ComfyUI server for that kind -- right away if the app is
+  running, else when it next starts. No `.env` editing.
+- **Data center:** a pod has to be in its volume's data center, and new
+  volumes go to `datacenter` in `pods.yaml`. If `up` can't get any of the
+  listed GPUs there, try again later or widen the GPU list. To move a kind to
+  another data center, `down <kind> --volume`, change `datacenter`, and `up`.
+
+The rest of this page is the manual way, and what `pods.py` does under the hood.
+
 ## 1. The pod
 
 - **GPU:** image pod: 48 GB recommended (L40S, RTX 6000 Ada, A6000, A100);

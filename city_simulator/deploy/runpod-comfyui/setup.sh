@@ -22,13 +22,17 @@
 #   MINIMAX_TEXT_ENCODER  video: nvfp4 (default, the workflow's; made for Blackwell
 #                    GPUs) or int8 (27 GB; then set the workflow to use it -- see
 #                    visuals/data/config.yaml's video_workflow)
-#   COMFYUI_VERSION  for a new install: a release tag (default v0.39.2; the
-#                    Qwen-Image 2.1 nodes need v0.37.0+) or "master"
+#   COMFYUI_VERSION  for a new install or an update: a release tag (default
+#                    v0.39.2; the Qwen-Image 2.1 nodes need v0.37.0+) or "master"
+#   COMFYUI_UPDATE   1: if the existing ComfyUI is missing the workflow's nodes,
+#                    update it to COMFYUI_VERSION (then exit 3: restart ComfyUI --
+#                    e.g. restart the pod -- and rerun). pods.py sets this.
 #   WORKSPACE        default /workspace
 set -euo pipefail
 
 WS="${WORKSPACE:-/workspace}"
 API="http://localhost:8188"
+VERSION="${COMFYUI_VERSION:-v0.39.2}"
 MODE="${1:-image}"
 case "$MODE" in
   image)   # visuals/data/comfyui/qwen_image_2_1_edit.json
@@ -67,7 +71,7 @@ fi
 
 if [ -z "$COMFY" ] && ! running; then
   # Nothing on the pod: install one (start it with start.sh).
-  COMFY="$WS/ComfyUI"; VENV="$WS/comfyui-venv"; VERSION="${COMFYUI_VERSION:-v0.39.2}"
+  COMFY="$WS/ComfyUI"; VENV="$WS/comfyui-venv"
   SUDO=""; [ "$(id -u)" -ne 0 ] && SUDO="sudo"
   echo "== no ComfyUI found: installing ComfyUI $VERSION at $COMFY"
   $SUDO apt-get update -y
@@ -124,6 +128,21 @@ for node in $NODES; do
 done
 if [ -n "$missing" ]; then
   echo "This ComfyUI is missing:$missing"
+  dir="${COMFY:-${COMFYUI_DIR:-$WS/runpod-slim/ComfyUI}}"
+  if [ "${COMFYUI_UPDATE:-}" = "1" ] && [ -d "$dir/.git" ]; then
+    echo "== updating the ComfyUI in $dir to $VERSION"
+    git -C "$dir" fetch -q --tags origin
+    if [ "$VERSION" = "master" ]; then git -C "$dir" checkout -q master && git -C "$dir" pull -q
+    else git -C "$dir" checkout -q "$VERSION"; fi
+    # its own Python: the RunPod template's venv, else the one setup.sh made, else the system's
+    py=python3
+    for v in "$dir/.venv-cu128" "$dir/.venv" "$WS/comfyui-venv"; do
+      [ -x "$v/bin/python" ] && { py="$v/bin/python"; break; }
+    done
+    "$py" -m pip install -q -r "$dir/requirements.txt"
+    echo "Updated. Restart ComfyUI (restart the pod), then rerun this script to check."
+    exit 3
+  fi
   echo "Update ComfyUI (ComfyUI Manager -> Update ComfyUI, or git pull in its folder; the Qwen-Image 2.1"
   echo "nodes need 0.37.0+, MiniMax H3 0.39.0+), restart it, then rerun this script."
   exit 1

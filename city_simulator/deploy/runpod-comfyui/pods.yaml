@@ -1,0 +1,38 @@
+# Settings for pods.py: the RunPod pods (and network volumes) that run
+# ComfyUI for the app -- one for images, one for video.
+#
+# Each kind gets a network volume mounted at /workspace: ComfyUI and the
+# models live there, so deleting the pod (pods.py down) loses nothing and
+# the next `pods.py up` starts with everything in place. A pod has to be in
+# its volume's data center, so pick one with the GPUs below.
+
+# Where new network volumes are made (existing volumes keep their own).
+# RunPod data center ids: US-TX-3, US-KS-2, US-CA-2, EU-RO-1, EU-SE-1, ...
+datacenter: US-KS-2
+
+# The address ComfyUI is reachable at, from the pod id (RunPod's HTTP proxy).
+comfyui_url: "https://{pod_id}-8188.proxy.runpod.net"
+
+image:
+  # RunPod's ComfyUI template image (ComfyUI in /workspace/runpod-slim);
+  # for Blackwell GPUs (RTX 5090, B200, RTX PRO 6000) use runpod/comfyui:cuda12.8
+  image: runpod/comfyui:latest
+  # tried in this order -- the first one available in the data center wins
+  gpus:
+    - NVIDIA L40S
+    - NVIDIA RTX 6000 Ada Generation
+    - NVIDIA RTX A6000
+    - NVIDIA A100 80GB PCIe
+    - NVIDIA A100-SXM4-80GB
+  volume_gb: 60            # ComfyUI + Qwen-Image 2.1 (~25 GB) + outputs
+  container_disk_gb: 30
+
+video:
+  image: runpod/comfyui:latest
+  gpus:
+    - NVIDIA A100-SXM4-80GB
+    - NVIDIA A100 80GB PCIe
+    - NVIDIA H100 80GB HBM3
+    - NVIDIA H100 PCIe
+  volume_gb: 100           # ComfyUI + MiniMax H3 (~42 GB, ~54 GB with the int8 text encoder) + outputs
+  container_disk_gb: 30
