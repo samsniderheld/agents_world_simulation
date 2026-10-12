@@ -80,7 +80,7 @@ if wants pods; then
   fi
 fi
 
-wants app && stop "App" "python app.py"
+wants app && stop "App" "[Pp]ython app.py"
 wants vllm && stop "vLLM" "vllm serve" "VLLM::EngineCore"
 # Ollama's server, plus the model runners it spawns (they hold the GPU memory).
 wants ollama && stop "Ollama" "ollama serve" "lib/ollama/llama-server" "ollama runner"
