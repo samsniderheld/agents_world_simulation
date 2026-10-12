@@ -35,16 +35,26 @@ class PrepareGraph(unittest.TestCase):
             self.assertEqual([g[l]["inputs"]["image"] for l in loaders], names)
             # the encoder numbers from 1, the batch node from 0 -- each keeps its own scheme
             self.assertEqual(image_inputs(g, "459:474"), {f"images.image_{i + 1}": [f"cs_image_{i + 1}", 0] for i in range(n)})
-            self.assertEqual(image_inputs(g, "459:485"), {f"images.image{i}": [f"cs_image_{i + 1}", 0] for i in range(n)})
             self.assertNotIn("470", g)
             self.assertNotIn("472", g)                     # the Compare node doesn't feed the output
-            self.assertEqual(g["459:500"]["inputs"]["prompt"], "a quiet morning")
+            # the prompt enhancer is skipped: the prompt goes to the encoder as written
+            self.assertFalse([n for n in g.values() if n["class_type"] in ("TextGenerate", "BatchImagesNode")])
+            self.assertEqual(g["459:474"]["inputs"]["prompt"], "a quiet morning")
             self.assertEqual(g["459:458"]["inputs"]["seed"], 42)
-            self.assertEqual(g["459:500"]["inputs"]["sampling_mode.seed"], 42)
             # the canvas is the node's size (custom size on), references resized to the budget
             self.assertEqual(g["459:468"]["inputs"]["switch"], True)
             self.assertEqual((g["459:456"]["inputs"]["width"], g["459:456"]["inputs"]["height"]), (1376, 768))
             self.assertEqual(g["459:474"]["inputs"]["resolution"], 1024)
+
+    def test_prompt_enhancer_when_enabled(self):
+        spec = dict(SPEC, with_images={k: v for k, v in SPEC["with_images"].items() if k != "459:474.prompt"})
+        for n in (1, 3):
+            names = [f"city_simulator/img{i}.png" for i in range(n)]
+            g = comfyui.prepare_graph(TEMPLATE, spec, "a quiet morning", names, seed=42)
+            # the batch node numbers from 0, unlike the encoder
+            self.assertEqual(image_inputs(g, "459:485"), {f"images.image{i}": [f"cs_image_{i + 1}", 0] for i in range(n)})
+            self.assertEqual(g["459:500"]["inputs"]["prompt"], "a quiet morning")
+            self.assertEqual(g["459:500"]["inputs"]["sampling_mode.seed"], 42)
 
     def test_text_to_image(self):
         g = comfyui.prepare_graph(TEMPLATE, SPEC, "a quiet morning", [], seed=1, size=(1328, 1328))

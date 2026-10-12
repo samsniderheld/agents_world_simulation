@@ -112,6 +112,12 @@ comfyui:
       # "custom size": the canvas is the node's aspect ratio and resolution,
       # not image 1's own size
       "459:468.switch": true
+      # the prompt goes to the image model as written; the template's Qwen3.5
+      # prompt enhancer (TextGenerate, "refine prompt" -- off in ComfyUI's own
+      # template) is skipped: it's slow, and its fused DeltaNet kernel fails
+      # on some setups ("deltanet_conv_step launch rejected"). Delete this
+      # line to turn the enhancer back on.
+      "459:474.prompt": "{prompt}"
     without_images:
       # skip the edit prompt-enhancer (it needs an image) ...
       "459:474.prompt": "{prompt}"
