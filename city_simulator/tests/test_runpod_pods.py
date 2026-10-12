@@ -60,7 +60,8 @@ class FakeRunPod(BaseHTTPRequestHandler):
         if self.path == "/pods":
             s["created"].append(body)
             pod = {"id": f"pod{len(s['created'])}", "name": body["name"], "desiredStatus": "RUNNING",
-                   "publicIp": "203.0.113.7", "portMappings": {"22": 40022}, "costPerHr": 0.79}
+                   "publicIp": "203.0.113.7", "portMappings": {"22": 40022}, "costPerHr": 0.79,
+                   "env": body.get("env") or {}}
             s["pods"][pod["id"]] = pod
             return self._json(201, pod)
         pod_id, action = self.path.split("/")[2], self.path.split("/")[3]
@@ -96,7 +97,7 @@ class Pods(unittest.TestCase):
         self.patches = [mock.patch.object(pods.time, "sleep", lambda s: None),
                         mock.patch.object(pods, "say", lambda *a, **k: None),
                         mock.patch.object(pods, "set_app_default", lambda kind, url: self.defaults.append((kind, url))),
-                        mock.patch.object(pods, "ssh_public_key", lambda: "ssh-ed25519 AAAA test")]
+                        mock.patch.object(pods, "ssh_public_key", lambda create=False: "ssh-ed25519 AAAA test")]
         for p in self.patches:
             p.start()
 
@@ -135,6 +136,24 @@ class Pods(unittest.TestCase):
         self.assertEqual(ssh.call_args[0][1], "image")
         self.assertIn(("restart", "pod1"), FakeRunPod.state["actions"])
         self.assertEqual(len(self.defaults), 1)
+
+    def test_a_pod_made_without_our_key_is_recreated_with_it(self):
+        FakeRunPod.state["volumes"]["v"] = {"id": "v", "name": "city-sim-comfyui-image", "dataCenterId": "EU-RO-1"}
+        FakeRunPod.state["pods"]["old"] = {"id": "old", "name": "city-sim-comfyui-image", "desiredStatus": "RUNNING",
+                                           "env": {"PUBLIC_KEY": ""}, "publicIp": "1.2.3.4", "portMappings": {"22": 1}}
+        results = iter([{"ok": False, "missing_models": ["x"]}, {"ok": True}])
+        with mock.patch.object(pods, "check", side_effect=lambda kind, url: next(results)), \
+                mock.patch.object(pods, "run_setup_over_ssh", return_value=0) as ssh:
+            pods.up(self.api, self.settings, "image")
+        self.assertIn(("delete", "old"), FakeRunPod.state["actions"])
+        self.assertEqual(FakeRunPod.state["created"][0]["env"]["PUBLIC_KEY"], "ssh-ed25519 AAAA test")
+        self.assertEqual(ssh.call_args[0][0]["id"], "pod1")              # set up the new one
+        self.assertEqual(self.defaults, [("image", self.base + "/comfy/pod1")])
+
+    def test_has_our_key(self):
+        self.assertTrue(pods.has_our_key({"env": {"PUBLIC_KEY": "ssh-rsa OTHER\nssh-ed25519 AAAA test"}}))
+        self.assertFalse(pods.has_our_key({"env": {"PUBLIC_KEY": ""}}))
+        self.assertFalse(pods.has_our_key({}))
 
     def test_up_without_ssh_says_what_to_do(self):
         with mock.patch.object(pods, "check", return_value={"ok": False, "missing_models": ["x"]}), \

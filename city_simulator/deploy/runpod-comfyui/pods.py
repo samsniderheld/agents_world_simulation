@@ -137,22 +137,41 @@ def comfyui_url(settings: dict, pod_id: str) -> str:
     return settings.get("comfyui_url", "https://{pod_id}-8188.proxy.runpod.net").format(pod_id=pod_id)
 
 
-def ssh_public_key() -> str:
+OWN_KEY = "id_city_sim_runpod"            # the key pods.py makes when there's none
+
+
+def ssh_public_key(create: bool = False) -> str:
     """The public key handed to the pod (RunPod's image adds PUBLIC_KEY to
     root's authorized_keys) so setup.sh can be run over SSH."""
-    path = ssh_key_path()
+    path = ssh_key_path(create)
     return Path(f"{path}.pub").read_text().strip() if path else ""
 
 
-def ssh_key_path():
-    """The private key to use: RUNPOD_SSH_KEY, else ~/.ssh/id_*, else
-    /workspace/.ssh/id_* (on a RunPod pod ~/.ssh is wiped at every restart,
-    so keep one on the volume: ssh-keygen -t ed25519 -f /workspace/.ssh/id_ed25519 -N '')."""
+def ssh_key_path(create: bool = False):
+    """The private key to use: RUNPOD_SSH_KEY, else one in ~/.ssh or
+    /workspace/.ssh. With `create` and none found, pods.py makes its own --
+    in /workspace/.ssh on a RunPod pod (its ~/.ssh is wiped at every
+    restart), else ~/.ssh."""
     named = os.environ.get("RUNPOD_SSH_KEY")
     dirs = [Path.home() / ".ssh", Path("/workspace/.ssh")]
     candidates = [Path(named).expanduser()] if named else \
-        [d / n for d in dirs for n in ("id_ed25519", "id_ecdsa", "id_rsa")]
-    return next((c for c in candidates if c.exists() and Path(f"{c}.pub").exists()), None)
+        [d / n for d in dirs for n in (OWN_KEY, "id_ed25519", "id_ecdsa", "id_rsa")]
+    found = next((c for c in candidates if c.exists() and Path(f"{c}.pub").exists()), None)
+    if found or not create or named:
+        return found
+    home = Path("/workspace/.ssh") if os.environ.get("RUNPOD_POD_ID") else Path.home() / ".ssh"
+    home.mkdir(parents=True, exist_ok=True, mode=0o700)
+    path = home / OWN_KEY
+    subprocess.run(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-C", "city-sim pods.py", "-f", str(path)],
+                   check=True)
+    say(f"== made an SSH key for the pods: {path}")
+    return path
+
+
+def has_our_key(pod: dict) -> bool:
+    """Was the pod created with our public key (so we can SSH in)?"""
+    ours = ssh_public_key()
+    return bool(ours) and ours in str((pod.get("env") or {}).get("PUBLIC_KEY") or "")
 
 
 def wait_for_comfyui(url: str, minutes: float = WAIT_MINUTES, session: requests.Session = None) -> bool:
@@ -193,13 +212,19 @@ def run_setup_over_ssh(pod: dict, kind: str) -> int:
     the pod has no SSH port yet / no key was given."""
     port = (pod.get("portMappings") or {}).get("22")
     ip = pod.get("publicIp")
-    if not (port and ip and ssh_public_key()):
+    if not (port and ip and has_our_key(pod)):
         return None
     say(f"== running setup.sh {kind} on the pod over SSH (root@{ip} -p {port})")
     cmd = ["ssh", "-i", str(ssh_key_path()), "-p", str(port), "-o", "StrictHostKeyChecking=accept-new",
            "-o", "ServerAliveInterval=30", "-o", "ConnectTimeout=20", f"root@{ip}", f"COMFYUI_UPDATE=1 bash -s {kind}"]
-    with open(HERE / "setup.sh", "rb") as script:
-        return subprocess.run(cmd, stdin=script).returncode
+    for attempt in range(4):            # a just-booted pod's SSH server can take a moment
+        with open(HERE / "setup.sh", "rb") as script:
+            code = subprocess.run(cmd, stdin=script).returncode
+        if code != 255:                 # 255: ssh itself couldn't connect
+            return code
+        say("   (SSH not accepting connections yet -- retrying in 20 s)")
+        time.sleep(20)
+    return code
 
 
 def set_app_default(kind: str, url: str):
@@ -265,7 +290,7 @@ def launch(api: RunPod, settings: dict, kind: str) -> dict:
             "networkVolumeId": volume["id"], "volumeMountPath": "/workspace",
             "dataCenterIds": [volume["dataCenterId"]],
             "ports": ["8188/http", "22/tcp", "8888/http"],
-            "env": {"PUBLIC_KEY": ssh_public_key()} if ssh_public_key() else {},
+            "env": {"PUBLIC_KEY": ssh_public_key(create=True)},
         }
         say(f"== creating pod {name_for(kind)} ({', '.join(spec['gpus'])} in {volume['dataCenterId']})")
         try:
@@ -288,6 +313,16 @@ def ready(api: RunPod, settings: dict, kind: str, pod: dict, wait_minutes: float
         if result.get("ok"):
             break
         say("== not ready yet: " + describe(result))
+        if not has_our_key(api.pod(pod["id"])) and ssh_public_key(create=True):
+            # Made before pods.py had a key to give it: replace it with one that
+            # has the key (ComfyUI and the models are on the volume, so nothing is lost).
+            say(f"== the pod has no SSH key to set it up with -- recreating it with one")
+            api.delete_pod(pod["id"])
+            pod = launch(api, settings, kind)
+            url = comfyui_url(settings, pod["id"])
+            say(f"== waiting for ComfyUI at {url} ", end="")
+            if not wait_for_comfyui(url, wait_minutes):
+                raise SystemExit(f"ComfyUI didn't answer within {wait_minutes} min. The pod's logs are in the RunPod console.")
         code = run_setup_over_ssh(api.pod(pod["id"]), kind)
         if code is None:
             say("\nCan't finish the setup over SSH: no SSH key here (~/.ssh or /workspace/.ssh), or the pod has no\n"
