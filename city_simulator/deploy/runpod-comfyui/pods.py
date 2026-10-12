@@ -230,8 +230,12 @@ def run_setup_over_ssh(pod: dict, kind: str) -> int:
 def set_app_default(kind: str, url: str):
     """Make `url` the app's default ComfyUI server for `kind`: through the
     running app if it's up (takes effect now), else saved for its next start."""
+    from dotenv import dotenv_values
+    env = dotenv_values(APP / ".env")
+    auth = (env.get("APP_USER") or "admin", env["APP_PASSWORD"]) if env.get("APP_PASSWORD") else None
     try:
-        r = requests.post(f"{APP_URL}/api/visuals/comfyui/default", json={"kind": kind, "url": url}, timeout=5)
+        r = requests.post(f"{APP_URL}/api/visuals/comfyui/default", json={"kind": kind, "url": url},
+                          auth=auth, timeout=5)
         if r.ok and r.json().get("ok"):
             say(f"The app now uses it for {kind} (no restart needed).")
             return

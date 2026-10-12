@@ -215,7 +215,7 @@ cd /workspace
 git clone https://github.com/samsniderheld/agents_world_simulation.git
 cd agents_world_simulation && git checkout improving_agents
 bash city_simulator/deploy/runpod/setup.sh     # ~15-25 min the first time (downloads)
-bash city_simulator/deploy/runpod/start.sh     # starts Ollama, vLLM, the app; prints the tunnel command
+bash city_simulator/deploy/runpod/start.sh     # starts Ollama, vLLM, the app, the ComfyUI pods; prints the tunnel command
 ```
 
 `setup.sh` installs Node, Ollama and vLLM, builds the frontend, writes
@@ -256,11 +256,20 @@ user and password once. Editing a pod's ports restarts it, so run
 -- it rebuilds the frontend if its source changed and restarts the app; then
 hard-refresh the browser.
 
+**The ComfyUI pods** for images and video come up with `start.sh` too, if
+`.env` has `RUNPOD_API_KEY`: it runs `deploy/runpod-comfyui/pods.py up` in the
+background (log: `/workspace/logs/comfyui-pods.log` -- a volume's first setup
+downloads its models, 15-30 min), and each pod becomes the app's image or
+video server as soon as it's ready. `COMFYUI_PODS=image` (or `video`, or `0`)
+limits that. See [`deploy/runpod-comfyui/`](deploy/runpod-comfyui/README.md).
+
 **Stopping:** `bash city_simulator/deploy/runpod/stop.sh` stops the app, vLLM
-and Ollama (freeing the GPU); name any of `app`, `vllm`, `ollama` to stop
-just those -- e.g. `stop.sh vllm`, then `VLLM_MODEL=... start.sh` to serve a
-different model. It won't stop the app while a city is generating or a
-simulation is running (add `--force` to anyway), and prints the GPU memory
+and Ollama (freeing the GPU) and deletes the ComfyUI pods (their network
+volumes, with ComfyUI and the models, stay for next time); name any of `app`,
+`vllm`, `ollama`, `pods` to stop just those -- e.g. `stop.sh vllm`, then
+`VLLM_MODEL=... start.sh` to serve a different model. It won't stop the app
+or the pods while a city is generating, a simulation is running or an image
+or video is being made (add `--force` to anyway), and prints the GPU memory
 afterwards.
 
 **After a pod restart** everything outside `/workspace` is gone: rerun
