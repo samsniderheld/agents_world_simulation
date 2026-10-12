@@ -8,7 +8,7 @@
 
 # Where new network volumes are made (existing volumes keep their own).
 # RunPod data center ids: US-TX-3, US-KS-2, US-CA-2, EU-RO-1, EU-SE-1, ...
-datacenter: EU-FR-1, EU-RO-1, EUR-IS-3, EUR-NO-1, EUR-NO-2
+datacenter: EU-FR-1
 
 # The address ComfyUI is reachable at, from the pod id (RunPod's HTTP proxy).
 comfyui_url: "https://{pod_id}-8188.proxy.runpod.net"
