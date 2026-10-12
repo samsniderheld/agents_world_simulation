@@ -72,6 +72,10 @@ class RunPod:
         resp = self.session.request(method, f"{self.base_url}{path}", timeout=60, **kw)
         if resp.status_code == 401:
             raise SystemExit("RunPod rejected RUNPOD_API_KEY (401) -- check it in city_simulator/.env.")
+        if resp.status_code == 403:
+            raise SystemExit(f"RunPod refused {method} {path} (403): RUNPOD_API_KEY doesn't have permission for it. "
+                             "Use a key with Read/Write access (RunPod console -> Settings -> API Keys), or a "
+                             "restricted key that can manage Pods and Network Volumes.")
         if resp.status_code >= 400:
             raise RuntimeError(f"RunPod {method} {path} failed ({resp.status_code}): {resp.text[:400]}")
         return resp.json() if resp.content else None

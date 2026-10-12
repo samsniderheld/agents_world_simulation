@@ -188,6 +188,13 @@ class Pods(unittest.TestCase):
         with self.assertRaises(SystemExit):
             pods.RunPod("wrong", base_url=self.base).pods()
 
+    def test_key_without_permission_says_so(self):
+        with mock.patch.object(pods.requests.Session, "request",
+                               return_value=mock.Mock(status_code=403, content=b"", text="")), \
+                self.assertRaises(SystemExit) as ctx:
+            self.api.volumes()
+        self.assertIn("doesn't have permission", str(ctx.exception))
+
 
 if __name__ == "__main__":
     unittest.main()
