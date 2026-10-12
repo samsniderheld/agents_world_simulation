@@ -24,7 +24,14 @@ python deploy/runpod-comfyui/pods.py down all     # delete both pods (stops GPU 
 ```
 
 It needs `RUNPOD_API_KEY` in `city_simulator/.env` (RunPod console ->
-Settings -> API Keys). GPUs, data center and sizes are in `pods.yaml`.
+Settings -> API Keys) -- your own key, in the file: on a RunPod pod the
+environment already has a `RUNPOD_API_KEY` (a restricted per-pod key that
+can't manage pods), so `pods.py` uses the one in `.env` first. GPUs, data
+center and sizes are in `pods.yaml`.
+
+Running it **on a RunPod pod** (e.g. the one running the app)? Give it an
+SSH key that survives restarts, once:
+`ssh-keygen -t ed25519 -f /workspace/.ssh/id_ed25519 -N ''`.
 
 - **Nothing is lost on `down`.** Each kind has a RunPod network volume
   (`city-sim-comfyui-image` / `-video`) mounted at `/workspace`, holding

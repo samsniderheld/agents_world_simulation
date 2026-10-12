@@ -108,6 +108,22 @@ class RunPod:
         return self._req("DELETE", f"/networkvolumes/{volume_id}")
 
 
+def api_key() -> str:
+    """Your RunPod API key: city_simulator/.env's RUNPOD_API_KEY first. On a
+    RunPod pod the environment already has a RUNPOD_API_KEY -- a restricted
+    key RunPod gives every pod, which can't manage pods or volumes -- so the
+    environment's is only the fallback."""
+    from dotenv import dotenv_values
+    key = (dotenv_values(APP / ".env").get("RUNPOD_API_KEY") or "").strip()
+    if key:
+        return key
+    if os.environ.get("RUNPOD_POD_ID"):
+        raise SystemExit("This is a RunPod pod: its RUNPOD_API_KEY is RunPod's restricted per-pod key, which "
+                         "can't manage pods. Put your own key in city_simulator/.env as RUNPOD_API_KEY "
+                         "(RunPod console -> Settings -> API Keys).")
+    return os.environ.get("RUNPOD_API_KEY", "").strip()
+
+
 def find_pod(api: RunPod, kind: str):
     live = [p for p in api.pods() if p.get("name") == name_for(kind) and p.get("desiredStatus") != "TERMINATED"]
     return live[0] if live else None
@@ -124,13 +140,19 @@ def comfyui_url(settings: dict, pod_id: str) -> str:
 def ssh_public_key() -> str:
     """The public key handed to the pod (RunPod's image adds PUBLIC_KEY to
     root's authorized_keys) so setup.sh can be run over SSH."""
-    named = os.environ.get("RUNPOD_SSH_PUBLIC_KEY")
+    path = ssh_key_path()
+    return Path(f"{path}.pub").read_text().strip() if path else ""
+
+
+def ssh_key_path():
+    """The private key to use: RUNPOD_SSH_KEY, else ~/.ssh/id_*, else
+    /workspace/.ssh/id_* (on a RunPod pod ~/.ssh is wiped at every restart,
+    so keep one on the volume: ssh-keygen -t ed25519 -f /workspace/.ssh/id_ed25519 -N '')."""
+    named = os.environ.get("RUNPOD_SSH_KEY")
+    dirs = [Path.home() / ".ssh", Path("/workspace/.ssh")]
     candidates = [Path(named).expanduser()] if named else \
-        [Path.home() / ".ssh" / n for n in ("id_ed25519.pub", "id_ecdsa.pub", "id_rsa.pub")]
-    for path in candidates:
-        if path.exists():
-            return path.read_text().strip()
-    return ""
+        [d / n for d in dirs for n in ("id_ed25519", "id_ecdsa", "id_rsa")]
+    return next((c for c in candidates if c.exists() and Path(f"{c}.pub").exists()), None)
 
 
 def wait_for_comfyui(url: str, minutes: float = WAIT_MINUTES, session: requests.Session = None) -> bool:
@@ -174,8 +196,8 @@ def run_setup_over_ssh(pod: dict, kind: str) -> int:
     if not (port and ip and ssh_public_key()):
         return None
     say(f"== running setup.sh {kind} on the pod over SSH (root@{ip} -p {port})")
-    cmd = ["ssh", "-p", str(port), "-o", "StrictHostKeyChecking=accept-new", "-o", "ServerAliveInterval=30",
-           "-o", "ConnectTimeout=20", f"root@{ip}", f"COMFYUI_UPDATE=1 bash -s {kind}"]
+    cmd = ["ssh", "-i", str(ssh_key_path()), "-p", str(port), "-o", "StrictHostKeyChecking=accept-new",
+           "-o", "ServerAliveInterval=30", "-o", "ConnectTimeout=20", f"root@{ip}", f"COMFYUI_UPDATE=1 bash -s {kind}"]
     with open(HERE / "setup.sh", "rb") as script:
         return subprocess.run(cmd, stdin=script).returncode
 
@@ -268,10 +290,13 @@ def ready(api: RunPod, settings: dict, kind: str, pod: dict, wait_minutes: float
         say("== not ready yet: " + describe(result))
         code = run_setup_over_ssh(api.pod(pod["id"]), kind)
         if code is None:
-            say("\nNo SSH (no ~/.ssh/*.pub key, or the pod has no public SSH port). Finish it by hand: open the pod's\n"
-                "web terminal (RunPod console -> the pod -> Connect) and run, from a clone of this repo:\n"
+            say("\nCan't finish the setup over SSH: no SSH key here (~/.ssh or /workspace/.ssh), or the pod has no\n"
+                "public SSH port yet. Either make a key and run `pods.py up` again --\n"
+                "    ssh-keygen -t ed25519 -f /workspace/.ssh/id_ed25519 -N ''     (on a pod; on a Mac, ~/.ssh)\n"
+                "-- (a new key only reaches pods created after it, so `pods.py down` this one first), or open the\n"
+                "pod's web terminal (RunPod console -> the pod -> Connect) and run, from a clone of this repo:\n"
                 f"    COMFYUI_UPDATE=1 bash city_simulator/deploy/runpod-comfyui/setup.sh {kind}\n"
-                "restart the pod if it says so, then run `pods.py up` again.")
+                "restarting the pod if it says so, then run `pods.py up` again.")
             raise SystemExit(1)
         if code == 3:                                  # ComfyUI was updated: restart it
             say("== restarting the pod to load the updated ComfyUI ", end="")
@@ -350,7 +375,7 @@ def main(argv=None):
 
     from dotenv import load_dotenv
     load_dotenv(APP / ".env")
-    api = RunPod(os.environ.get("RUNPOD_API_KEY", ""))
+    api = RunPod(api_key())
     settings = load_settings()
     if args.command == "up":
         if args.kind == "all":

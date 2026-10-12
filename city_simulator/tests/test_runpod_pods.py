@@ -188,6 +188,21 @@ class Pods(unittest.TestCase):
         with self.assertRaises(SystemExit):
             pods.RunPod("wrong", base_url=self.base).pods()
 
+    def test_env_file_key_beats_a_pods_own(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            app = Path(tmp)
+            (app / ".env").write_text("RUNPOD_API_KEY=rpa_mine\n")
+            with mock.patch.object(pods, "APP", app), \
+                    mock.patch.dict(pods.os.environ, {"RUNPOD_API_KEY": "pod-scoped", "RUNPOD_POD_ID": "abc"}):
+                self.assertEqual(pods.api_key(), "rpa_mine")
+                (app / ".env").write_text("")
+                with self.assertRaises(SystemExit):          # on a pod, its own key isn't enough
+                    pods.api_key()
+            with mock.patch.object(pods, "APP", app), mock.patch.dict(pods.os.environ, {"RUNPOD_API_KEY": "rpa_env"}):
+                pods.os.environ.pop("RUNPOD_POD_ID", None)
+                self.assertEqual(pods.api_key(), "rpa_env")   # elsewhere, an exported key still works
+
     def test_key_without_permission_says_so(self):
         with mock.patch.object(pods.requests.Session, "request",
                                return_value=mock.Mock(status_code=403, content=b"", text="")), \
