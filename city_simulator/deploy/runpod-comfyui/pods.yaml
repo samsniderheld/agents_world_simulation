@@ -24,6 +24,8 @@ image:
     - NVIDIA RTX A6000
     - NVIDIA A100 80GB PCIe
     - NVIDIA A100-SXM4-80GB
+    - NVIDIA H100 80GB HBM3
+    - NVIDIA H100 PCIe
   volume_gb: 60            # ComfyUI + Qwen-Image 2.1 (~25 GB) + outputs
   container_disk_gb: 30
 
