@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Create and delete the RunPod pods that run ComfyUI for the app.
 
+    python deploy/runpod-comfyui/pods.py up            # both pods (they boot at the same time)
     python deploy/runpod-comfyui/pods.py up image      # create (or reuse) the image pod, ready to use
     python deploy/runpod-comfyui/pods.py up video
     python deploy/runpod-comfyui/pods.py status        # pods, cost per hour, URLs, ComfyUI up?
@@ -191,6 +192,35 @@ def set_app_default(kind: str, url: str):
 
 
 def up(api: RunPod, settings: dict, kind: str, wait_minutes: float = WAIT_MINUTES):
+    """One kind: launch its pod, then get it ready."""
+    return ready(api, settings, kind, launch(api, settings, kind), wait_minutes)
+
+
+def up_many(api: RunPod, settings: dict, kinds, wait_minutes: float = WAIT_MINUTES) -> dict:
+    """Several kinds: launch every pod first (so they boot at the same time),
+    then get each ready in turn. One kind failing doesn't stop the others.
+    Returns {kind: pod, or the failure message}."""
+    launched, results = {}, {}
+    for kind in kinds:
+        try:
+            launched[kind] = launch(api, settings, kind)
+        except (SystemExit, RuntimeError) as e:
+            results[kind] = str(e)
+    for kind, pod in launched.items():
+        say(f"\n---- {kind} ----")
+        try:
+            results[kind] = ready(api, settings, kind, pod, wait_minutes)
+        except (SystemExit, RuntimeError) as e:
+            results[kind] = str(e)
+    say("\n==== summary")
+    for kind in kinds:
+        r = results.get(kind)
+        say(f"  {kind}: " + (f"ready -- {comfyui_url(settings, r['id'])}" if isinstance(r, dict) else f"FAILED -- {r}"))
+    return results
+
+
+def launch(api: RunPod, settings: dict, kind: str) -> dict:
+    """The kind's volume (made if new) and its pod, created, started or reused."""
     spec = settings[kind]
     volume = find_volume(api, kind)
     if volume is None:
@@ -217,6 +247,11 @@ def up(api: RunPod, settings: dict, kind: str, wait_minutes: float = WAIT_MINUTE
         except RuntimeError as e:
             raise SystemExit(f"{e}\n\nNo luck in {volume['dataCenterId']}? RunPod may have none of those GPUs free "
                              "there right now -- try again later, or add GPU types to pods.yaml.")
+    return pod
+
+
+def ready(api: RunPod, settings: dict, kind: str, pod: dict, wait_minutes: float = WAIT_MINUTES) -> dict:
+    """Wait for the pod's ComfyUI, fix what's missing, make it the app's default."""
     url = comfyui_url(settings, pod["id"])
     say(f"== waiting for ComfyUI at {url} (the first start copies ComfyUI onto the volume) ", end="")
     if not wait_for_comfyui(url, wait_minutes):
@@ -299,8 +334,9 @@ def status(api: RunPod, settings: dict):
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Create and delete the RunPod pods that run ComfyUI for the app.")
     sub = parser.add_subparsers(dest="command", required=True)
-    p_up = sub.add_parser("up", help="create (or reuse) a pod, wait until ComfyUI is ready, make it the app's default")
-    p_up.add_argument("kind", choices=KINDS)
+    p_up = sub.add_parser("up", help="create (or reuse) pods, wait until ComfyUI is ready, make them the app's defaults")
+    p_up.add_argument("kind", nargs="?", default="all", choices=KINDS + ("all",),
+                      help="image, video, or all (the default)")
     p_down = sub.add_parser("down", help="delete a pod (its network volume is kept unless --volume)")
     p_down.add_argument("kind", choices=KINDS + ("all",))
     p_down.add_argument("--volume", action="store_true", help="also delete its network volume (ComfyUI + models)")
@@ -313,7 +349,12 @@ def main(argv=None):
     api = RunPod(os.environ.get("RUNPOD_API_KEY", ""))
     settings = load_settings()
     if args.command == "up":
-        up(api, settings, args.kind)
+        if args.kind == "all":
+            results = up_many(api, settings, KINDS)
+            if not all(isinstance(r, dict) for r in results.values()):
+                raise SystemExit(1)
+        else:
+            up(api, settings, args.kind)
     elif args.command == "down":
         for kind in (KINDS if args.kind == "all" else (args.kind,)):
             down(api, kind, volume=args.volume, yes=args.yes)

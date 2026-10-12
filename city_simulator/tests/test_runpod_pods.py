@@ -142,6 +142,39 @@ class Pods(unittest.TestCase):
             pods.up(self.api, self.settings, "video")
         self.assertEqual(self.defaults, [])
 
+    def test_up_all_launches_both_before_waiting(self):
+        order = []
+        real_wait = pods.wait_for_comfyui
+
+        def wait(url, minutes=30):
+            order.append(("wait", url.rsplit("/", 1)[1], len(FakeRunPod.state["created"])))
+            return real_wait(url, minutes)
+        with mock.patch.object(pods, "check", return_value={"ok": True}), \
+                mock.patch.object(pods, "wait_for_comfyui", side_effect=wait):
+            results = pods.up_many(self.api, self.settings, pods.KINDS)
+        self.assertEqual([b["name"] for b in FakeRunPod.state["created"]],
+                         ["city-sim-comfyui-image", "city-sim-comfyui-video"])
+        self.assertEqual([o[2] for o in order], [2, 2])            # both pods existed before the first wait
+        self.assertEqual(set(results), {"image", "video"})
+        self.assertEqual([k for k, _ in self.defaults], ["image", "video"])
+
+    def test_up_all_carries_on_past_a_failure(self):
+        def check(kind, url):
+            return {"ok": True} if kind == "video" else {"ok": False, "missing_models": ["x"]}
+        with mock.patch.object(pods, "check", side_effect=check), \
+                mock.patch.object(pods, "run_setup_over_ssh", return_value=None):
+            results = pods.up_many(self.api, self.settings, pods.KINDS)
+        self.assertIsInstance(results["video"], dict)
+        self.assertIsInstance(results["image"], str)                # the failure, reported
+        self.assertEqual([k for k, _ in self.defaults], ["video"])
+
+    def test_up_with_no_kind_means_all(self):
+        with mock.patch.object(pods, "RunPod", return_value=self.api), \
+                mock.patch.object(pods, "load_settings", return_value=self.settings), \
+                mock.patch.object(pods, "up_many", return_value={"image": {}, "video": {}}) as many:
+            pods.main(["up"])
+        self.assertEqual(many.call_args[0][2], pods.KINDS)
+
     def test_down_keeps_the_volume_unless_asked(self):
         FakeRunPod.state["volumes"]["v"] = {"id": "v", "name": "city-sim-comfyui-image", "size": 60}
         FakeRunPod.state["pods"]["p1"] = {"id": "p1", "name": "city-sim-comfyui-image", "desiredStatus": "RUNNING"}

@@ -16,7 +16,8 @@ Once started they stay up -- no per-request cold start.
 `pods.py` creates and deletes the pods for you through RunPod's API:
 
 ```bash
-python deploy/runpod-comfyui/pods.py up image     # create (or reuse) the image pod, ready to use
+python deploy/runpod-comfyui/pods.py up           # both pods (they boot at the same time)
+python deploy/runpod-comfyui/pods.py up image     # or just one: create (or reuse) the image pod, ready to use
 python deploy/runpod-comfyui/pods.py up video
 python deploy/runpod-comfyui/pods.py status       # pods, $/hr, URLs, is ComfyUI up
 python deploy/runpod-comfyui/pods.py down all     # delete both pods (stops GPU billing)
