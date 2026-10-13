@@ -24,6 +24,10 @@
 #                    visuals/data/config.yaml's video_workflow)
 #   COMFYUI_VERSION  for a new install or an update: a release tag (default
 #                    v0.39.2; the Qwen-Image 2.1 nodes need v0.37.0+) or "master"
+#   COMFYUI_VIDEO_ARGS  video, RunPod's ComfyUI template: launch flags added to its
+#                    comfyui_args.txt (default --disable-smart-memory: models leave
+#                    the GPU once used, so the text encoder isn't holding ~20 GB while
+#                    the video is sampled); "" to leave the file alone
 #   COMFYUI_UPDATE   1: if the existing ComfyUI is missing the workflow's nodes,
 #                    update it to COMFYUI_VERSION (then exit 3: restart ComfyUI --
 #                    e.g. restart the pod -- and rerun). pods.py sets this.
@@ -152,6 +156,25 @@ if [ -n "$missing" ]; then
 fi
 running && echo "  all there ($(curl -s --max-time 5 "$API/system_stats" | python3 -c 'import json,sys; print("ComfyUI", json.load(sys.stdin)["system"].get("comfyui_version"))'))" \
         || echo "  all there"
+
+# --- ComfyUI's launch flags (RunPod's ComfyUI template reads comfyui_args.txt) ------------
+ARGS_FILE="$WS/runpod-slim/comfyui_args.txt"
+if [ "$MODE" = "video" ] && [ -d "$WS/runpod-slim" ]; then
+  added=""
+  for flag in ${COMFYUI_VIDEO_ARGS---disable-smart-memory}; do
+    grep -qxF -- "$flag" "$ARGS_FILE" 2>/dev/null || { echo "$flag" >> "$ARGS_FILE"; added="$added $flag"; }
+  done
+  if [ -n "$added" ]; then
+    echo "== added to $ARGS_FILE:$added"
+    if running; then
+      if [ "${COMFYUI_UPDATE:-}" = "1" ]; then
+        echo "Restart ComfyUI (restart the pod) for it to take effect."
+        exit 3
+      fi
+      echo "   Restart ComfyUI (restart the pod) for it to take effect."
+    fi
+  fi
+fi
 
 echo
 if running; then

@@ -360,6 +360,13 @@ class AgainstAStandInServer(unittest.TestCase):
         self.assertEqual(out["seed"], 7)
         self.assertTrue(out["video"]["local_path"])
 
+    def test_out_of_memory_says_what_to_lower(self):
+        msg = comfyui._execution_error({"messages": [["execution_error", {
+            "node_id": "125", "node_type": "SamplerCustomAdvanced",
+            "exception_message": "Allocation on device 0 would exceed allowed memory. (out of memory)"}]]})
+        self.assertIn("node 125 (SamplerCustomAdvanced)", msg)
+        self.assertIn("resolution x duration", msg)
+
     def test_workflow_defaults(self):
         self.assertEqual(comfyui.workflow_defaults("reference_video"),
                          {"duration": 15, "megapixels": 2, "steps": 8, "sampler": "euler", "scheduler": "beta"})

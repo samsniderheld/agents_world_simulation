@@ -474,5 +474,9 @@ def _describe_error(resp) -> str:
 def _execution_error(status: dict) -> str:
     for kind, msg in status.get("messages") or []:
         if kind == "execution_error":
-            return f"node {msg.get('node_id')} ({msg.get('node_type')}): {msg.get('exception_message', '').strip()}"
+            text = f"node {msg.get('node_id')} ({msg.get('node_type')}): {msg.get('exception_message', '').strip()}"
+            if "out of memory" in text.lower() or "exceed allowed memory" in text.lower():
+                text += (" -- the GPU ran out of memory. For video, what it needs grows with resolution x duration "
+                         "(and the reference pictures): lower one of them and try again.")
+            return text
     return "unknown error"
