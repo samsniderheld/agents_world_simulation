@@ -336,6 +336,27 @@ class ComfyUIProvider(Provider):
                           "content_type": content_type, "file_size": len(data)}, "seed": seed}
 
 
+def workflow_defaults(kind: str) -> dict:
+    """What a video workflow uses for each node option ({"duration": 15,
+    "megapixels": 2, ...}) when the node leaves it blank: the spec's
+    `defaults`, else the value in the workflow file itself. {} if the
+    workflow isn't configured or can't be read."""
+    try:
+        spec = ComfyUIProvider._spec(kind)
+        graph = ComfyUIProvider._template(spec)
+    except RuntimeError:
+        return {}
+    out = {}
+    for name, path in (spec.get("options") or {}).items():
+        value = (spec.get("defaults") or {}).get(name)
+        if value is None:
+            node, field = _split(path)
+            value = (graph.get(node) or {}).get("inputs", {}).get(field)
+        if value is not None and not isinstance(value, list):      # a link isn't a value
+            out[name] = value
+    return out
+
+
 def normalize_url(url):
     """A ComfyUI address as typed on a node -> its base URL, or None if
     blank. Pasting an endpoint (".../prompt") works too."""

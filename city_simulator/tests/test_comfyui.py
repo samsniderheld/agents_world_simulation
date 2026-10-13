@@ -360,6 +360,12 @@ class AgainstAStandInServer(unittest.TestCase):
         self.assertEqual(out["seed"], 7)
         self.assertTrue(out["video"]["local_path"])
 
+    def test_workflow_defaults(self):
+        self.assertEqual(comfyui.workflow_defaults("reference_video"),
+                         {"duration": 15, "megapixels": 2, "steps": 8, "sampler": "euler", "scheduler": "beta"})
+        self.assertEqual(comfyui.workflow_defaults("video")["duration"], 5)
+        self.assertEqual(comfyui.workflow_defaults("nonexistent"), {})
+
     def test_reference_video_default_duration_and_limit(self):
         self.provider.generate_video_from_reference("x", image_paths=self._images(1))
         self.assertEqual(FakeComfy.prompts[0]["132"]["inputs"]["value"], 15.0)

@@ -9,7 +9,7 @@ import { ComfyServerField } from './ComfyServerField';
 import { ProviderSelect } from './ProviderSelect';
 import { useVisualsProviders } from './useProviderCapabilities';
 import { useVideoGeneration } from './useVideoGeneration';
-import { VideoOptions, type VideoOptionValues } from './VideoOptions';
+import { VideoOptions, VideoSizeOptions, type VideoOptionValues } from './VideoOptions';
 
 export interface VideoNodeData extends Record<string, unknown> {
   // Resolved by the parent from the connected Frame node -- both stay
@@ -66,6 +66,8 @@ export function VideoNode({ id, data, selected }: NodeProps<VideoNodeType>) {
   const [building, setBuilding] = useState(false);
   // (nothing built yet: an image-to-video prompt is replaced on first build)
   const edited = fromStoryboard && data.autoPrompt !== undefined && prompt !== data.autoPrompt;
+  // the workflow's own duration, resolution, ... (what a blank option means)
+  const workflowDefaults = providers?.video_workflows?.[fromStoryboard ? 'video_reference' : 'video'];
 
   // The storyboard's prompt and pictures; the prompt goes in the box unless
   // it's been edited by hand (`force`: even then).
@@ -104,6 +106,16 @@ export function VideoNode({ id, data, selected }: NodeProps<VideoNodeType>) {
     void build(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data.storyboardId]);
+
+  // A new duration moves the shots' cut times: rebuild the prompt (unless
+  // it's been edited by hand) so the times shown are the ones sent.
+  const lastDuration = useRef(data.options?.duration);
+  useEffect(() => {
+    if (lastDuration.current === data.options?.duration) return;
+    lastDuration.current = data.options?.duration;
+    if (fromStoryboard && !edited) void build(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.options?.duration]);
 
   async function onGenerate() {
     if (fromStoryboard) {
@@ -190,7 +202,12 @@ export function VideoNode({ id, data, selected }: NodeProps<VideoNodeType>) {
           onChange={(url) => data.onUpdate(id, { comfyuiUrl: url || undefined })} />
       )}
       {comfy && (
-        <VideoOptions value={data.options ?? {}} lastSeed={data.lastSeed} onChange={(options) => data.onUpdate(id, { options })} />
+        <VideoSizeOptions value={data.options ?? {}} defaults={workflowDefaults} aspectRatio={data.aspectRatio ?? '16:9'}
+          onChange={(options) => data.onUpdate(id, { options })} />
+      )}
+      {comfy && (
+        <VideoOptions value={data.options ?? {}} defaults={workflowDefaults} lastSeed={data.lastSeed}
+          onChange={(options) => data.onUpdate(id, { options })} />
       )}
       {error && <div className="node-error-text">{error}</div>}
       <div className="node-controls">

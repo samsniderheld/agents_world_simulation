@@ -659,3 +659,22 @@
   color: var(--node-error);
   opacity: 0.85;
 }
+
+/* The Video node's duration and resolution -- always on show, like the
+   workflow's own Float (Duration) and Resolution Selector. */
+.node-video-size {
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.node-video-size > label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+}
+
+.node-video-size .node-ticks-input {
+  width: 48px;
+  font-variant-numeric: tabular-nums;
+}

@@ -436,7 +436,6 @@ def storyboard_video_prompt():
     /api/visuals/generate-video-from-reference."""
     from citystate import graph_store
     import theme
-    from visuals import config as vconfig
     from . import storyboard_video
 
     body = request.get_json(silent=True) or {}
@@ -446,9 +445,9 @@ def storyboard_video_prompt():
     if not (body.get("treatment_text") or "").strip():
         return json_response({"error": "this Storyboard has no treatment saved with it -- make it again from "
                                        "its Treatment node (\"create storyboard\")"}, status=400)
-    spec = (vconfig.COMFYUI.get("reference_video_workflow") or {})
+    from visuals.providers.comfyui import workflow_defaults
     try:
-        duration = float(body.get("duration") or (spec.get("defaults") or {}).get("duration") or 15)
+        duration = float(body.get("duration") or workflow_defaults("reference_video").get("duration") or 15)
         storyboard = graph_store.get_graph(body.get("storyboard_id") or "")
         result = storyboard_video.prepare(
             city, citystate.get_background(), storyboard, body["treatment_text"], body.get("agent_ids") or [],

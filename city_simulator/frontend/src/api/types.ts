@@ -363,6 +363,17 @@ export interface VisualsProviders {
   // the ComfyUI servers a node uses when it doesn't name one
   comfyui_urls: { image: string; video: string };
   capabilities: Record<string, ProviderCapabilities>;
+  // each ComfyUI video workflow's own option values (its Float (Duration),
+  // Resolution Selector megapixels, steps...) -- what a blank option means
+  video_workflows?: Record<'video' | 'video_reference', VideoWorkflowDefaults>;
+}
+
+export interface VideoWorkflowDefaults {
+  duration?: number;
+  megapixels?: number;
+  steps?: number;
+  sampler?: string;
+  scheduler?: string;
 }
 
 // POST /api/visuals/comfyui/check -- is that ComfyUI up, with the workflow's

@@ -5,8 +5,22 @@ import { useState } from 'react';
 // canvas that silently ran a 7-tick setting down to 1. What you type is kept
 // as typed (no snapping to the minimum mid-edit) and applied -- clamped to
 // min..max (no upper limit when `max` is omitted) -- when you leave the field
-// or press Enter.
-export function NumberField({ value, min, max = Infinity, title, onCommit }: { value: number; min: number; max?: number; title: string; onCommit: (v: number) => void }) {
+// or press Enter. `decimals`: allow a fraction (e.g. 7.5 seconds).
+export function NumberField({
+  value,
+  min,
+  max = Infinity,
+  title,
+  decimals = false,
+  onCommit,
+}: {
+  value: number;
+  min: number;
+  max?: number;
+  title: string;
+  decimals?: boolean;
+  onCommit: (v: number) => void;
+}) {
   const [draft, setDraft] = useState(String(value));
   const [shown, setShown] = useState(value);
   if (value !== shown) {
@@ -14,7 +28,7 @@ export function NumberField({ value, min, max = Infinity, title, onCommit }: { v
     setDraft(String(value));
   }
   function commit() {
-    const n = Number.parseInt(draft, 10);
+    const n = decimals ? Number.parseFloat(draft) : Number.parseInt(draft, 10);
     const next = Number.isNaN(n) ? value : Math.min(max, Math.max(min, n));
     setDraft(String(next));
     if (next !== value) onCommit(next);
@@ -23,10 +37,10 @@ export function NumberField({ value, min, max = Infinity, title, onCommit }: { v
     <input
       className="node-ticks-input nodrag"
       type="text"
-      inputMode="numeric"
+      inputMode={decimals ? 'decimal' : 'numeric'}
       value={draft}
       title={max === Infinity ? `${title} (${min} or more)` : `${title} (${min}-${max})`}
-      onChange={(e) => setDraft(e.target.value.replace(/[^0-9]/g, ''))}
+      onChange={(e) => setDraft(e.target.value.replace(decimals ? /[^0-9.]/g : /[^0-9]/g, ''))}
       onBlur={commit}
       onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
     />

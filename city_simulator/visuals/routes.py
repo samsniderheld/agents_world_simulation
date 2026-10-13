@@ -7,6 +7,7 @@ from flask import Blueprint, request, send_from_directory
 from jsonutil import json_response
 
 from . import config, jobs, providers, storage
+from .providers.comfyui import workflow_defaults
 
 bp = Blueprint("visuals", __name__, url_prefix="/api/visuals")
 
@@ -21,6 +22,10 @@ def providers_list():
         # the ComfyUI servers a node uses when it doesn't name one
         "comfyui_urls": {"image": config.COMFYUI_IMAGE_URL, "video": config.COMFYUI_VIDEO_URL},
         "capabilities": providers.CAPABILITIES,
+        # each ComfyUI video workflow's own duration, resolution, steps... --
+        # what a Video node uses for an option it leaves blank
+        "video_workflows": {"video": workflow_defaults("video"),
+                            "video_reference": workflow_defaults("reference_video")},
     })
 
 
