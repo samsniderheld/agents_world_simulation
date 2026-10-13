@@ -36,5 +36,5 @@ video:
     - NVIDIA A100 80GB PCIe
     - NVIDIA H100 80GB HBM3
     - NVIDIA H100 PCIe
-  volume_gb: 100           # ComfyUI + MiniMax H3 (~42 GB, ~54 GB with the int8 text encoder) + outputs
+  volume_gb: 100           # ComfyUI + MiniMax H3 i2v and ref2v (~62 GB, ~74 GB with the int8 text encoder) + outputs
   container_disk_gb: 30

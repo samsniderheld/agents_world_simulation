@@ -41,6 +41,7 @@ CAPABILITIES = {
     "comfyui": {
         "supports_reference_images": True,
         "supports_video": bool(config.COMFYUI.get("video_workflow")),
+        "supports_video_reference": bool(config.COMFYUI.get("reference_video_workflow")),
         "supports_music": False,
     },
 }

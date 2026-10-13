@@ -152,3 +152,33 @@ comfyui:
     # `MINIMAX_TEXT_ENCODER=int8 setup.sh video` on the pod and uncomment:
     # set:
     #   "105:13.clip_name": "qwen3vl_32b_minimax_h3_int8_convrot.safetensors"
+
+  reference_video_workflow:
+    # MiniMax H3 reference-to-video with the 4-step turbo LoRA (the
+    # Storyboard -> Video path): the reference pictures are the cast's
+    # pictures, then each shot's background, and the prompt is built from
+    # the treatment (agents/storyboard_video.py). Runs on the video pod --
+    # `setup.sh video` downloads its models too.
+    file: "comfyui/minimax_h3_r2v_turbo.json"
+    max_images: 9
+    # a clip takes ~20 minutes, plus loading the models the first time
+    timeout_seconds: 3600
+    prompt: ["138.value"]
+    seed: ["129.noise_seed"]
+    output: "92"
+    aspect_ratio: "115.aspect_ratio"
+    aspect_ratios:
+      "16:9": "16:9 (Widescreen)"
+      "9:16": "9:16 (Portrait Widescreen)"
+      "1:1": "1:1 (Square)"
+    options:
+      duration: "132.value"             # seconds; the shots' cut times are spread over it
+      megapixels: "115.megapixels"      # the workflow's 2 is ~1920x1088 at 16:9 (slow); 0.9 ~1280x736
+      steps: "124.steps"
+      sampler: "123.sampler_name"
+      scheduler: "124.scheduler"
+    defaults:
+      duration: 15
+    # Same NVFP4 text encoder as above; with the int8 one, uncomment:
+    # set:
+    #   "128.clip_name": "qwen3vl_32b_minimax_h3_int8_convrot.safetensors"

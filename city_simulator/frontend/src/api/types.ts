@@ -453,6 +453,23 @@ export interface GeneratedVideo {
   file_size: number | null;
 }
 
+// POST /api/agents/storyboard/video-prompt: a Storyboard's reference-to-video
+// prompt and pictures, in the order the prompt numbers them <Picture N>.
+export interface StoryboardVideoPicture {
+  number: number;
+  kind: 'character' | 'background';
+  name: string;
+  url: string;
+  source: 'city' | 'visuals'; // which file route serves `url`
+}
+export interface StoryboardVideoPrompt {
+  prompt: string;
+  image_paths: string[];
+  pictures: StoryboardVideoPicture[];
+  warnings: string[];
+  duration: number;
+}
+
 export interface VideoGenResult {
   kind: 'video' | 'video_reference';
   video: GeneratedVideo;

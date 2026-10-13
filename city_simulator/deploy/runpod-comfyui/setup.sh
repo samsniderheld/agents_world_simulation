@@ -5,7 +5,7 @@
 # already there are skipped; an interrupted download resumes).
 #
 #   bash city_simulator/deploy/runpod-comfyui/setup.sh          # image pod (Qwen-Image 2.1, ~25 GB)
-#   bash city_simulator/deploy/runpod-comfyui/setup.sh video    # video pod (MiniMax H3, ~42 GB)
+#   bash city_simulator/deploy/runpod-comfyui/setup.sh video    # video pod (MiniMax H3, ~62 GB)
 #
 # Which ComfyUI, in order:
 #   1. COMFYUI_DIR, if set (a ComfyUI folder);
@@ -43,13 +43,16 @@ case "$MODE" in
 text_encoders/qwen3vl_8b_int8_convrot.safetensors
 text_encoders/qwen3.5_9b_qwen_image_2.1_pe_i2i.int8_convrot.safetensors
 vae/qwen_image_2.1_vae_bf16.safetensors" ;;
-  video)   # visuals/data/comfyui/minimax_h3_i2v.json
-    LABEL="MiniMax H3 (~42 GB)"
-    NODES="MiniMaxH3ImageToVideo ResolutionSelector CreateVideo SaveVideo ComfyMathExpression VAEDecodeAudio PrimitiveFloat SamplerCustomAdvanced BasicGuider BasicScheduler KSamplerSelect RandomNoise"
+  video)   # visuals/data/comfyui/minimax_h3_i2v.json and minimax_h3_r2v_turbo.json
+    LABEL="MiniMax H3 (~62 GB)"
+    NODES="MiniMaxH3ImageToVideo MiniMaxH3ReferenceToVideo ModelAttentionBackend LoraLoaderModelOnly ResolutionSelector CreateVideo SaveVideo ComfyMathExpression VAEDecodeAudio PrimitiveFloat PrimitiveStringMultiline SamplerCustomAdvanced BasicGuider BasicScheduler KSamplerSelect RandomNoise"
     REPO="https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main"
     TE="qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors"
     [ "${MINIMAX_TEXT_ENCODER:-nvfp4}" = "int8" ] && TE="qwen3vl_32b_minimax_h3_int8_convrot.safetensors"
+    # the reference-to-video turbo LoRA isn't in Comfy-Org's repo -- a full URL after the name says where it is
     MODELS="diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors
+diffusion_models/minimax_h3_ref2va_pruned_int8_convrot.safetensors
+loras/minimax_h3_turbo_4step_pruned_comfyui.safetensors https://huggingface.co/drbaph/MiniMax-H3-Turbo-Lora-ComfyUI/resolve/main/minimax_h3_turbo_4step_pruned_comfyui.safetensors
 text_encoders/$TE
 vae/minimax_h3_video_vae_fp16.safetensors
 vae/minimax_h3_audio_vae_fp32.safetensors" ;;
@@ -106,13 +109,13 @@ print((own or paths)[0])"
 }
 
 echo "== $LABEL models"
-echo "$MODELS" | while read -r f; do
+echo "$MODELS" | while read -r f src; do
   kind="${f%%/*}"; name="${f#*/}"
   dir="$(model_dir "$kind")"; dest="$dir/$name"
   if [ -s "$dest" ]; then echo "  have $dest"; continue; fi
   mkdir -p "$dir"
   echo "  downloading $name -> $dir"
-  wget -q --show-progress -c -O "$dest.part" "$REPO/$f"
+  wget -q --show-progress -c -O "$dest.part" "${src:-$REPO/$f}"
   mv "$dest.part" "$dest"
 done
 

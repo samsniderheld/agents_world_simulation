@@ -162,8 +162,10 @@ class ComfyUIProvider(Provider):
     def urls(self) -> dict:
         """Each kind's server: fixed at construction (tests), else the current
         defaults (config -- a node's "make default" changes them live)."""
-        return {"image": self._fixed.get("image") or config.COMFYUI_IMAGE_URL,
-                "video": self._fixed.get("video") or config.COMFYUI_VIDEO_URL}
+        video = self._fixed.get("video") or config.COMFYUI_VIDEO_URL
+        # reference-to-video runs on the video server
+        return {"image": self._fixed.get("image") or config.COMFYUI_IMAGE_URL, "video": video,
+                "video_reference": video}
 
     @property
     def base_url(self) -> str:
@@ -194,6 +196,7 @@ class ComfyUIProvider(Provider):
             return self._session.request(method, f"{url}{path}", timeout=kw.pop("timeout", 60), **kw)
         except requests.RequestException as e:
             env = "COMFYUI_IMAGE_URL" if kind == "image" else "COMFYUI_VIDEO_URL"
+            kind = "video" if kind == "video_reference" else kind
             raise RuntimeError(f"Could not reach the {kind} ComfyUI at {url} ({type(e).__name__}). Is the pod "
                                f"running and ComfyUI up (deploy/runpod-comfyui/start.sh)? It's {env} (or "
                                "COMFYUI_URL) in .env.") from e
@@ -289,6 +292,28 @@ class ComfyUIProvider(Provider):
         template = self._template(spec)
         url = normalize_url(options.pop("server_url", None))      # a node's own ComfyUI URL
         names = [self._upload("video", image_path, url)] if image_path else []
+        return self._make_video("video", spec, template, prompt, names, url, options)
+
+    def generate_video_from_reference(self, prompt: str, video_path: str = None, image_paths: list = None,
+                                      **options) -> dict:
+        """A clip from reference pictures (comfyui.reference_video_workflow:
+        MiniMax H3 ref2va) -- a Storyboard's cast and backgrounds, in the
+        order the prompt numbers them <Picture 1>, <Picture 2>, ..."""
+        if video_path:
+            raise ValueError("the ComfyUI reference-to-video workflow takes pictures, not a reference video")
+        spec = self._spec("reference_video")
+        template = self._template(spec)
+        url = normalize_url(options.pop("server_url", None))
+        image_paths = list(image_paths or [])
+        limit = int(spec.get("max_images") or 9)
+        if len(image_paths) > limit:
+            raise ValueError(f"{len(image_paths)} reference pictures -- the workflow takes at most {limit}")
+        names = [self._upload("video_reference", p, url) for p in image_paths]
+        return self._make_video("video_reference", spec, template, prompt, names, url, options)
+
+    def _make_video(self, kind, spec, template, prompt, names, url, options) -> dict:
+        """Fill in a video workflow (aspect ratio and the node's options go
+        where the spec says), run it, and save the clip."""
         seed = options.get("seed")
         if seed is None:
             seed = random.randint(0, 2**48)
@@ -305,7 +330,7 @@ class ComfyUIProvider(Provider):
                 continue                          # the workflow's own value stands
             settings[path] = _video_option(name, value)
         graph = prepare_graph(template, spec, prompt, names, int(seed), settings=settings)
-        filename, data, content_type = self._run("video", spec, graph, url)[0]
+        filename, data, content_type = self._run(kind, spec, graph, url)[0]
         local_path = self._save(filename, data, content_type)
         return {"video": {"local_path": str(local_path), "url": storage.relative_path(local_path),
                           "content_type": content_type, "file_size": len(data)}, "seed": seed}
@@ -346,8 +371,19 @@ def check_server(kind: str, url: str = None, session: requests.Session = None) -
             # "cuda:0 NVIDIA A100-SXM4-80GB : cudaMallocAsync" -> "NVIDIA A100-SXM4-80GB"
             name = re.sub(r"^\w+:\d+\s+", "", devices[0].get("name", "").split(" : ")[0]).strip()
             out["gpu"] = f"{name} ({round(devices[0].get('vram_total', 0) / 2**30)} GB)"
-        spec = ComfyUIProvider._spec(kind)
-        template = ComfyUIProvider._template(spec)
+        # the video server runs both video workflows (image-to-video and
+        # reference-to-video); each workflow as it's sent, `set` overrides in
+        template = {}
+        for k in (["video", "reference_video"] if kind == "video" else [kind]):
+            if k != kind and not config.COMFYUI.get(f"{k}_workflow"):
+                continue
+            spec = ComfyUIProvider._spec(k)
+            graph = ComfyUIProvider._template(spec)
+            for path, value in (spec.get("set") or {}).items():
+                node, name = _split(path)
+                if node in graph:
+                    graph[node]["inputs"][name] = value
+            template.update({f"{k}:{nid}": node for nid, node in graph.items()})
         for class_type in sorted({n["class_type"] for n in template.values() if n.get("class_type")}):
             r = session.get(f"{url}/object_info/{class_type}", timeout=15)
             node_info = (r.json() or {}).get(class_type) if r.status_code < 400 else None

@@ -177,6 +177,8 @@ def generate_video_from_reference():
         "video_path": body.get("video_path"),
         "image_paths": body.get("image_paths") or None,
         "options": body.get("options") or {},
+        "provider": body.get("provider") or None,   # the node's pick; None = the default
+        "comfyui_url": body.get("comfyui_url") or None,   # the node's own ComfyUI address
     }
     ok, error = jobs.start("video_reference", params)
     return json_response({"ok": ok, "error": error}, status=200 if ok else 409)

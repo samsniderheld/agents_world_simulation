@@ -34,7 +34,9 @@ DEFAULT_ID = "noir_nyc"
 
 _SLOT = re.compile(r"\{([a-z][a-z0-9_]*)\}")
 # Prompt groups a theme may leave out (they fall back to the default theme's).
-OPTIONAL_PROMPT_PREFIXES = ("dm.",)
+# Prompts added after themes were already in use: an older or uploaded theme
+# without one gets the default theme's (Theme.template).
+OPTIONAL_PROMPT_PREFIXES = ("dm.", "treatment.vignette")
 _ID_OK = re.compile(r"^[a-z0-9][a-z0-9_\-]{1,40}$")
 
 
@@ -274,7 +276,7 @@ _REPLY_MARKERS = {
     "scene.where": ["WHERE:"],
     "scene.react": ["REACT:", "CONTINUE"],
     "city.react": ["TALK:", "REACT:", "CONTINUE"],
-    "treatment.main": ["STORYBOARD:"],
+    "treatment.vignette": ["STORYBOARD:", "Background:", "Action:", "SOUNDSCAPE:", "MUSIC:"],
     "city.bio_upgrade": ["QUIRK:"],
 }
 

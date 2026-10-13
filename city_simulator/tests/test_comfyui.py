@@ -338,7 +338,35 @@ class AgainstAStandInServer(unittest.TestCase):
 
     def test_separate_servers(self):
         p = comfyui.ComfyUIProvider(base_url="http://image-pod", video_url="http://video-pod")
-        self.assertEqual(p.urls, {"image": "http://image-pod", "video": "http://video-pod"})
+        self.assertEqual(p.urls, {"image": "http://image-pod", "video": "http://video-pod",
+                                  "video_reference": "http://video-pod"})
+
+    def test_reference_video(self):
+        images = self._images(4)
+        out = self.provider.generate_video_from_reference("<Subject 1> walks in.", image_paths=images,
+                                                          aspect_ratio="16:9", duration=12, megapixels=0.9, seed=7)
+        g = FakeComfy.prompts[0]
+        ref = g["136"]["inputs"]
+        # pictures in order, numbered from 0 the way the node numbers them
+        self.assertEqual([k for k in ref if k.startswith("ref_images.")],
+                         [f"ref_images.ref_image_{i}" for i in range(4)])
+        self.assertEqual([g[ref[f"ref_images.ref_image_{i}"][0]]["inputs"]["image"].split("/")[-1][-4:]
+                          for i in range(4)], [".png"] * 4)
+        self.assertEqual(g["138"]["inputs"]["value"], "<Subject 1> walks in.")
+        self.assertEqual((g["132"]["inputs"]["value"], g["115"]["inputs"]["megapixels"]), (12.0, 0.9))
+        self.assertEqual(g["115"]["inputs"]["aspect_ratio"], "16:9 (Widescreen)")
+        self.assertEqual(g["129"]["inputs"]["noise_seed"], 7)
+        self.assertNotIn("137", g)                                # the template's own pictures are gone
+        self.assertEqual(out["seed"], 7)
+        self.assertTrue(out["video"]["local_path"])
+
+    def test_reference_video_default_duration_and_limit(self):
+        self.provider.generate_video_from_reference("x", image_paths=self._images(1))
+        self.assertEqual(FakeComfy.prompts[0]["132"]["inputs"]["value"], 15.0)
+        with self.assertRaises(ValueError):
+            self.provider.generate_video_from_reference("x", image_paths=self._images(1) * 10)
+        with self.assertRaises(ValueError):
+            self.provider.generate_video_from_reference("x", video_path="/a.mp4")
 
     def test_a_nodes_own_url_wins(self):
         here = f"http://127.0.0.1:{self.server.server_port}"
@@ -359,6 +387,13 @@ class AgainstAStandInServer(unittest.TestCase):
         down = comfyui.check_server("image", "http://127.0.0.1:9")
         self.assertFalse(down["ok"])
         self.assertIn("couldn't reach", down["error"])
+
+    def test_check_video_server_covers_both_workflows(self):
+        here = f"http://127.0.0.1:{self.server.server_port}"
+        out = comfyui.check_server("video", here)
+        self.assertFalse(out["ok"])        # the stand-in only lists the image model
+        self.assertIn("minimax_h3_fl2va_pruned_int8_convrot.safetensors", out["missing_models"])
+        self.assertIn("minimax_h3_ref2va_pruned_int8_convrot.safetensors", out["missing_models"])
 
     def test_unreachable_server(self):
         with self.assertRaises(RuntimeError) as ctx:

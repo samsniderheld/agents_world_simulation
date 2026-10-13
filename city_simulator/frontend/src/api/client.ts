@@ -28,6 +28,7 @@ import type {
   Person,
   VisualsProviders,
   ComfyCheck,
+  StoryboardVideoPrompt,
 } from './types';
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -288,6 +289,19 @@ export const agentsApi = {
       }),
     }),
 
+  // A Storyboard -> its reference-to-video prompt and pictures (agents/storyboard_video.py).
+  storyboardVideoPrompt: (params: { storyboardId: string; treatmentText?: string; agentIds?: string[]; duration?: number; style?: string }) =>
+    request<StoryboardVideoPrompt>('/api/agents/storyboard/video-prompt', {
+      method: 'POST',
+      body: json({
+        storyboard_id: params.storyboardId,
+        treatment_text: params.treatmentText ?? '',
+        agent_ids: params.agentIds ?? [],
+        duration: params.duration,
+        style: params.style,
+      }),
+    }),
+
   treatmentShots: (text: string) =>
     request<{ shots: string[] }>(`/api/agents/treatment/shots?text=${encodeURIComponent(text)}`),
 };
@@ -371,6 +385,8 @@ export const visuals = {
     videoPath?: string;
     imagePaths?: string[];
     options?: Record<string, unknown>;
+    provider?: string;
+    comfyuiUrl?: string;
   }) =>
     request<{ ok: boolean; error: string | null }>('/api/visuals/generate-video-from-reference', {
       method: 'POST',
@@ -379,6 +395,8 @@ export const visuals = {
         video_path: params.videoPath,
         image_paths: params.imagePaths ?? null,
         options: params.options ?? {},
+        provider: params.provider || undefined,
+        comfyui_url: params.comfyuiUrl || undefined,
       }),
     }),
 

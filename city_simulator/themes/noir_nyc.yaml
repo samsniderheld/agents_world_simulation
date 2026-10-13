@@ -1854,13 +1854,15 @@ prompts:
       <insight> (because of 1, 3)
       where the numbers in parentheses are the statement numbers it's based on.
   treatment:
-    main: |-
+    vignette: |-
       You are a film treatment writer adapting a scene transcript into a short video vignette pitch: a quiet slice-of-life story set in this film-noir city -- small everyday moments, routines and human connection, not crime plots or melodrama.
 
       Cast available in this scene: {cast_names}. Only write about characters who actually appear in the transcript below; do not invent any other named characters.
 
       {cast_block}{setting_block}{direction_block}Transcript:
       {transcript}
+
+      The vignette becomes one short video of six shots. Each shot's background is painted first as a set with nobody in it; a video model then places the characters into those sets from their reference pictures. So keep the set and the people apart: the Background describes only the place, and the Action carries everything that moves, speaks or makes a sound.
 
       Write the treatment in exactly this format, with no extra commentary before or after it:
 
@@ -1872,8 +1874,12 @@ prompts:
       <a tight paragraph, 4-8 sentences, describing what happens in this vignette, in understated slice-of-life prose that lingers on small moments>
 
       STORYBOARD:
-      1. <shot description> | Character: <physical description of whoever appears in this shot -- their build, face, and wardrobe, drawn from the cast appearance reference above, not invented -- or "none" for a shot with no one in frame> | Art direction: <set/production design notes> | Lighting: <lighting setup> | DOP: <camera angle, lens, and movement>
-      (exactly 6 numbered shots in this format, each a different beat of the story, all consistent with a {visual_look}. Each shot line is used on its own, standalone, to generate that shot's actual image later -- the Character field must repeat enough of their real appearance that the shot still reads correctly by itself, without needing the rest of this treatment for context.)
+      1. Background: <the set for this shot as if everyone had just stepped out of it: the place, its set dressing and props, time of day, weather and light, the color palette, and the camera's angle, lens and framing. Never mention a person, and don't call it empty> | Action: <2-4 sentences in the present tense: which characters (by name) are in the shot, where they are in the frame, what they do and how they react, the sounds their actions make, and one camera move as a plain sentence, e.g. "The camera holds a static shot.", "The camera pushes in with small amplitude at slow speed." or "The camera pans right." If someone speaks, write it as: Name says: "the exact words".>
+      (exactly 6 numbered shots in this format, each a different beat of the story, all consistent with a {visual_look}. Each Background is used on its own to paint that shot's background image, so it must read correctly by itself, without the rest of this treatment.)
+
+      SOUNDSCAPE: <1-3 sentences: the ambient and physical sounds across the whole vignette -- rooms, streets, weather, footsteps, objects -- no dialogue and no music>
+
+      MUSIC: <1-2 sentences: the background score only the audience hears -- its instruments, tempo and how it builds or fades, without mood words -- or N/A for none>
 
       The direction should take into account the Japanese concept of MA, focusing on individual moments, the characters within them, and how those characters experience their environment.
     empty_transcript: (nothing happened)

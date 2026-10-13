@@ -16,6 +16,8 @@ const ALLOWED: Record<string, string[]> = {
   // two style slots (portraits vs. exterior photos).
   'style:out': ['style:in', 'character-style:in', 'location-style:in'],
   'treatment:out': ['text:in'],
+  // a Storyboard into a Video node: reference-to-video from its pictures
+  'storyboard:out': ['storyboard:in'],
 };
 
 export function isValidConnection(sourceHandle: string | null | undefined, targetHandle: string | null | undefined): boolean {

@@ -34,7 +34,7 @@ def _worker(kind: str, params: dict):
         elif kind == "video_reference":
             result = provider.generate_video_from_reference(
                 params["prompt"], video_path=params.get("video_path"),
-                image_paths=params.get("image_paths"), **params.get("options", {}),
+                image_paths=params.get("image_paths"), **options,
             )
         elif kind == "music":
             result = provider.generate_music(params["prompt"], **params.get("options", {}))

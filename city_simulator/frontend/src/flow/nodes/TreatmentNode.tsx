@@ -59,6 +59,7 @@ export interface TreatmentNodeData extends Record<string, unknown> {
     agentNames: string[],
     placeNames: string[],
     styleNames: string[],
+    treatmentText: string,
   ) => void;
   onProviderChange: (nodeId: string, provider: string) => void;
   onModelChange: (nodeId: string, model: string) => void;
@@ -233,6 +234,7 @@ export function TreatmentNode({ id, data, selected }: NodeProps<TreatmentNodeTyp
                 data.contextAgentNames ?? [],
                 data.contextPlaceNames ?? [],
                 data.contextStyleNames ?? [],
+                text ?? '',
               )
             }
           >

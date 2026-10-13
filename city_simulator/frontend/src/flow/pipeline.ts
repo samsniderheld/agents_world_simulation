@@ -41,6 +41,7 @@ export interface PipelineCallbacks {
     agentNames: string[],
     placeNames: string[],
     styleNames: string[],
+    treatmentText: string,
   ) => void;
   onExpandStoryboard: (storyboardId: string) => void;
   onPopulationChange: (nodeId: string, patch: { count?: number; withImages?: boolean }) => void;
@@ -223,6 +224,7 @@ export function toPipelineRenderNode(gn: GraphNode, cb: PipelineCallbacks, owner
         comfyuiUrl: gn.data.comfyuiUrl as string | undefined,
         options: gn.data.options as Record<string, unknown> | undefined,
         lastSeed: gn.data.lastSeed as number | undefined,
+        autoPrompt: gn.data.autoPrompt as string | undefined,
         url: gn.data.url as string | undefined,
         localPath: gn.data.localPath as string | undefined,
         onUpdate: cb.onVideoUpdate,
@@ -301,6 +303,7 @@ export function toPipelineRenderNode(gn: GraphNode, cb: PipelineCallbacks, owner
         contextAgentNames: (gn.data.contextAgentNames as string[]) ?? [],
         contextPlaceNames: (gn.data.contextPlaceNames as string[]) ?? [],
         contextStyleNames: (gn.data.contextStyleNames as string[]) ?? [],
+        treatmentText: gn.data.treatmentText as string | undefined,
         onExpand: cb.onExpandStoryboard,
       },
     };
@@ -368,7 +371,7 @@ export function pipelineToGraphNode(n: Node): GraphNode | null {
   }
   if (n.type === 'video') {
     const d = n.data as VideoNodeData;
-    return { id: n.id, type: 'video', position: n.position, width: n.width, height: n.height, data: { prompt: d.prompt, aspectRatio: d.aspectRatio, provider: d.provider, comfyuiUrl: d.comfyuiUrl, options: d.options, lastSeed: d.lastSeed, url: d.url, localPath: d.localPath } };
+    return { id: n.id, type: 'video', position: n.position, width: n.width, height: n.height, data: { prompt: d.prompt, aspectRatio: d.aspectRatio, provider: d.provider, comfyuiUrl: d.comfyuiUrl, options: d.options, lastSeed: d.lastSeed, autoPrompt: d.autoPrompt, url: d.url, localPath: d.localPath } };
   }
   if (n.type === 'style') {
     const d = n.data as StyleNodeData;
@@ -393,7 +396,7 @@ export function pipelineToGraphNode(n: Node): GraphNode | null {
       position: n.position,
       width: n.width,
       height: n.height,
-      data: { shotCount: d.shotCount, contextAgentNames: d.contextAgentNames, contextPlaceNames: d.contextPlaceNames, contextStyleNames: d.contextStyleNames },
+      data: { shotCount: d.shotCount, contextAgentNames: d.contextAgentNames, contextPlaceNames: d.contextPlaceNames, contextStyleNames: d.contextStyleNames, treatmentText: d.treatmentText },
     };
   }
   return null;
@@ -579,9 +582,20 @@ export function enrichPipelineNodes(nodes: Node[], edges: Edge[], historyData: H
       sourceImagePath = img.imagePath;
       sourceImageUrl = img.imageUrl;
       const merged = mergeStyles(connectedStyles(n.id, edges, byId));
+      // A Storyboard wired in: reference-to-video from its cast and backgrounds.
+      const sbEdge = edges.find((e) => e.target === n.id && e.targetHandle === 'storyboard:in');
+      const sb = sbEdge && byId.get(sbEdge.source);
+      const storyboard =
+        sb?.type === 'storyboard'
+          ? {
+              storyboardId: sb.id,
+              storyboardTreatment: (sb.data as StoryboardNodeData).treatmentText,
+              storyboardAgentIds: connectedAgents(sb.id, 'agent:in', edges, byId).map((a) => a.id),
+            }
+          : { storyboardId: undefined, storyboardTreatment: undefined, storyboardAgentIds: undefined };
       return {
         ...n,
-        data: { ...n.data, sourceImagePath, sourceImageUrl, mergedStylePrompt: merged.stylePrompt, hasStyleRef: hasEdge(n.id, 'style:in', edges) },
+        data: { ...n.data, sourceImagePath, sourceImageUrl, mergedStylePrompt: merged.stylePrompt, hasStyleRef: hasEdge(n.id, 'style:in', edges), ...storyboard },
       };
     }
 

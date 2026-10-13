@@ -248,7 +248,7 @@ def generate_treatment(log: list[str], agent_names: list[str], model: str = None
     transcript = "\n".join(log) or t.template("treatment.empty_transcript")
     direction_line = (t.prompt("treatment.direction", directive=directive.strip()) + "\n\n"
                       if directive and directive.strip() else "")
-    prompt = t.prompt("treatment.main", cast_names=", ".join(agent_names), cast_block=_cast_block(cast_details),
+    prompt = t.prompt("treatment.vignette", cast_names=", ".join(agent_names), cast_block=_cast_block(cast_details),
                       setting_block=_setting_block(location_details), direction_block=direction_line,
                       transcript=transcript, visual_look=t["world"]["visual_look"])
     return llm.complete(
@@ -257,24 +257,70 @@ def generate_treatment(log: list[str], agent_names: list[str], model: str = None
     )
 
 
-def parse_storyboard_shots(text: str) -> list:
-    """Pulls the numbered shot lines out of a treatment's STORYBOARD
-    section (agents/routes.py's GET /api/agents/treatment/shots, which the
-    Treatment node calls) -- each returned line is the *whole* shot ("<shot
-    description> | Art direction: ... | Lighting: ... | DOP: ..."), since
-    that whole line is exactly what makes a good single-image prompt, not
-    just the leading description. Returns however many shots were
-    actually found (not hardcoded to 6 -- the LLM's own count can vary);
-    an empty list if there's no STORYBOARD section at all, which callers
-    must handle gracefully rather than assume a fixed count."""
-    lines = text.splitlines()
-    start = next((i for i, line in enumerate(lines) if _STORYBOARD_HEADER_RE.match(line)), None)
-    if start is None:
-        return []
+_SECTION_RE = re.compile(r"^\s*([A-Z][A-Z ]+):\s*(.*)$")
+_FIELD_RE = re.compile(r"^\s*([A-Za-z][A-Za-z ]{0,20}):\s*(.*)$", re.DOTALL)
+
+
+def parse_treatment(text: str) -> dict:
+    """A treatment's parts: {"characters": [name], "synopsis", "shots":
+    [{"background", "action", "frame_prompt"}], "soundscape", "music"}.
+
+    A shot line is "Background: ... | Action: ..." (the theme's
+    treatment.vignette). `frame_prompt` is what paints the shot's
+    background image -- every field except the Action. A treatment written
+    before that format (one free-form line per shot, "<description> |
+    Character: ... | Lighting: ...") keeps its whole line as the frame
+    prompt, and as the action."""
+    sections, current = {}, None
+    for line in text.splitlines():
+        m = _SECTION_RE.match(line)
+        if m and m.group(1).strip() in ("CHARACTERS", "SYNOPSIS", "STORYBOARD", "SOUNDSCAPE", "MUSIC"):
+            current = m.group(1).strip()
+            sections[current] = [m.group(2)] if m.group(2).strip() else []
+        elif current:
+            sections[current].append(line)
+
+    def joined(name):
+        return " ".join(l.strip() for l in sections.get(name, []) if l.strip())
+
+    characters = []
+    for line in sections.get("CHARACTERS", []):
+        m = re.match(r"^\s*[-*]\s*(.+?)\s*(?:--|—|–|:|$)", line)
+        if m and m.group(1).strip():
+            characters.append(m.group(1).strip().strip("*").strip())
 
     shots = []
-    for line in lines[start + 1:]:
-        match = _SHOT_LINE_RE.match(line)
-        if match:
-            shots.append(match.group(1).strip())
-    return shots
+    for line in sections.get("STORYBOARD", []):
+        m = _SHOT_LINE_RE.match(line)
+        if not m:
+            continue
+        whole = m.group(1).strip()
+        fields = {}
+        for part in whole.split("|"):
+            f = _FIELD_RE.match(part.strip())
+            if f:
+                fields[f.group(1).strip().lower()] = f.group(2).strip()
+        if "action" in fields:
+            setting = [v for k, v in fields.items() if k != "action" and v]
+            background = fields.get("background") or " ".join(setting)
+            frame_prompt = " ".join(setting).strip()
+            if frame_prompt:
+                frame_prompt += " No people in the frame."
+            shots.append({"background": background, "action": fields["action"], "frame_prompt": frame_prompt})
+        else:
+            shots.append({"background": whole, "action": whole, "frame_prompt": whole})
+
+    music = joined("MUSIC")
+    return {"characters": characters, "synopsis": joined("SYNOPSIS"), "shots": shots,
+            "soundscape": joined("SOUNDSCAPE"), "music": music}
+
+
+def parse_storyboard_shots(text: str) -> list:
+    """The prompt for each storyboard shot's image (agents/routes.py's GET
+    /api/agents/treatment/shots, which the Treatment node calls): the
+    shot's background, with no people -- the characters join it later, in
+    the reference-to-video step (agents/storyboard_video.py). Returns
+    however many shots were actually found (the LLM's own count can vary);
+    an empty list if there's no STORYBOARD section at all, which callers
+    must handle gracefully rather than assume a fixed count."""
+    return [s["frame_prompt"] for s in parse_treatment(text)["shots"] if s["frame_prompt"]]

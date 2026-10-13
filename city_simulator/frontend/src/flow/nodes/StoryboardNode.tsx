@@ -20,6 +20,9 @@ export interface StoryboardNodeData extends Record<string, unknown> {
   hasAgentRef?: boolean;
   hasPlaceRef?: boolean;
   hasStyleRef?: boolean;
+  // The treatment it was made from (its shots' actions, sound and music) --
+  // a Video node wired to storyboard:out builds its prompt from it.
+  treatmentText?: string;
   onExpand: (storyboardId: string) => void;
 }
 
@@ -97,6 +100,7 @@ export function StoryboardNode({ id, data, selected }: NodeProps<StoryboardNodeT
       <Port id="place:in" type="place" direction="in" label="place" optional={!data.hasPlaceRef} top="calc(100% - 54px)" />
       <Port id="style:in" type="style" direction="in" label="style" optional={!data.hasStyleRef} top="calc(100% - 34px)" />
       <Port id="shots:in" type="shot" direction="in" label="shots" optional top="calc(100% - 14px)" />
+      <Port id="storyboard:out" type="video" direction="out" label="to video" top="calc(100% - 14px)" />
     </NodeShell>
   );
 }

@@ -184,6 +184,7 @@ export function usePipelineCallbacks(
       agentNames: string[],
       placeNames: string[],
       styleNames: string[],
+      treatmentText: string,
     ) => {
       const storyboardId = newNodeId('storyboard');
 
@@ -230,11 +231,13 @@ export function usePipelineCallbacks(
         data: { shotIndex: i, prompt: shotText },
       }));
 
+      // Each Frame paints only its shot's background (the treatment's
+      // "Background:"), with nobody in it -- so the Agents aren't wired to
+      // the Frames. The characters join in the video: a Video node wired to
+      // this Storyboard sends their pictures with the backgrounds as
+      // references (agents/storyboard_video.py).
       const seedEdges: GraphEdge[] = [];
       for (const frame of frameNodes) {
-        for (const ref of agentRefNodes) {
-          seedEdges.push({ id: `e:${ref.id}->${frame.id}:agent`, source: ref.id, sourceHandle: 'agent:out', target: frame.id, targetHandle: 'agent:in' });
-        }
         for (const ref of placeRefNodes) {
           seedEdges.push({ id: `e:${ref.id}->${frame.id}:place`, source: ref.id, sourceHandle: 'place:out', target: frame.id, targetHandle: 'place:in' });
         }
@@ -278,7 +281,7 @@ export function usePipelineCallbacks(
           // the node's width from the moment it exists, not just after
           // the next reload (same fix Style's own live-add path needed).
           width: 340,
-          data: { shotCount: shots.length, contextAgentNames: agentNames, contextPlaceNames: placeNames, contextStyleNames: styleNames, onExpand: onExpandStoryboard },
+          data: { shotCount: shots.length, contextAgentNames: agentNames, contextPlaceNames: placeNames, contextStyleNames: styleNames, treatmentText, onExpand: onExpandStoryboard },
         };
         return [...list, storyboardNode];
       });

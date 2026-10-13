@@ -428,6 +428,36 @@ def generate_treatment_for_agent():
     return json_response({"treatment": entry})
 
 
+@bp.post("/storyboard/video-prompt")
+def storyboard_video_prompt():
+    """A Storyboard -> the reference-to-video prompt and its pictures (the
+    cast's pictures, then each shot's background) -- see
+    agents/storyboard_video.py. The Video node shows both, and sends them to
+    /api/visuals/generate-video-from-reference."""
+    from citystate import graph_store
+    import theme
+    from visuals import config as vconfig
+    from . import storyboard_video
+
+    body = request.get_json(silent=True) or {}
+    city = citystate.get()
+    if city is None:
+        return json_response({"error": "no active city"}, status=404)
+    if not (body.get("treatment_text") or "").strip():
+        return json_response({"error": "this Storyboard has no treatment saved with it -- make it again from "
+                                       "its Treatment node (\"create storyboard\")"}, status=400)
+    spec = (vconfig.COMFYUI.get("reference_video_workflow") or {})
+    try:
+        duration = float(body.get("duration") or (spec.get("defaults") or {}).get("duration") or 15)
+        storyboard = graph_store.get_graph(body.get("storyboard_id") or "")
+        result = storyboard_video.prepare(
+            city, citystate.get_background(), storyboard, body["treatment_text"], body.get("agent_ids") or [],
+            duration, visual_look=theme.current()["world"].get("visual_look", ""), style=body.get("style") or "")
+    except ValueError as e:
+        return json_response({"error": str(e)}, status=400)
+    return json_response({**result, "duration": duration})
+
+
 @bp.get("/treatment/shots")
 def treatment_shots():
     """Parses the treatment text a Treatment node currently holds into its
