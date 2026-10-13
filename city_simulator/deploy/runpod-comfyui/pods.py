@@ -296,12 +296,17 @@ def launch(api: RunPod, settings: dict, kind: str) -> dict:
             "ports": ["8188/http", "22/tcp", "8888/http"],
             "env": {"PUBLIC_KEY": ssh_public_key(create=True)},
         }
+        cuda = [str(v) for v in settings.get("cuda_versions") or []]
+        if cuda:
+            body["allowedCudaVersions"] = cuda      # a host whose driver runs comfy_kitchen's kernels
         say(f"== creating pod {name_for(kind)} ({', '.join(spec['gpus'])} in {volume['dataCenterId']})")
         try:
             pod = api.create_pod(body)
         except RuntimeError as e:
+            needs = f" on a CUDA {'/'.join(cuda)} host" if cuda else ""
             raise SystemExit(f"{e}\n\nNo luck in {volume['dataCenterId']}? RunPod may have none of those GPUs free "
-                             "there right now -- try again later, or add GPU types to pods.yaml.")
+                             f"there{needs} right now -- try again later, or add GPU types to pods.yaml"
+                             + (" (or drop cuda_versions there -- see its comment)." if cuda else "."))
     return pod
 
 

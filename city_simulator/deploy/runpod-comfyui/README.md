@@ -141,6 +141,28 @@ can't load it (the job fails at the CLIP loader), use the int8 one instead:
 2. in `visuals/data/config.yaml`, under `video_workflow`, uncomment the `set:`
    lines that point node `105:13` at `qwen3vl_32b_minimax_h3_int8_convrot.safetensors`.
 
+## "CUDA driver version is insufficient" / "launch rejected"
+
+ComfyUI's `comfy_kitchen` kernels -- the "comfy kitchen attention" in the
+video workflows, and the DeltaNet decode in Qwen-Image's prompt enhancer --
+are built for CUDA 13.0, so they only run on a host whose NVIDIA driver
+supports it (580+). On an older host they fail with
+`detect_k_anchor kernel launch failed: CUDA driver version is insufficient
+for CUDA runtime version` or `deltanet_conv_step launch rejected`.
+
+pods.py asks RunPod for CUDA 13 hosts (`cuda_versions` in pods.yaml). A pod
+made before that keeps its old host -- replace it (the volume and its models
+stay):
+
+```bash
+python city_simulator/deploy/runpod-comfyui/pods.py down video
+python city_simulator/deploy/runpod-comfyui/pods.py up video
+```
+
+If RunPod has no CUDA 13 host with those GPUs free, drop `cuda_versions` and
+uncomment the `"141.model"` line in `visuals/data/config.yaml`'s
+`reference_video_workflow.set` to skip that attention node.
+
 ## Models
 
 | folder | file | size |

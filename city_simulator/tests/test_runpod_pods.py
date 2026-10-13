@@ -117,6 +117,7 @@ class Pods(unittest.TestCase):
         self.assertEqual(body["dataCenterIds"], [vol["dataCenterId"]])     # a pod must sit with its volume
         self.assertIn("8188/http", body["ports"])
         self.assertEqual(body["env"]["PUBLIC_KEY"], "ssh-ed25519 AAAA test")
+        self.assertEqual(body["allowedCudaVersions"], ["13.0"])   # comfy_kitchen's kernels need a CUDA 13 driver
         self.assertEqual(self.defaults, [("image", self.base + "/comfy/pod1")])
 
     def test_up_reuses_a_running_pod_and_starts_a_stopped_one(self):

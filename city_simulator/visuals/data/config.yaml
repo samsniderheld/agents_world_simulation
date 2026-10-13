@@ -179,6 +179,13 @@ comfyui:
       scheduler: "124.scheduler"
     defaults:
       duration: 15
-    # Same NVFP4 text encoder as above; with the int8 one, uncomment:
+    # Fixed overrides. "comfy kitchen attention" (node 145) needs a pod whose
+    # NVIDIA driver supports CUDA 13 (deploy/runpod-comfyui/pods.yaml's
+    # cuda_versions) -- on an older one it fails with "CUDA driver version is
+    # insufficient for CUDA runtime version". To run there anyway, uncomment
+    # the 141 line: the LoRA then takes the model straight from the loader,
+    # skipping that node (ComfyUI's default attention; slower). The 128 line
+    # is the int8 text encoder, as above.
     # set:
+    #   "141.model": ["143", 0]
     #   "128.clip_name": "qwen3vl_32b_minimax_h3_int8_convrot.safetensors"

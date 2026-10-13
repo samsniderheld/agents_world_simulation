@@ -10,6 +10,16 @@
 # RunPod data center ids: US-TX-3, US-KS-2, US-CA-2, EU-RO-1, EU-SE-1, ...
 datacenter: EU-FR-1
 
+# CUDA versions a new pod's host must support. ComfyUI's comfy_kitchen
+# kernels (its fast attention, Qwen3.5's DeltaNet) are built for CUDA 13.0:
+# on a host whose NVIDIA driver predates it they fail with "CUDA driver
+# version is insufficient for CUDA runtime version" (or "... launch
+# rejected"). Remove the line to take any host -- then see
+# visuals/data/config.yaml's reference_video_workflow for running without
+# comfy_kitchen's attention. A pod made before this keeps its host:
+# `pods.py down <kind>` then `pods.py up <kind>` (the volume and models stay).
+cuda_versions: ["13.0"]
+
 # The address ComfyUI is reachable at, from the pod id (RunPod's HTTP proxy).
 comfyui_url: "https://{pod_id}-8188.proxy.runpod.net"
 

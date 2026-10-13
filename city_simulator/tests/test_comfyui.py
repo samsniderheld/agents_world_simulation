@@ -366,6 +366,13 @@ class AgainstAStandInServer(unittest.TestCase):
         self.assertEqual(comfyui.workflow_defaults("video")["duration"], 5)
         self.assertEqual(comfyui.workflow_defaults("nonexistent"), {})
 
+    def test_reference_video_without_comfy_kitchen_attention(self):
+        spec = dict(config.COMFYUI["reference_video_workflow"], set={"141.model": ["143", 0]})
+        template = comfyui.ComfyUIProvider._template(spec)
+        g = comfyui.prepare_graph(template, spec, "x", ["a.png"], seed=1)
+        self.assertNotIn("145", g)                            # the attention node is skipped
+        self.assertEqual(g["141"]["inputs"]["model"], ["143", 0])
+
     def test_reference_video_default_duration_and_limit(self):
         self.provider.generate_video_from_reference("x", image_paths=self._images(1))
         self.assertEqual(FakeComfy.prompts[0]["132"]["inputs"]["value"], 15.0)
