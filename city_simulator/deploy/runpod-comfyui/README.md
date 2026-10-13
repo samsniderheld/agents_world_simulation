@@ -54,10 +54,9 @@ SSH key that survives restarts, once:
   listed GPUs there, try again later or widen the GPU list. To move a kind to
   another data center, `down <kind> --volume`, change `datacenter`, and `up`.
 
-**On the app's own pod, `deploy/runpod/start.sh` and `stop.sh` do this for
-you:** `start.sh` runs `pods.py up` in the background after starting the app
-(log: `/workspace/logs/comfyui-pods.log`; `COMFYUI_PODS=image|video|0` to
-limit it), and `stop.sh` deletes the pods (`stop.sh pods` for just that).
+**On the app's own pod:** `deploy/runpod/start.sh` doesn't start the pods --
+run `pods.py up` when you want them. `stop.sh` deletes them along with
+everything else (`stop.sh pods` for just that).
 
 The rest of this page is the manual way, and what `pods.py` does under the hood.
 

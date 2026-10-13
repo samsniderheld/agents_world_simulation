@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Start Ollama, vLLM and the app in the background (logs in /workspace/logs),
-# then the ComfyUI pods for images and video (deploy/runpod-comfyui/pods.py).
-# Safe to rerun: anything already running is left alone.
+# Start Ollama, vLLM and the app in the background (logs in /workspace/logs).
+# Safe to rerun: anything already running is left alone. The ComfyUI pods for
+# images and video are started separately, when you want them:
+#   python deploy/runpod-comfyui/pods.py up [image|video]
 #
 # Settings (environment variables, all optional):
 #   VLLM_MODEL         default Qwen/Qwen3-30B-A3B-Instruct-2507-FP8
@@ -11,8 +12,6 @@
 #   VLLM_WAIT_MIN      default 25 -- minutes to wait for vLLM to come up
 #   VLLM_EXTRA_ARGS    extra `vllm serve` flags, e.g. "--enforce-eager" to skip
 #                      the slow first-start compile (somewhat slower serving)
-#   COMFYUI_PODS       all (default) | image | video | 0 -- which ComfyUI pods to
-#                      start; needs RUNPOD_API_KEY in city_simulator/.env
 #   WORKSPACE          default /workspace
 set -euo pipefail
 
@@ -97,23 +96,6 @@ else
   up http://localhost:8420/ && echo "App: running (log: $LOGS/app.log)" || echo "App: failed -- see $LOGS/app.log"
 fi
 
-# The ComfyUI pods (images, video): in the background, since a new volume's
-# first setup downloads its models (15-30 min); pods.py makes each pod the
-# app's ComfyUI server as soon as it's ready.
-PODS="${COMFYUI_PODS:-all}"
-if [ "$PODS" = "0" ] || [ "$PODS" = "off" ]; then
-  echo "ComfyUI pods: skipped (COMFYUI_PODS=$PODS)"
-elif ! grep -qE '^[[:space:]]*RUNPOD_API_KEY=.+' "$APP_DIR/.env" 2>/dev/null; then
-  echo "ComfyUI pods: skipped (no RUNPOD_API_KEY in $APP_DIR/.env)"
-elif pgrep -f "runpod-comfyui/pods.py up" >/dev/null; then
-  echo "ComfyUI pods: already starting (log: $LOGS/comfyui-pods.log)"
-else
-  (cd "$APP_DIR" && nohup "$WS/app-venv/bin/python" -u deploy/runpod-comfyui/pods.py up "$PODS" \
-     > "$LOGS/comfyui-pods.log" 2>&1 &)
-  echo "ComfyUI pods ($PODS): starting in the background -- follow: tail -f $LOGS/comfyui-pods.log"
-  echo "  (each becomes the app's image/video server when ready; status: python $APP_DIR/deploy/runpod-comfyui/pods.py status)"
-fi
-
 cat <<MSG
 
 The app listens on this pod's localhost only (it has no login). From your
@@ -121,6 +103,8 @@ laptop, tunnel it -- RunPod's "SSH over exposed TCP" gives the IP and port:
 
   ssh -L 8420:localhost:8420 root@<pod-ip> -p <ssh-port> -i ~/.ssh/<your-key>
 
-then open http://localhost:8420.  Stop everything, ComfyUI pods included:  bash $(dirname "$0")/stop.sh
+then open http://localhost:8420.  ComfyUI pods (images, video), when you want them:
+  python $APP_DIR/deploy/runpod-comfyui/pods.py up [image|video]
+Stop everything (ComfyUI pods included):  bash $(dirname "$0")/stop.sh
 (or just some of it: stop.sh app | vllm | ollama | pods; restart only the app: restart.sh)
 MSG

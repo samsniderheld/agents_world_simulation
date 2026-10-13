@@ -252,16 +252,15 @@ site is `https://<pod-id>-8420.proxy.runpod.net`; the browser asks for the
 user and password once. Editing a pod's ports restarts it, so run
 `setup.sh` and `start.sh` again afterwards.
 
-**After a `git pull`** on the pod: `bash city_simulator/deploy/runpod/stop.sh app; bash city_simulator/deploy/runpod/start.sh`
--- it rebuilds the frontend if its source changed and restarts the app; then
-hard-refresh the browser.
+**After a `git pull`** on the pod: `bash city_simulator/deploy/runpod/restart.sh`
+(or `restart.sh --pull` to pull too) -- it rebuilds the frontend if its source
+changed and restarts the app; then hard-refresh the browser.
 
-**The ComfyUI pods** for images and video come up with `start.sh` too, if
-`.env` has `RUNPOD_API_KEY`: it runs `deploy/runpod-comfyui/pods.py up` in the
-background (log: `/workspace/logs/comfyui-pods.log` -- a volume's first setup
-downloads its models, 15-30 min), and each pod becomes the app's image or
-video server as soon as it's ready. `COMFYUI_PODS=image` (or `video`, or `0`)
-limits that. See [`deploy/runpod-comfyui/`](deploy/runpod-comfyui/README.md).
+**The ComfyUI pods** for images and video aren't started by `start.sh` --
+start them when you want them: `python city_simulator/deploy/runpod-comfyui/pods.py up`
+(or `up image` / `up video`; needs `RUNPOD_API_KEY` in `.env`). Each becomes
+the app's image or video server when it's ready (a volume's first setup
+downloads its models, 15-30 min). See [`deploy/runpod-comfyui/`](deploy/runpod-comfyui/README.md).
 
 **Stopping:** `bash city_simulator/deploy/runpod/stop.sh` stops the app, vLLM
 and Ollama (freeing the GPU) and deletes the ComfyUI pods (their network
